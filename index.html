@@ -210,7 +210,9 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .export-opt:hover { color: var(--text); }
 .export-opt input[type=checkbox] { accent-color: var(--accent); cursor: pointer; width: 12px; height: 12px; }
 .export-note    { font-size: 10px; color: var(--dim); }
-.export-text    { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 8px 10px; color: var(--text); font-family: 'Courier New', monospace; font-size: 11px; overflow-y: auto; white-space: pre; resize: none; outline: none; min-height: 0; }
+.export-text    { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 8px 10px; color: var(--text); font-family: 'Courier New', monospace; font-size: 11px; overflow-y: auto; white-space: pre; resize: none; outline: none; min-height: 0; cursor: text; user-select: text; }
+.export-text pre { margin: 0; font-family: inherit; font-size: inherit; white-space: pre-wrap; }
+.export-text strong { font-weight: 700; }
 .export-table-wrap { flex: 1; overflow: auto; border: 1px solid var(--border); border-radius: 5px; min-height: 0; }
 .export-table   { width: 100%; border-collapse: collapse; font-size: 11px; }
 .export-table th { background: var(--card); padding: 5px 10px; text-align: left; font-weight: 600; color: var(--dim); border-bottom: 1px solid var(--border); position: sticky; top: 0; white-space: nowrap; }
@@ -1256,49 +1258,64 @@ function fmtDateRange(task) {
   return sl + ' \u2013 ' + end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function buildTextExport() {
-  if (!activeProjectId) return '(No project selected)';
-  const proj = getProject(activeProjectId);
-  if (!proj) return '';
-  const sorted = [...proj.tasks].sort((a, b) => a.date.localeCompare(b.date));
-  if (!sorted.length) return '(No tasks scheduled)';
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 
-  // Raw date strings for each task (used for alignment width calculation)
+// Returns { html, plain } — html pastes bold into Word/PPT; plain uses ** for Slack/Notion.
+function buildHTMLExport() {
+  if (!activeProjectId) return { html: '<em>(No project selected)</em>', plain: '(No project selected)' };
+  const proj = getProject(activeProjectId);
+  if (!proj) return { html: '', plain: '' };
+  const sorted = [...proj.tasks].sort((a, b) => a.date.localeCompare(b.date));
+  if (!sorted.length) return { html: '<em>(No tasks scheduled)</em>', plain: '(No tasks scheduled)' };
+
   const rawDates = sorted.map(t => fmtDateRange(t));
   const maxLen   = exportOptAlign ? Math.max(...rawDates.map(s => s.length)) : 0;
 
-  const fmtDate = (raw) => {
+  const fmtHtml = raw => {
+    const pad = exportOptAlign ? ' '.repeat(maxLen - raw.length) : '';
+    return exportOptBold
+      ? `<strong>${escHtml(raw)}</strong>${escHtml(pad)}`
+      : escHtml(raw + pad);
+  };
+  const fmtPlain = raw => {
     const padded = exportOptAlign ? raw.padEnd(maxLen) : raw;
-    return exportOptBold ? `**${raw}**${exportOptAlign ? ' '.repeat(maxLen - raw.length) : ''}` : padded;
+    return exportOptBold ? `**${raw}**${' '.repeat(Math.max(0, maxLen - raw.length))}` : padded;
   };
 
-  const sep = exportOptAlign ? '  ' : '  \u2014  ';
+  const sep = exportOptAlign ? '  \u2014  ' : '  \u2014  ';
 
-  return sorted.map((t, i) => {
-    const datePart = fmtDate(rawDates[i]);
-    const label    = t.reviewLabel || 'Review';
+  const hLines = [], pLines = [];
+
+  sorted.forEach((t, i) => {
+    const raw   = rawDates[i];
+    const label = t.reviewLabel || 'Review';
 
     if (t.isReview) {
-      const name  = t.taskName || label;
-      const lines = [`${datePart}${sep}${name} [${label.toUpperCase()}]`];
+      const name = t.taskName || label;
+      hLines.push(`${fmtHtml(raw)}${escHtml(sep)}${escHtml(name)} [${escHtml(label.toUpperCase())}]`);
+      pLines.push(`${fmtPlain(raw)}${sep}${name} [${label.toUpperCase()}]`);
       if (t.attendees && t.attendees.length) {
-        const indent = exportOptAlign ? ' '.repeat(maxLen + sep.length) : '    ';
+        const indent = ' '.repeat(exportOptAlign ? maxLen + sep.length : 4);
         t.attendees.forEach(a => {
           const role = exportOptRoles ? ` (${a.role})` : '';
-          lines.push(`${indent}\u00b7 ${a.person || ''}${role}`);
+          hLines.push(`${escHtml(indent)}\u00b7 ${escHtml(a.person || '')}${escHtml(role)}`);
+          pLines.push(`${indent}\u00b7 ${a.person || ''}${role}`);
         });
       }
-      return lines.join('\n');
+    } else {
+      const task    = t.taskName || '(untitled)';
+      const who     = t.person   || (exportOptRoles ? t.role : '');
+      const roleStr = exportOptRoles && t.person ? ` (${t.role})` : '';
+      const body    = `${task}  \u00b7  ${who}${roleStr}`;
+      hLines.push(`${fmtHtml(raw)}${escHtml(sep)}${escHtml(body)}`);
+      pLines.push(`${fmtPlain(raw)}${sep}${body}`);
     }
+  });
 
-    const task    = t.taskName || '(untitled)';
-    const who     = t.person   || (exportOptRoles ? t.role : '');
-    const roleStr = exportOptRoles && t.person ? ` (${t.role})` : '';
-    const body    = exportOptAlign
-      ? `\u2014  ${task}  \u00b7  ${who}${roleStr}`
-      : `${task}  \u00b7  ${who}${roleStr}`;
-    return `${datePart}${sep}${body}`;
-  }).join('\n');
+  const html = `<pre style="font-family:Consolas,'Courier New',monospace;font-size:12px;line-height:1.7;margin:0">${hLines.join('\n')}</pre>`;
+  return { html, plain: pLines.join('\n') };
 }
 
 function buildTSV() {
@@ -1335,48 +1352,44 @@ function renderExportPanel() {
     // ── Format options ──
     const opts = document.createElement('div');
     opts.className = 'export-opts';
-    const mkOpt = (label, checked, onChange) => {
-      const lbl = document.createElement('label');
-      lbl.className = 'export-opt';
+    const mkOpt = (lbl, checked, onChange) => {
+      const el = document.createElement('label');
+      el.className = 'export-opt';
       const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.checked = checked;
-      cb.addEventListener('change', () => { onChange(cb.checked); refreshText(); });
-      lbl.appendChild(cb);
-      lbl.appendChild(document.createTextNode(label));
-      opts.appendChild(lbl);
+      cb.type = 'checkbox'; cb.checked = checked;
+      cb.addEventListener('change', () => { onChange(cb.checked); refresh(); });
+      el.appendChild(cb);
+      el.appendChild(document.createTextNode(lbl));
+      opts.appendChild(el);
     };
     mkOpt('Bold dates',    exportOptBold,  v => { exportOptBold  = v; });
     mkOpt('Include roles', exportOptRoles, v => { exportOptRoles = v; });
     mkOpt('Align tasks',   exportOptAlign, v => { exportOptAlign = v; });
 
-    const text = buildTextExport();
     const actions = document.createElement('div');
     actions.className = 'export-actions';
-    const copyBtn = mkCopyBtn('Copy', text);
-    actions.appendChild(copyBtn);
+    // Rich copy button: writes text/html (Word/PPT) + text/plain (**) simultaneously
+    actions.appendChild(mkRichCopyBtn('Copy', () => buildHTMLExport()));
     const pngBtn = document.createElement('button');
     pngBtn.className = 'btn btn-ghost';
     pngBtn.textContent = 'Download PNG';
     pngBtn.style.cssText = 'font-size:11px;padding:3px 10px';
     pngBtn.addEventListener('click', exportPNG);
     actions.appendChild(pngBtn);
+    const note = document.createElement('span');
+    note.className = 'export-note';
+    note.textContent = 'Pastes as rich text in Word & PowerPoint';
+    actions.appendChild(note);
 
-    const pre = document.createElement('textarea');
-    pre.className = 'export-text';
-    pre.readOnly = true;
-    pre.value = text;
+    const preview = document.createElement('div');
+    preview.className = 'export-text';
+    preview.innerHTML = buildHTMLExport().html;
 
-    // Live-refresh textarea + copy button when options change
-    function refreshText() {
-      const t = buildTextExport();
-      pre.value = t;
-      copyBtn.replaceWith(mkCopyBtn('Copy', t));
-    }
+    function refresh() { preview.innerHTML = buildHTMLExport().html; }
 
     content.appendChild(opts);
     content.appendChild(actions);
-    content.appendChild(pre);
+    content.appendChild(preview);
   } else {
     const tsv  = buildTSV();
     const proj = getProject(activeProjectId);
@@ -1438,6 +1451,32 @@ function mkCopyBtn(label, text) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(() => done(true)).catch(() => fallbackCopy(text, done));
     } else { fallbackCopy(text, done); }
+  });
+  return btn;
+}
+
+// Writes text/html + text/plain so Word & PPT get bold, Slack gets **
+function mkRichCopyBtn(label, getContent) {
+  const btn = document.createElement('button');
+  btn.className = 'btn btn-ghost';
+  btn.textContent = label;
+  btn.style.cssText = 'font-size:11px;padding:3px 10px';
+  btn.addEventListener('click', async () => {
+    const { html, plain } = getContent();
+    const orig = btn.textContent;
+    const done = ok => { btn.textContent = ok ? 'Copied!' : 'Failed'; setTimeout(() => { btn.textContent = orig; }, 1500); };
+    if (navigator.clipboard && window.ClipboardItem) {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({
+          'text/html':  new Blob([html],  { type: 'text/html' }),
+          'text/plain': new Blob([plain], { type: 'text/plain' })
+        })]);
+        done(true); return;
+      } catch(e) { /* fall through to plain text */ }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(plain).then(() => done(true)).catch(() => fallbackCopy(plain, done));
+    } else { fallbackCopy(plain, done); }
   });
   return btn;
 }
