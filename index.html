@@ -473,18 +473,20 @@ function renderPalette() {
   revLbl.className = 'pal-label';
   revLbl.textContent = 'Meeting';
   revGrp.appendChild(revLbl);
-  const revChip = document.createElement('div');
-  revChip.className = 'role-chip';
-  revChip.draggable = true;
-  revChip.textContent = 'Review';
-  revChip.style.background = REVIEW_COLOR;
-  revChip.addEventListener('dragstart', e => {
-    dragPayload = { type: 'review', color: REVIEW_COLOR };
-    e.dataTransfer.setData('text', JSON.stringify(dragPayload));
-    e.dataTransfer.effectAllowed = 'copy';
+  ['Review', 'Studio Shoot', 'On-Location Shoot'].forEach(label => {
+    const chip = document.createElement('div');
+    chip.className = 'role-chip';
+    chip.draggable = true;
+    chip.textContent = label;
+    chip.style.background = REVIEW_COLOR;
+    chip.addEventListener('dragstart', e => {
+      dragPayload = { type: 'review', color: REVIEW_COLOR, label };
+      e.dataTransfer.setData('text', JSON.stringify(dragPayload));
+      e.dataTransfer.effectAllowed = 'copy';
+    });
+    chip.addEventListener('dragend', () => { dragPayload = null; });
+    revGrp.appendChild(chip);
   });
-  revChip.addEventListener('dragend', () => { dragPayload = null; });
-  revGrp.appendChild(revChip);
   pal.appendChild(revGrp);
 }
 
@@ -601,7 +603,7 @@ function makeCell(dayNum, dateStr, todayStr, laneArr) {
     } else if (pl.type === 'copy') {
       copyTask(pl.taskId, dateStr);
     } else if (pl.type === 'review') {
-      openPanel('create-review', dateStr, null, null, null, REVIEW_COLOR);
+      openPanel('create-review', dateStr, null, pl.label || 'Review', null, REVIEW_COLOR);
     } else {
       openPanel('create', dateStr, null, pl.role, pl.category, pl.color);
     }
@@ -682,7 +684,7 @@ function buildReviewBlock(task, dateStr) {
   hd.className = 'review-hd';
   const badge = document.createElement('span');
   badge.className = 'review-badge';
-  badge.textContent = 'Review';
+  badge.textContent = task.reviewLabel || 'Review';
   const title = document.createElement('span');
   title.className = 'review-title';
   title.textContent = task.taskName || 'Untitled Review';
@@ -1046,13 +1048,14 @@ function openPanel(mode, dateStr, taskId, role, category, color) {
     document.getElementById('panelDelete').classList.remove('hidden');
 
   } else if (mode === 'create-review') {
-    panelContext = { mode, date: dateStr, color: REVIEW_COLOR };
-    document.getElementById('panelRoleBadge').textContent      = 'Review';
+    const lbl = role || 'Review';
+    panelContext = { mode, date: dateStr, color: REVIEW_COLOR, label: lbl };
+    document.getElementById('panelRoleBadge').textContent      = lbl;
     document.getElementById('panelRoleBadge').style.background = REVIEW_COLOR;
     document.getElementById('panelDateLabel').textContent      = fmtDateLabel(dateStr);
     fieldPerson.style.display = 'none';
-    taskLabel.textContent     = 'Review Name';
-    taskInput.placeholder     = 'e.g. Sprint Review';
+    taskLabel.textContent     = lbl + ' Name';
+    taskInput.placeholder     = 'e.g. ' + lbl + ' — Apr 1';
     taskInput.value = '';
     document.getElementById('panelDelete').classList.add('hidden');
 
@@ -1062,12 +1065,13 @@ function openPanel(mode, dateStr, taskId, role, category, color) {
     const task = proj.tasks.find(t => t.id === taskId);
     if (!task) return;
     panelContext = { mode: 'edit-review', taskId, date: task.date };
-    document.getElementById('panelRoleBadge').textContent      = 'Review';
+    const lbl = task.reviewLabel || 'Review';
+    document.getElementById('panelRoleBadge').textContent      = lbl;
     document.getElementById('panelRoleBadge').style.background = REVIEW_COLOR;
     document.getElementById('panelDateLabel').textContent      = fmtDateLabel(task.date);
     fieldPerson.style.display = 'none';
-    taskLabel.textContent     = 'Review Name';
-    taskInput.placeholder     = 'e.g. Sprint Review';
+    taskLabel.textContent     = lbl + ' Name';
+    taskInput.placeholder     = 'e.g. ' + lbl + ' — Apr 1';
     taskInput.value           = task.taskName || '';
     document.getElementById('panelDelete').classList.remove('hidden');
 
@@ -1119,11 +1123,13 @@ function savePanel() {
     if (task) { task.person = person; task.taskName = taskName; }
 
   } else if (panelContext.mode === 'create-review') {
-    const name = taskName || 'Review';
+    const lbl  = panelContext.label || 'Review';
+    const name = taskName || lbl;
     proj.tasks.push({
       id: genId(),
       date: panelContext.date,
       isReview: true,
+      reviewLabel: lbl,
       taskName: name,
       color: REVIEW_COLOR,
       attendees: []
