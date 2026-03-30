@@ -102,12 +102,12 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 
 /* solo = single day: left handle + text + right handle */
 .task-chip.chip-solo  { border-radius: 4px; padding-left: 17px; padding-right: 17px; }
-/* start of multi-day: left handle + text, connected on right */
-.task-chip.chip-start { border-radius: 4px 0 0 4px; padding-left: 17px; }
-/* middle continuation: bar only */
-.task-chip.chip-mid   { border-radius: 0; min-height: 18px; opacity: .7; font-size: 0; }
-/* end of multi-day: bar + right handle, connected on left */
-.task-chip.chip-end   { border-radius: 0 4px 4px 0; min-height: 18px; opacity: .85; font-size: 0; padding-right: 17px; }
+/* start: bleeds 6px right (5px cell padding + 1px grid gap) */
+.task-chip.chip-start { border-radius: 4px 0 0 4px; padding-left: 17px; margin-right: -6px; position: relative; z-index: 1; }
+/* mid: extends left past padding, bleeds right into gap */
+.task-chip.chip-mid   { border-radius: 0; min-height: 18px; font-size: 0; margin-left: -5px; margin-right: -6px; }
+/* end: extends left past padding, right stays normal */
+.task-chip.chip-end   { border-radius: 0 4px 4px 0; min-height: 18px; font-size: 0; padding-right: 17px; margin-left: -5px; }
 
 /* shared handle base */
 .chip-handle-l, .chip-handle-r {
@@ -127,7 +127,11 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .task-chip:hover .chip-handle-r { color: rgba(255,255,255,.9); }
 
 /* ── REVIEW BLOCK ── */
-.review-block { background: rgba(192,57,79,.15); border: 1.5px solid rgba(192,57,79,.6); border-radius: 5px; padding: 5px 7px; cursor: pointer; flex-shrink: 0; transition: background .12s; }
+.review-block { background: rgba(192,57,79,.15); border: 1.5px solid rgba(192,57,79,.6); border-radius: 5px; padding: 5px 7px; cursor: pointer; flex-shrink: 0; transition: background .12s; position: relative; }
+.review-block .chip-handle-l,
+.review-block .chip-handle-r { top: 10px; transform: none; }
+.review-block:hover .chip-handle-l,
+.review-block:hover .chip-handle-r { color: rgba(255,255,255,.9); }
 .review-block:hover { background: rgba(192,57,79,.22); }
 .review-block.drag-accepting { background: rgba(192,57,79,.32); border-color: #c0394f; outline: 2px solid rgba(192,57,79,.5); outline-offset: -1px; }
 .review-hd { display: flex; align-items: center; gap: 5px; }
@@ -573,6 +577,8 @@ function makeCell(dayNum, dateStr, todayStr) {
     if (!pl || !activeProjectId) return;
     if (pl.type === 'move') {
       moveTask(pl.taskId, dateStr);
+    } else if (pl.type === 'copy') {
+      copyTask(pl.taskId, dateStr);
     } else if (pl.type === 'review') {
       openPanel('create-review', dateStr, null, null, null, REVIEW_COLOR);
     } else {
@@ -621,12 +627,13 @@ function buildChip(task, dateStr) {
     chip.appendChild(rh);
   }
 
-  // Drag to move
+  // Drag to move (alt+drag = copy)
   chip.addEventListener('dragstart', e => {
     if (isResizing) { e.preventDefault(); return; }
-    dragPayload = { type: 'move', taskId: task.id };
+    const isCopy = e.altKey;
+    dragPayload = { type: isCopy ? 'copy' : 'move', taskId: task.id };
     e.dataTransfer.setData('text', JSON.stringify(dragPayload));
-    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.effectAllowed = isCopy ? 'copy' : 'move';
   });
   chip.addEventListener('dragend', () => { dragPayload = null; });
 
@@ -635,6 +642,10 @@ function buildChip(task, dateStr) {
 }
 
 function buildReviewBlock(task, dateStr) {
+  const endDate = task.endDate || task.date;
+  const isStart = task.date === dateStr;
+  const isEnd   = endDate   === dateStr;
+
   const block = document.createElement('div');
   block.className = 'review-block';
   block.dataset.taskId = task.id;
@@ -686,13 +697,14 @@ function buildReviewBlock(task, dateStr) {
     openPanel('edit-review', task.date, task.id);
   });
 
-  // Drag to move
+  // Drag to move (alt+drag = copy)
   block.draggable = true;
   block.addEventListener('dragstart', e => {
     if (isResizing) { e.preventDefault(); return; }
-    dragPayload = { type: 'move', taskId: task.id };
+    const isCopy = e.altKey;
+    dragPayload = { type: isCopy ? 'copy' : 'move', taskId: task.id };
     e.dataTransfer.setData('text', JSON.stringify(dragPayload));
-    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.effectAllowed = isCopy ? 'copy' : 'move';
   });
   block.addEventListener('dragend', () => { dragPayload = null; });
 
@@ -712,9 +724,25 @@ function buildReviewBlock(task, dateStr) {
     block.classList.remove('drag-accepting');
     let pl = dragPayload;
     if (!pl) { try { pl = JSON.parse(e.dataTransfer.getData('text')); } catch(_) { return; } }
-    if (!pl || pl.type === 'move' || pl.type === 'review') return;
+    if (!pl || pl.type === 'move' || pl.type === 'copy' || pl.type === 'review') return;
     openPanel('add-attendee', task.date, task.id, pl.role, pl.category, pl.color);
   });
+
+  // Resize handles (left on start/solo, right on end/solo)
+  if (isStart) {
+    const lh = document.createElement('span');
+    lh.className = 'chip-handle-l';
+    lh.textContent = '\u22ee\u22ee';
+    lh.addEventListener('mousedown', e => startResize(e, task.id, 'left'));
+    block.appendChild(lh);
+  }
+  if (isEnd) {
+    const rh = document.createElement('span');
+    rh.className = 'chip-handle-r';
+    rh.textContent = '\u22ee\u22ee';
+    rh.addEventListener('mousedown', e => startResize(e, task.id, 'right'));
+    block.appendChild(rh);
+  }
 
   return block;
 }
@@ -820,6 +848,28 @@ function moveTask(taskId, newStartDate) {
     task.endDate = fmtDate(newEnd.getFullYear(), newEnd.getMonth() + 1, newEnd.getDate());
   }
   task.date = newStartDate;
+  saveState();
+  renderCalendar();
+  if (exportOpen) renderExportPanel();
+}
+
+function copyTask(taskId, newStartDate) {
+  const proj = getProject(activeProjectId);
+  if (!proj) return;
+  const orig = proj.tasks.find(t => t.id === taskId);
+  if (!orig) return;
+  const copy = Object.assign({}, orig, { id: genId(), date: newStartDate });
+  if (orig.endDate && orig.endDate !== orig.date) {
+    const dur = new Date(orig.endDate + 'T00:00:00') - new Date(orig.date + 'T00:00:00');
+    const newEnd = new Date(new Date(newStartDate + 'T00:00:00').getTime() + dur);
+    copy.endDate = fmtDate(newEnd.getFullYear(), newEnd.getMonth() + 1, newEnd.getDate());
+  } else {
+    delete copy.endDate;
+  }
+  if (orig.isReview && orig.attendees) {
+    copy.attendees = orig.attendees.map(a => Object.assign({}, a, { id: genId() }));
+  }
+  proj.tasks.push(copy);
   saveState();
   renderCalendar();
   if (exportOpen) renderExportPanel();
@@ -1123,6 +1173,12 @@ function renderExportPanel() {
     const actions = document.createElement('div');
     actions.className = 'export-actions';
     actions.appendChild(mkCopyBtn('Copy', text));
+    const pngBtn = document.createElement('button');
+    pngBtn.className = 'btn btn-ghost';
+    pngBtn.textContent = 'Download PNG';
+    pngBtn.style.cssText = 'font-size:11px;padding:3px 10px';
+    pngBtn.addEventListener('click', exportPNG);
+    actions.appendChild(pngBtn);
     const pre = document.createElement('textarea');
     pre.className = 'export-text';
     pre.readOnly = true;
@@ -1204,6 +1260,197 @@ function fallbackCopy(text, cb) {
   try { ok = document.execCommand('copy'); } catch(e) {}
   document.body.removeChild(ta);
   cb(ok);
+}
+
+// ── PNG EXPORT ──
+function canvasRoundRect(ctx, x, y, w, h, r) {
+  if (ctx.roundRect) {
+    ctx.beginPath(); ctx.roundRect(x, y, w, h, r); return;
+  }
+  const R = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + R, y);
+  ctx.lineTo(x + w - R, y); ctx.arcTo(x + w, y, x + w, y + R, R);
+  ctx.lineTo(x + w, y + h - R); ctx.arcTo(x + w, y + h, x + w - R, y + h, R);
+  ctx.lineTo(x + R, y + h); ctx.arcTo(x, y + h, x, y + h - R, R);
+  ctx.lineTo(x, y + R); ctx.arcTo(x, y, x + R, y, R);
+  ctx.closePath();
+}
+
+function exportPNG() {
+  const proj = getProject(activeProjectId);
+  if (!proj) return;
+
+  // ── date range ──
+  const todayD = new Date(); todayD.setHours(0,0,0,0);
+  // snap to Monday
+  const startD = new Date(todayD);
+  startD.setDate(startD.getDate() - ((startD.getDay() + 6) % 7));
+
+  let endD = new Date(startD);
+  endD.setDate(startD.getDate() + 27); // 4 weeks
+
+  if (proj.tasks.length) {
+    const maxStr = proj.tasks.reduce((m, t) => { const d = t.endDate || t.date; return d > m ? d : m; }, '');
+    if (maxStr) {
+      const maxD = new Date(maxStr + 'T00:00:00');
+      if (maxD > endD) {
+        // snap to end of that week (Fri or Sun)
+        const add = showWeekends ? (7 - maxD.getDay()) % 7 : ((5 - maxD.getDay()) + 7) % 7;
+        maxD.setDate(maxD.getDate() + add);
+        endD = maxD;
+      }
+    }
+  }
+
+  // ── build day list ──
+  const days = [];
+  const cur = new Date(startD);
+  while (cur <= endD) {
+    if (showWeekends || !isWeekend(cur.getDay()))
+      days.push(fmtDate(cur.getFullYear(), cur.getMonth() + 1, cur.getDate()));
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  const COLS   = showWeekends ? 7 : 5;
+  const SC     = 2;                        // retina scale
+  const CW     = 155 * SC;
+  const CH     = 110 * SC;
+  const HDR_H  = 28 * SC;
+  const TTL_H  = 46 * SC;
+  const ROWS   = Math.ceil(days.length / COLS);
+  const W      = COLS * CW;
+  const H      = TTL_H + HDR_H + ROWS * CH;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  // background
+  ctx.fillStyle = '#0d0d12';
+  ctx.fillRect(0, 0, W, H);
+
+  // title
+  ctx.fillStyle = '#e0e0ec';
+  ctx.font = `bold ${14*SC}px system-ui,sans-serif`;
+  ctx.textAlign = 'left';
+  ctx.fillText(proj.name, 12*SC, 20*SC);
+
+  const todayStr = fmtDate(todayD.getFullYear(), todayD.getMonth() + 1, todayD.getDate());
+  const sFmt = new Date(startD.getTime()).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  const eFmt = endD.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  ctx.fillStyle = '#8080a0';
+  ctx.font = `${10*SC}px system-ui,sans-serif`;
+  ctx.fillText(`${sFmt} – ${eFmt}`, 12*SC, 36*SC);
+
+  // DOW headers
+  ctx.fillStyle = '#16161e';
+  ctx.fillRect(0, TTL_H, W, HDR_H);
+  (showWeekends ? DOW_ALL : DOW_WD).forEach((d, i) => {
+    ctx.fillStyle = '#8080a0';
+    ctx.font = `bold ${9*SC}px system-ui,sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(d.toUpperCase(), i * CW + CW / 2, TTL_H + 18*SC);
+  });
+
+  // cells
+  const todayIdx = days.indexOf(todayStr);
+  days.forEach((dateStr, idx) => {
+    const col = idx % COLS;
+    const row = Math.floor(idx / COLS);
+    const cx  = col * CW;
+    const cy  = TTL_H + HDR_H + row * CH;
+
+    // cell bg
+    ctx.fillStyle = '#1e1e28';
+    ctx.fillRect(cx + 1, cy + 1, CW - 1, CH - 1);
+
+    // grid lines
+    ctx.strokeStyle = '#2c2c3e';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(cx, cy, CW, CH);
+
+    // day number
+    const d = new Date(dateStr + 'T00:00:00');
+    const dayNum = d.getDate();
+    const isToday = dateStr === todayStr;
+
+    if (isToday) {
+      ctx.fillStyle = '#6c63ff';
+      ctx.beginPath();
+      ctx.arc(cx + 14*SC, cy + 14*SC, 9*SC, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+    } else {
+      ctx.fillStyle = '#8080a0';
+    }
+    ctx.font = `bold ${10*SC}px system-ui,sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(dayNum, cx + 14*SC, cy + 18*SC);
+
+    if (dayNum === 1) {
+      ctx.fillStyle = '#6c63ff';
+      ctx.font = `bold ${8*SC}px system-ui,sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.fillText(d.toLocaleDateString('en-US',{month:'short'}), cx + 25*SC, cy + 18*SC);
+    }
+
+    // tasks
+    const tasks = getTasksForDate(activeProjectId, dateStr);
+    let ty = cy + 28*SC;
+    tasks.forEach(task => {
+      const endDate = task.endDate || task.date;
+      const isStart = task.date === dateStr;
+      const isEnd   = endDate === dateStr;
+      const chipH   = 14 * SC;
+      const pad     = 4 * SC;
+
+      const chipX = isStart ? cx + pad : cx;
+      const chipW = isEnd   ? CW - (isStart ? pad : 0) - pad : CW - (isStart ? pad : 0);
+
+      if (task.isReview) {
+        ctx.fillStyle = 'rgba(192,57,79,0.25)';
+        canvasRoundRect(ctx, chipX, ty, chipW, chipH, isStart ? 3*SC : isEnd ? 3*SC : 0);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(192,57,79,0.8)';
+        ctx.lineWidth = SC;
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = task.color;
+        canvasRoundRect(ctx, chipX, ty, chipW, chipH,
+          isStart && isEnd ? 3*SC : isStart ? [3*SC,0,0,3*SC] : isEnd ? [0,3*SC,3*SC,0] : 0);
+        ctx.fill();
+      }
+
+      if (isStart) {
+        ctx.fillStyle = '#fff';
+        ctx.font = `${8*SC}px system-ui,sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.save();
+        ctx.rect(chipX + 3*SC, ty, chipW - 6*SC, chipH);
+        ctx.clip();
+        const label = task.isReview
+          ? 'REVIEW: ' + (task.taskName || '')
+          : (task.person || '') + (task.person && task.taskName ? ' · ' : '') + (task.taskName || task.role);
+        ctx.fillText(label, chipX + 5*SC, ty + 10*SC);
+        ctx.restore();
+      }
+
+      ty += chipH + 3*SC;
+      if (ty + chipH > cy + CH - 4*SC) return; // clip overflow
+    });
+  });
+
+  canvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (proj.name.replace(/[^a-z0-9_\-]/gi,'_') || 'schedule') + '.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }, 'image/png');
 }
 
 // ── INIT ──
