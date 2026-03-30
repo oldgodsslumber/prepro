@@ -197,7 +197,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .export-toggle:hover { color: var(--text); }
 .export-chevron { font-size: 9px; transition: transform .2s; }
 .export-toggle.open .export-chevron { transform: rotate(180deg); }
-.export-body   { display: none; height: 220px; flex-direction: column; }
+.export-body   { display: none; height: 258px; flex-direction: column; }
 .export-body.visible { display: flex; }
 .export-tabs   { display: flex; border-bottom: 1px solid var(--border); padding: 0 14px; flex-shrink: 0; }
 .export-tab    { padding: 6px 12px; font-size: 11px; font-weight: 600; color: var(--dim); border-bottom: 2px solid transparent; cursor: pointer; transition: color .15s; }
@@ -205,6 +205,10 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .export-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 .export-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 8px 14px 10px; gap: 7px; min-height: 0; }
 .export-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.export-opts    { display: flex; gap: 16px; align-items: center; flex-shrink: 0; padding: 4px 0; border-bottom: 1px solid var(--border); margin-bottom: 2px; }
+.export-opt     { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--dim); cursor: pointer; user-select: none; white-space: nowrap; }
+.export-opt:hover { color: var(--text); }
+.export-opt input[type=checkbox] { accent-color: var(--accent); cursor: pointer; width: 12px; height: 12px; }
 .export-note    { font-size: 10px; color: var(--dim); }
 .export-text    { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 8px 10px; color: var(--text); font-family: 'Courier New', monospace; font-size: 11px; overflow-y: auto; white-space: pre; resize: none; outline: none; min-height: 0; }
 .export-table-wrap { flex: 1; overflow: auto; border: 1px solid var(--border); border-radius: 5px; min-height: 0; }
@@ -341,8 +345,11 @@ let viewStart       = null; // YYYY-MM-DD of first visible day
 let collapsedIds    = new Set();
 let dragPayload     = null;
 let panelContext    = null;
-let exportTabActive = 'text';
-let exportOpen      = false;
+let exportTabActive  = 'text';
+let exportOpen       = false;
+let exportOptBold    = false;
+let exportOptRoles   = true;
+let exportOptAlign   = false;
 let showWeekends    = false;
 let resizeState     = null;
 let isResizing      = false;
@@ -1255,20 +1262,42 @@ function buildTextExport() {
   if (!proj) return '';
   const sorted = [...proj.tasks].sort((a, b) => a.date.localeCompare(b.date));
   if (!sorted.length) return '(No tasks scheduled)';
-  return sorted.map(t => {
+
+  // Raw date strings for each task (used for alignment width calculation)
+  const rawDates = sorted.map(t => fmtDateRange(t));
+  const maxLen   = exportOptAlign ? Math.max(...rawDates.map(s => s.length)) : 0;
+
+  const fmtDate = (raw) => {
+    const padded = exportOptAlign ? raw.padEnd(maxLen) : raw;
+    return exportOptBold ? `**${raw}**${exportOptAlign ? ' '.repeat(maxLen - raw.length) : ''}` : padded;
+  };
+
+  const sep = exportOptAlign ? '  ' : '  \u2014  ';
+
+  return sorted.map((t, i) => {
+    const datePart = fmtDate(rawDates[i]);
+    const label    = t.reviewLabel || 'Review';
+
     if (t.isReview) {
-      const name = t.taskName || 'Review';
-      const lines = [`${fmtDateRange(t)}  \u2014  ${name} [REVIEW]`];
+      const name  = t.taskName || label;
+      const lines = [`${datePart}${sep}${name} [${label.toUpperCase()}]`];
       if (t.attendees && t.attendees.length) {
+        const indent = exportOptAlign ? ' '.repeat(maxLen + sep.length) : '    ';
         t.attendees.forEach(a => {
-          lines.push(`    \u00b7 ${a.person ? a.person + ' ' : ''}(${a.role})`);
+          const role = exportOptRoles ? ` (${a.role})` : '';
+          lines.push(`${indent}\u00b7 ${a.person || ''}${role}`);
         });
       }
       return lines.join('\n');
     }
-    const who  = t.person   || t.role;
-    const task = t.taskName || '(untitled)';
-    return `${fmtDateRange(t)}  \u2014  ${task}  \u00b7  ${who} (${t.role})`;
+
+    const task    = t.taskName || '(untitled)';
+    const who     = t.person   || (exportOptRoles ? t.role : '');
+    const roleStr = exportOptRoles && t.person ? ` (${t.role})` : '';
+    const body    = exportOptAlign
+      ? `\u2014  ${task}  \u00b7  ${who}${roleStr}`
+      : `${task}  \u00b7  ${who}${roleStr}`;
+    return `${datePart}${sep}${body}`;
   }).join('\n');
 }
 
@@ -1303,20 +1332,49 @@ function renderExportPanel() {
   content.innerHTML = '';
 
   if (exportTabActive === 'text') {
+    // ── Format options ──
+    const opts = document.createElement('div');
+    opts.className = 'export-opts';
+    const mkOpt = (label, checked, onChange) => {
+      const lbl = document.createElement('label');
+      lbl.className = 'export-opt';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = checked;
+      cb.addEventListener('change', () => { onChange(cb.checked); refreshText(); });
+      lbl.appendChild(cb);
+      lbl.appendChild(document.createTextNode(label));
+      opts.appendChild(lbl);
+    };
+    mkOpt('Bold dates',    exportOptBold,  v => { exportOptBold  = v; });
+    mkOpt('Include roles', exportOptRoles, v => { exportOptRoles = v; });
+    mkOpt('Align tasks',   exportOptAlign, v => { exportOptAlign = v; });
+
     const text = buildTextExport();
     const actions = document.createElement('div');
     actions.className = 'export-actions';
-    actions.appendChild(mkCopyBtn('Copy', text));
+    const copyBtn = mkCopyBtn('Copy', text);
+    actions.appendChild(copyBtn);
     const pngBtn = document.createElement('button');
     pngBtn.className = 'btn btn-ghost';
     pngBtn.textContent = 'Download PNG';
     pngBtn.style.cssText = 'font-size:11px;padding:3px 10px';
     pngBtn.addEventListener('click', exportPNG);
     actions.appendChild(pngBtn);
+
     const pre = document.createElement('textarea');
     pre.className = 'export-text';
     pre.readOnly = true;
     pre.value = text;
+
+    // Live-refresh textarea + copy button when options change
+    function refreshText() {
+      const t = buildTextExport();
+      pre.value = t;
+      copyBtn.replaceWith(mkCopyBtn('Copy', t));
+    }
+
+    content.appendChild(opts);
     content.appendChild(actions);
     content.appendChild(pre);
   } else {
