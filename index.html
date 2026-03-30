@@ -109,6 +109,9 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 /* end: extends left past padding, right stays normal */
 .task-chip.chip-end   { border-radius: 0 4px 4px 0; min-height: 18px; font-size: 0; padding-right: 17px; margin-left: -5px; }
 
+/* lane spacer: same height as a chip row so multi-day bars stay aligned */
+.chip-spacer { height: 20px; flex-shrink: 0; pointer-events: none; }
+
 /* shared handle base */
 .chip-handle-l, .chip-handle-r {
   position: absolute;
@@ -128,10 +131,17 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 
 /* ── REVIEW BLOCK ── */
 .review-block { background: rgba(192,57,79,.15); border: 1.5px solid rgba(192,57,79,.6); border-radius: 5px; padding: 5px 7px; cursor: pointer; flex-shrink: 0; transition: background .12s; position: relative; }
+/* multi-day start: bleed right into gap, suppress right border */
+.review-block.review-multi-start { border-radius: 5px 0 0 5px; border-right: none; margin-right: -7px; z-index: 1; }
 .review-block .chip-handle-l,
 .review-block .chip-handle-r { top: 10px; transform: none; }
 .review-block:hover .chip-handle-l,
 .review-block:hover .chip-handle-r { color: rgba(255,255,255,.9); }
+/* slim continuation bars for multi-day reviews */
+.review-bar { height: 20px; flex-shrink: 0; position: relative; cursor: pointer; background: rgba(192,57,79,.45); font-size: 0; }
+.review-bar-mid { border-radius: 0; margin-left: -5px; margin-right: -6px; }
+.review-bar-end { border-radius: 0 4px 4px 0; margin-left: -5px; padding-right: 17px; }
+.review-bar.drag-accepting { background: rgba(192,57,79,.7); }
 .review-block:hover { background: rgba(192,57,79,.22); }
 .review-block.drag-accepting { background: rgba(192,57,79,.32); border-color: #c0394f; outline: 2px solid rgba(192,57,79,.5); outline-offset: -1px; }
 .review-hd { display: flex; align-items: center; gap: 5px; }
@@ -513,17 +523,22 @@ function renderCalendar() {
   const today    = new Date();
   const todayStr = fmtDate(today.getFullYear(), today.getMonth() + 1, today.getDate());
 
-  // Walk 14 calendar days; skip weekends when hidden — always yields exactly 14 or 10 cells
+  // Collect dates first, then build the lane layout, then render cells
   const target = showWeekends ? 42 : 30;
   const cur    = new Date(startD);
+  const allDates = [];  // [[dayNum, dateStr], ...]
   let shown    = 0;
   while (shown < target) {
     if (!showWeekends && isWeekend(cur.getDay())) { cur.setDate(cur.getDate() + 1); continue; }
-    const dateStr = fmtDate(cur.getFullYear(), cur.getMonth() + 1, cur.getDate());
-    grid.appendChild(makeCell(cur.getDate(), dateStr, todayStr));
+    allDates.push([cur.getDate(), fmtDate(cur.getFullYear(), cur.getMonth() + 1, cur.getDate())]);
     shown++;
     cur.setDate(cur.getDate() + 1);
   }
+
+  const layout = buildTaskLayout(allDates.map(([, d]) => d));
+  allDates.forEach(([dayNum, dateStr]) => {
+    grid.appendChild(makeCell(dayNum, dateStr, todayStr, layout.get(dateStr) || []));
+  });
 }
 
 function isWeekend(dow) { return dow === 0 || dow === 6; }
@@ -538,7 +553,7 @@ function getWeekStart() {
   return fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
 }
 
-function makeCell(dayNum, dateStr, todayStr) {
+function makeCell(dayNum, dateStr, todayStr, laneArr) {
   const cell = document.createElement('div');
   cell.className = 'cal-day' + (dateStr === todayStr ? ' today' : '');
   cell.dataset.date = dateStr;
@@ -557,8 +572,14 @@ function makeCell(dayNum, dateStr, todayStr) {
   }
   cell.appendChild(numDiv);
 
-  getTasksForDate(activeProjectId, dateStr).forEach(task => {
-    cell.appendChild(buildChip(task, dateStr));
+  laneArr.forEach(taskOrNull => {
+    if (taskOrNull === null) {
+      const sp = document.createElement('div');
+      sp.className = 'chip-spacer';
+      cell.appendChild(sp);
+    } else {
+      cell.appendChild(buildChip(taskOrNull, dateStr));
+    }
   });
 
   cell.addEventListener('dragover', e => {
@@ -645,9 +666,16 @@ function buildReviewBlock(task, dateStr) {
   const endDate = task.endDate || task.date;
   const isStart = task.date === dateStr;
   const isEnd   = endDate   === dateStr;
+  const isSolo  = isStart && isEnd;
+  const isMulti = !isSolo;
+
+  // Non-start cells for multi-day reviews: render a slim continuation bar
+  if (isMulti && !isStart) {
+    return buildReviewBar(task, dateStr, isEnd);
+  }
 
   const block = document.createElement('div');
-  block.className = 'review-block';
+  block.className = 'review-block' + (isMulti ? ' review-multi-start' : '');
   block.dataset.taskId = task.id;
 
   const hd = document.createElement('div');
@@ -747,6 +775,52 @@ function buildReviewBlock(task, dateStr) {
   return block;
 }
 
+// Slim bar rendered in mid/end cells of a multi-day review
+function buildReviewBar(task, dateStr, isEnd) {
+  const bar = document.createElement('div');
+  bar.className = 'review-bar ' + (isEnd ? 'review-bar-end' : 'review-bar-mid');
+  bar.dataset.taskId = task.id;
+
+  bar.addEventListener('click', e => { e.stopPropagation(); openPanel('edit-review', task.date, task.id); });
+
+  bar.draggable = true;
+  bar.addEventListener('dragstart', e => {
+    if (isResizing) { e.preventDefault(); return; }
+    const isCopy = e.altKey;
+    dragPayload = { type: isCopy ? 'copy' : 'move', taskId: task.id };
+    e.dataTransfer.setData('text', JSON.stringify(dragPayload));
+    e.dataTransfer.effectAllowed = isCopy ? 'copy' : 'move';
+  });
+  bar.addEventListener('dragend', () => { dragPayload = null; });
+
+  bar.addEventListener('dragover', e => {
+    if (!dragPayload || dragPayload.type === 'move' || dragPayload.type === 'copy' || dragPayload.type === 'review') return;
+    e.preventDefault(); e.stopPropagation();
+    bar.classList.add('drag-accepting');
+  });
+  bar.addEventListener('dragleave', e => {
+    if (!bar.contains(e.relatedTarget)) bar.classList.remove('drag-accepting');
+  });
+  bar.addEventListener('drop', e => {
+    e.preventDefault(); e.stopPropagation();
+    bar.classList.remove('drag-accepting');
+    let pl = dragPayload;
+    if (!pl) { try { pl = JSON.parse(e.dataTransfer.getData('text')); } catch(_) { return; } }
+    if (!pl || pl.type === 'move' || pl.type === 'copy' || pl.type === 'review') return;
+    openPanel('add-attendee', task.date, task.id, pl.role, pl.category, pl.color);
+  });
+
+  if (isEnd) {
+    const rh = document.createElement('span');
+    rh.className = 'chip-handle-r';
+    rh.textContent = '\u22ee\u22ee';
+    rh.addEventListener('mousedown', e => startResize(e, task.id, 'right'));
+    bar.appendChild(rh);
+  }
+
+  return bar;
+}
+
 function removeAttendee(taskId, attId) {
   const proj = getProject(activeProjectId);
   if (!proj) return;
@@ -760,6 +834,60 @@ function removeAttendee(taskId, attId) {
 
 function fmtDate(y, m, d) {
   return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+// Assigns each task to a consistent lane index so multi-day bars never shift row
+// when solo tasks exist on only some of the days they span.
+function buildTaskLayout(dates) {
+  const proj = getProject(activeProjectId);
+  if (!proj || !dates.length) return new Map(dates.map(d => [d, []]));
+
+  const minDate = dates[0];
+  const maxDate = dates[dates.length - 1];
+  const visible = proj.tasks.filter(t => t.date <= maxDate && (t.endDate || t.date) >= minDate);
+
+  const isMulti = t => t.endDate && t.endDate > t.date;
+  const multi   = visible.filter(isMulti);
+  const single  = visible.filter(t => !isMulti(t));
+
+  const layout = new Map(dates.map(d => [d, []]));
+  const taskDates = t => dates.filter(d => d >= t.date && d <= (t.endDate || t.date));
+
+  // Sort: earliest start first, then longest span first
+  const sortedMulti = [...multi].sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    const durA = new Date((a.endDate||a.date)+'T00:00:00') - new Date(a.date+'T00:00:00');
+    const durB = new Date((b.endDate||b.date)+'T00:00:00') - new Date(b.date+'T00:00:00');
+    return durB - durA;
+  });
+
+  const laneOcc = []; // laneOcc[i] = Set<dateStr> of occupied dates
+
+  sortedMulti.forEach(task => {
+    const td = taskDates(task);
+    if (!td.length) return;
+    let lane = 0;
+    while (laneOcc[lane] && td.some(d => laneOcc[lane].has(d))) lane++;
+    if (!laneOcc[lane]) laneOcc[lane] = new Set();
+    td.forEach(d => laneOcc[lane].add(d));
+    td.forEach(d => {
+      const arr = layout.get(d);
+      while (arr.length < lane) arr.push(null); // pad with spacers
+      arr[lane] = task;
+    });
+  });
+
+  // Single-day tasks: fill first null slot or append
+  single.forEach(task => {
+    const d = task.date;
+    if (!layout.has(d)) return;
+    const arr = layout.get(d);
+    const slot = arr.indexOf(null);
+    if (slot >= 0) arr[slot] = task;
+    else arr.push(task);
+  });
+
+  return layout;
 }
 
 function getTasksForDate(projectId, dateStr) {
