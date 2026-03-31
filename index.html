@@ -247,6 +247,16 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .roster-suggest-chip { background: transparent; border: 1px dashed var(--border); border-radius: 20px; padding: 2px 9px; font-size: 11px; color: var(--dim); cursor: pointer; transition: color .12s, border-color .12s; white-space: nowrap; }
 .roster-suggest-chip:hover { color: var(--accent); border-color: var(--accent); }
 
+/* ── HELP BUTTON ── */
+.help-btn { position: fixed; bottom: 18px; left: 18px; width: 32px; height: 32px; border-radius: 50%; background: var(--card); border: 1px solid var(--border); color: var(--dim); font-size: 15px; font-weight: 700; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 400; text-decoration: none; transition: background .15s, color .15s, border-color .15s; }
+.help-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ── HELP TOOLTIPS ── */
+.htip { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; background: var(--border); color: var(--dim); font-size: 9px; font-weight: 700; cursor: default; flex-shrink: 0; position: relative; }
+.htip:hover { background: var(--accent); color: #fff; }
+.htip-popup { display: none; position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: 11px; color: var(--text); line-height: 1.5; min-width: 200px; max-width: 260px; z-index: 500; box-shadow: 0 6px 20px rgba(0,0,0,.5); pointer-events: none; text-align: left; font-weight: 400; white-space: normal; }
+.htip:hover .htip-popup { display: block; }
+
 /* ── CONTEXT MENU ── */
 .ctx-menu { position: fixed; background: var(--panel); border: 1px solid var(--border); border-radius: 7px; padding: 4px; z-index: 300; min-width: 148px; box-shadow: 0 8px 24px rgba(0,0,0,.55); }
 .ctx-menu.hidden { display: none; }
@@ -277,6 +287,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
   <div class="sidebar">
     <div class="sidebar-head">
       <span class="sidebar-head-label">Projects</span>
+      <span class="htip">?<span class="htip-popup" style="left:0;transform:none;">One project per video. Right-click any project to rename, delete, or add a sub-project (e.g. separate Pre-Production and Post-Production phases).</span></span>
     </div>
     <div class="sidebar-tree" id="sidebarTree"></div>
   </div>
@@ -285,7 +296,9 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
   <div class="right-col">
 
     <!-- ROLE PALETTE -->
-    <div class="palette" id="palette"></div>
+    <div class="palette" id="palette">
+      <span class="htip" style="margin-left:6px;">?<span class="htip-popup">Drag any role chip onto a calendar day to create a task. Red chips (Review, Studio Shoot, On-Location Shoot) create multi-day event blocks. Drop more chips onto a red block to add attendees.</span></span>
+    </div>
 
     <!-- CALENDAR -->
     <div class="cal-wrap" id="calWrap">
@@ -300,6 +313,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
           <button class="cal-nav-btn" id="calNext">&#8250;</button>
           <button class="btn-toggle" id="calToday">Today</button>
           <button class="btn-toggle on" id="wkndToggle">Show Weekends</button>
+          <span class="htip">?<span class="htip-popup">← → navigate two weeks at a time. Today snaps back to the current week. Toggle weekends to show or hide Sat/Sun columns. Drag tasks to move them; hold Alt while dragging to duplicate.</span></span>
         </div>
         <div class="cal-grid" id="calGrid"></div>
       </div>
@@ -315,7 +329,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
         <div class="panel-divider"></div>
         <div class="panel-fields">
           <div class="panel-field panel-field-loe" id="panelFieldLOE">
-            <label>Effort</label>
+            <label>Effort <span class="htip">?<span class="htip-popup">Optional level of effort: 🟢 Low, 🟡 Medium, 🔴 High. Shows as a dot on the task chip and feeds into the Planyway export.</span></span></label>
             <select id="panelLOE">
               <option value="">—</option>
               <option value="low">🟢 Low</option>
@@ -324,7 +338,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
             </select>
           </div>
           <div class="panel-field" id="panelFieldPerson">
-            <label id="panelPersonLabel">Person</label>
+            <label id="panelPersonLabel">Person <span class="htip">?<span class="htip-popup">Choose from people added to this project in Role Assignees. Select "Other…" to type a new name — they'll be saved to history for future projects.</span></span></label>
             <select id="panelPerson" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:5px 9px;color:var(--text);font-size:13px;outline:none;transition:border-color .15s;min-width:100px;">
               <option value="">—</option>
             </select>
@@ -350,6 +364,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
       <div class="export-panel">
         <div class="export-toggle" id="exportToggle">
           <span>Export Schedule</span>
+          <span class="htip" style="margin-left:6px;">?<span class="htip-popup">Four export formats: Text (paste into email/Word/Slack), Table/Excel (TSV), PNG (high-res calendar image), Planyway (checklist for Trello/Planyway — only the category column is copied).</span></span>
         </div>
         <div class="export-body" id="exportBody">
           <div class="export-tabs">
@@ -367,6 +382,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
         <div class="roster-toggle" id="rosterToggle">
           <span class="export-chevron">▲</span>
           <span>Role Assignees</span>
+          <span class="htip" style="margin-left:6px;">?<span class="htip-popup">Add your project team here — one list per role. Resets for each new project. Dashed chips are people from previous projects; click to add them instantly. Names added here populate the Person dropdown when creating tasks.</span></span>
         </div>
         <div class="roster-body" id="rosterBody">
           <div class="roster-content" id="rosterContent"></div>
@@ -380,6 +396,9 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 
 <!-- CONTEXT MENU -->
 <div class="ctx-menu hidden" id="ctxMenu"></div>
+
+<!-- HELP BUTTON -->
+<a href="guide.html" target="_blank" class="help-btn" title="Open guide">?</a>
 
 <script>
 'use strict';
