@@ -230,7 +230,6 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .roster-body    { display: none; flex: 1; flex-direction: column; overflow-y: auto; }
 .roster-body.visible { display: flex; }
 .roster-content { display: flex; flex-direction: column; gap: 0; padding: 6px 0 10px; flex: 1; }
-.roster-attach-all { margin: 0 12px 8px; }
 .roster-role    { border-bottom: 1px solid var(--border); padding: 6px 12px 8px; }
 .roster-role-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
 .roster-role-label  { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .07em; }
@@ -244,6 +243,9 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .roster-add-input:focus { border-color: var(--accent); }
 .roster-add-btn  { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer; transition: opacity .15s; }
 .roster-add-btn:hover { opacity: .85; }
+.roster-suggestions { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 5px; }
+.roster-suggest-chip { background: transparent; border: 1px dashed var(--border); border-radius: 20px; padding: 2px 9px; font-size: 11px; color: var(--dim); cursor: pointer; transition: color .12s, border-color .12s; white-space: nowrap; }
+.roster-suggest-chip:hover { color: var(--accent); border-color: var(--accent); }
 
 /* ── CONTEXT MENU ── */
 .ctx-menu { position: fixed; background: var(--panel); border: 1px solid var(--border); border-radius: 7px; padding: 4px; z-index: 300; min-width: 148px; box-shadow: 0 8px 24px rgba(0,0,0,.55); }
@@ -413,14 +415,44 @@ let resizeState     = null;
 let isResizing      = false;
 
 // ── ROSTER ──
-let roster = {}; // { roleName: ['Alice', 'Bob'], ... }
 let rosterOpen = true;
-function loadRoster() {
-  try { const r = localStorage.getItem('prepro_roster'); if (r) roster = JSON.parse(r); } catch(e) {}
-  if (!roster || typeof roster !== 'object') roster = {};
+// Name history: global record of all names ever used, per role { role: Set-as-array }
+let nameHistory = {};
+function loadNameHistory() {
+  try { const r = localStorage.getItem('prepro_name_history'); if (r) nameHistory = JSON.parse(r); } catch(e) {}
+  if (!nameHistory || typeof nameHistory !== 'object') nameHistory = {};
 }
-function saveRoster() { localStorage.setItem('prepro_roster', JSON.stringify(roster)); }
-function getRosterNames(role) { return roster[role] || []; }
+function saveNameHistory() { localStorage.setItem('prepro_name_history', JSON.stringify(nameHistory)); }
+function recordNameHistory(role, name) {
+  if (!nameHistory[role]) nameHistory[role] = [];
+  if (!nameHistory[role].includes(name)) { nameHistory[role].push(name); saveNameHistory(); }
+}
+// Roster lives on the active project
+function getProjectRoster() {
+  const proj = getProject(activeProjectId);
+  if (!proj) return {};
+  if (!proj.roster) proj.roster = {};
+  return proj.roster;
+}
+function getRosterNames(role) { return getProjectRoster()[role] || []; }
+function addToRoster(role, name) {
+  const proj = getProject(activeProjectId);
+  if (!proj) return;
+  if (!proj.roster) proj.roster = {};
+  if (!proj.roster[role]) proj.roster[role] = [];
+  if (!proj.roster[role].includes(name)) { proj.roster[role].push(name); saveState(); }
+  recordNameHistory(role, name);
+}
+function removeFromRoster(role, name) {
+  const proj = getProject(activeProjectId);
+  if (!proj || !proj.roster || !proj.roster[role]) return;
+  proj.roster[role] = proj.roster[role].filter(n => n !== name);
+  saveState();
+}
+function getHistorySuggestions(role) {
+  const current = getRosterNames(role);
+  return (nameHistory[role] || []).filter(n => !current.includes(n));
+}
 
 // ── PERSISTENCE ──
 function loadState() {
@@ -443,7 +475,7 @@ function getDescendantIds(id) {
   return ids;
 }
 function addProject(name, parentId) {
-  const p = { id: genId(), name, parentId: parentId || null, tasks: [] };
+  const p = { id: genId(), name, parentId: parentId || null, tasks: [], roster: {} };
   state.projects.push(p); saveState(); return p;
 }
 function deleteProject(id) {
@@ -500,6 +532,7 @@ function renderTreeLevel(parentId, depth, container) {
       renderSidebar();
       renderCalendar();
       if (exportOpen) renderExportPanel();
+      if (rosterOpen) renderRosterPanel();
     });
     node.addEventListener('contextmenu', e => { e.preventDefault(); openContextMenu(e, proj.id); });
 
@@ -1466,57 +1499,24 @@ function renderRosterPanel() {
   if (!content) return;
   content.innerHTML = '';
 
-  // Collect all roles from ROLE_CATS (skip "Other" catch-all)
   const roles = ROLE_CATS.flatMap(cat => cat.roles).filter(r => r !== 'Other');
 
-  // Attach All button
-  const attachAllBtn = document.createElement('button');
-  attachAllBtn.className = 'btn btn-ghost roster-attach-all';
-  attachAllBtn.style.cssText = 'font-size:11px;padding:3px 10px;';
-  attachAllBtn.textContent = 'Attach All to Open Task';
-  attachAllBtn.title = 'Add all roster members as attendees to the currently open review block';
-  attachAllBtn.addEventListener('click', () => {
-    if (!panelContext || panelContext.mode !== 'add-attendee') {
-      attachAllBtn.textContent = 'Open a review block first';
-      setTimeout(() => { attachAllBtn.textContent = 'Attach All to Open Task'; }, 2000);
-      return;
-    }
-    const proj = getProject(activeProjectId);
-    const task = proj && proj.tasks.find(t => t.id === panelContext.taskId);
-    if (!task) return;
-    if (!task.attendees) task.attendees = [];
-    let added = 0;
-    roles.forEach(role => {
-      const names = getRosterNames(role);
-      const cat = ROLE_CATS.find(c => c.roles.includes(role));
-      names.forEach(name => {
-        task.attendees.push({ id: genId(), role, category: cat ? cat.label : '', person: name, color: cat ? cat.color : '#888' });
-        added++;
-      });
-    });
-    saveState(); closePanel(); renderCalendar();
-    if (exportOpen) renderExportPanel();
-    attachAllBtn.textContent = `Added ${added} attendee${added !== 1 ? 's' : ''}`;
-    setTimeout(() => { attachAllBtn.textContent = 'Attach All to Open Task'; }, 2000);
-  });
-  content.appendChild(attachAllBtn);
-
   roles.forEach(role => {
-    const cat = ROLE_CATS.find(c => c.roles.includes(role));
+    const cat   = ROLE_CATS.find(c => c.roles.includes(role));
     const names = getRosterNames(role);
+    const suggestions = getHistorySuggestions(role);
 
     const section = document.createElement('div');
     section.className = 'roster-role';
 
-    const header = document.createElement('div');
-    header.className = 'roster-role-header';
-    const lbl = document.createElement('span');
+    // Role label
+    const lbl = document.createElement('div');
     lbl.className = 'roster-role-label';
     lbl.textContent = role;
     lbl.style.color = cat ? cat.color : 'var(--dim)';
-    header.appendChild(lbl);
-    section.appendChild(header);
+    section.appendChild(lbl);
 
+    // Current project members
     const nameList = document.createElement('div');
     nameList.className = 'roster-names';
     names.forEach(name => {
@@ -1527,52 +1527,57 @@ function renderRosterPanel() {
       const removeBtn = document.createElement('span');
       removeBtn.className = 'remove-x';
       removeBtn.textContent = '✕';
-      removeBtn.title = 'Remove';
       removeBtn.addEventListener('click', e => {
         e.stopPropagation();
-        roster[role] = (roster[role] || []).filter(n => n !== name);
-        saveRoster();
+        removeFromRoster(role, name);
         renderRosterPanel();
-        // refresh dropdown if this role is currently open
         if (panelContext && panelContext.role === role) populatePersonDropdown(role);
       });
       chip.appendChild(nameSpan);
       chip.appendChild(removeBtn);
-      // clicking name fills person field
-      nameSpan.addEventListener('click', () => {
-        const sel = document.getElementById('panelPerson');
-        const other = document.getElementById('panelPersonOther');
-        if (!sel) return;
-        if ([...sel.options].some(o => o.value === name)) {
-          sel.value = name;
-          if (other) other.style.display = 'none';
-        }
-      });
       nameList.appendChild(chip);
     });
     section.appendChild(nameList);
 
+    // Previous names as suggestion chips (not yet on this project)
+    if (suggestions.length) {
+      const suggestRow = document.createElement('div');
+      suggestRow.className = 'roster-suggestions';
+      suggestions.forEach(name => {
+        const chip = document.createElement('div');
+        chip.className = 'roster-suggest-chip';
+        chip.textContent = '+ ' + name;
+        chip.title = 'Add to this project';
+        chip.addEventListener('click', () => {
+          addToRoster(role, name);
+          renderRosterPanel();
+          if (panelContext && panelContext.role === role) populatePersonDropdown(role);
+        });
+        suggestRow.appendChild(chip);
+      });
+      section.appendChild(suggestRow);
+    }
+
+    // Add name input — focus stays after adding
     const addRow = document.createElement('div');
     addRow.className = 'roster-add-row';
     const input = document.createElement('input');
     input.className = 'roster-add-input';
     input.placeholder = 'Add name…';
     input.type = 'text';
+    input.dataset.role = role;
     const addBtn = document.createElement('button');
     addBtn.className = 'roster-add-btn';
     addBtn.textContent = '+';
     const doAdd = () => {
       const val = input.value.trim();
       if (!val) return;
-      if (!roster[role]) roster[role] = [];
-      if (!roster[role].includes(val)) {
-        roster[role].push(val);
-        saveRoster();
-        renderRosterPanel();
-        if (panelContext && panelContext.role === role) populatePersonDropdown(role);
-      }
-      input.value = '';
-      input.focus();
+      addToRoster(role, val);
+      renderRosterPanel();
+      if (panelContext && panelContext.role === role) populatePersonDropdown(role);
+      // Re-focus the input for this role after re-render
+      const restored = document.querySelector(`.roster-add-input[data-role="${CSS.escape(role)}"]`);
+      if (restored) restored.focus();
     };
     addBtn.addEventListener('click', doAdd);
     input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doAdd(); } });
@@ -2039,7 +2044,7 @@ function exportPNG() {
 // ── INIT ──
 function init() {
   loadState();
-  loadRoster();
+  loadNameHistory();
   const roots = getRootProjects();
   if (roots.length) activeProjectId = roots[0].id;
 
