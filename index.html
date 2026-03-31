@@ -429,7 +429,7 @@ let panelContext    = null;
 let exportTabActive  = localStorage.getItem('prepro_export_tab') || 'text';
 let exportOpen       = true;
 let exportOptBold    = true;
-let exportOptRoles   = true;
+let exportOptRoles   = false;
 let exportOptAlign   = true;
 let exportOptDueDate = true;
 let exportPNGRoles   = true;
@@ -570,7 +570,10 @@ function renderTreeLevel(parentId, depth, container) {
       renderSidebar();
       renderCalendar();
       if (exportOpen) renderExportPanel();
-      if (rosterOpen) renderRosterPanel();
+      // Collapse roster when switching to an existing project
+      rosterOpen = false;
+      document.getElementById('rosterToggle').classList.remove('open');
+      document.getElementById('rosterBody').classList.remove('visible');
     });
     node.addEventListener('contextmenu', e => { e.preventDefault(); openContextMenu(e, proj.id); });
 
@@ -2185,6 +2188,11 @@ function init() {
       activeProjectId = p.id;
       renderSidebar();
       renderCalendar();
+      // Open roster for new projects so team can be set up immediately
+      rosterOpen = true;
+      document.getElementById('rosterToggle').classList.add('open');
+      document.getElementById('rosterBody').classList.add('visible');
+      renderRosterPanel();
     }
   });
 
@@ -2269,10 +2277,8 @@ function init() {
     if (rosterOpen) renderRosterPanel();
   });
 
-  // Open roster on load
-  document.getElementById('rosterToggle').classList.add('open');
-  document.getElementById('rosterBody').classList.add('visible');
-  renderRosterPanel();
+  // Roster starts closed on load (existing projects); opens automatically for new projects
+  rosterOpen = false;
 }
 
 init();
