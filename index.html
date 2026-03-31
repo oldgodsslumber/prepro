@@ -52,11 +52,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .sidebar-head-label { font-size: 10px; font-weight: 600; color: var(--dim); letter-spacing: .08em; text-transform: uppercase; }
 .sidebar-tree { flex: 1; overflow-y: auto; padding: 6px 0; }
 
-.tree-node { display: flex; align-items: center; gap: 4px; padding: 5px 8px 5px 0; cursor: pointer; border-radius: 5px; margin: 1px 6px; user-select: none; flex-wrap: wrap; }
-.tree-due  { width: 100%; padding: 1px 0 3px 26px; font-size: 10px; color: rgba(255,255,255,.55); display: flex; align-items: center; gap: 4px; }
-.tree-due input[type=date] { background: transparent; border: none; border-bottom: 1px solid rgba(255,255,255,.2); color: inherit; font-size: 10px; outline: none; cursor: pointer; padding: 1px 2px; width: 100px; }
-.tree-node:not(.active) .tree-due { color: var(--dim); }
-.tree-node:not(.active) .tree-due input[type=date] { border-bottom-color: var(--border); color: var(--dim); }
+.tree-node { display: flex; align-items: center; gap: 4px; padding: 5px 8px 5px 0; cursor: pointer; border-radius: 5px; margin: 1px 6px; user-select: none; }
 .tree-node:hover { background: var(--card); }
 .tree-node.active { background: var(--accent); }
 .tree-node.active .tree-more, .tree-node.active .tree-toggle, .tree-node.active .tree-label { color: #fff; }
@@ -77,6 +73,9 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .role-chip { padding: 4px 11px; border-radius: 12px; font-size: 11px; font-weight: 600; color: #fff; cursor: grab; user-select: none; white-space: nowrap; transition: opacity .1s, transform .1s; }
 .role-chip:hover { opacity: .9; transform: translateY(-1px); }
 .role-chip:active { cursor: grabbing; transform: scale(.97); }
+.chip-duedate { background: #ffffff !important; color: #111 !important; border: 1.5px solid #ccc; }
+.duedate-marker { background: #fff; color: #111; border-radius: 4px; padding: 3px 8px; font-size: 11px; font-weight: 700; cursor: grab; user-select: none; white-space: nowrap; flex-shrink: 0; border-left: 3px solid #111; transition: opacity .12s; }
+.duedate-marker:hover { opacity: .85; }
 
 /* ── CALENDAR WRAPPER ── */
 .cal-wrap { flex: 1; overflow-y: auto; padding: 12px 14px 8px; min-height: 0; }
@@ -564,23 +563,6 @@ function renderTreeLevel(parentId, depth, container) {
     more.addEventListener('click', e => { e.stopPropagation(); openContextMenu(e, proj.id); });
     node.appendChild(more);
 
-    // Due date row
-    const dueRow = document.createElement('div');
-    dueRow.className = 'tree-due';
-    dueRow.innerHTML = '🏁 Due:';
-    const duePicker = document.createElement('input');
-    duePicker.type  = 'date';
-    duePicker.value = proj.dueDate || '';
-    duePicker.title = 'Project Due Date';
-    duePicker.addEventListener('click', e => e.stopPropagation());
-    duePicker.addEventListener('change', e => {
-      e.stopPropagation();
-      proj.dueDate = duePicker.value || null;
-      saveState();
-    });
-    dueRow.appendChild(duePicker);
-    node.appendChild(dueRow);
-
     node.addEventListener('click', () => {
       activeProjectId = proj.id;
       closePanel();
@@ -651,6 +633,24 @@ function renderPalette() {
     revGrp.appendChild(chip);
   });
   pal.appendChild(revGrp);
+
+  // Separator
+  const sep2 = document.createElement('div');
+  sep2.style.cssText = 'width:1px;height:20px;background:var(--border);margin:0 4px;align-self:center';
+  pal.appendChild(sep2);
+
+  // Project Due Date chip
+  const dueChip = document.createElement('div');
+  dueChip.className = 'role-chip chip-duedate';
+  dueChip.draggable = true;
+  dueChip.textContent = '🏁 Project Due Date';
+  dueChip.addEventListener('dragstart', e => {
+    dragPayload = { type: 'duedate' };
+    e.dataTransfer.setData('text', JSON.stringify(dragPayload));
+    e.dataTransfer.effectAllowed = 'copy';
+  });
+  dueChip.addEventListener('dragend', () => { dragPayload = null; });
+  pal.appendChild(dueChip);
 }
 
 // ── CALENDAR ──
@@ -765,6 +765,11 @@ function makeCell(dayNum, dateStr, todayStr, laneArr) {
       moveTask(pl.taskId, dateStr);
     } else if (pl.type === 'copy') {
       copyTask(pl.taskId, dateStr);
+    } else if (pl.type === 'duedate') {
+      const proj = getProject(activeProjectId);
+      if (!proj) return;
+      proj.tasks.push({ id: genId(), date: dateStr, isDueDate: true, color: '#ffffff', role: '', roleCategory: '' });
+      saveState(); renderCalendar(); if (exportOpen) renderExportPanel();
     } else if (pl.type === 'review') {
       openPanel('create-review', dateStr, null, pl.label || 'Review', null, REVIEW_COLOR);
     } else {
@@ -776,6 +781,7 @@ function makeCell(dayNum, dateStr, todayStr, laneArr) {
 }
 
 function buildChip(task, dateStr) {
+  if (task.isDueDate) return buildDueDateMarker(task, dateStr);
   if (task.isReview) return buildReviewBlock(task, dateStr);
   const endDate = task.endDate || task.date;
   const isStart = task.date === dateStr;
@@ -826,6 +832,29 @@ function buildChip(task, dateStr) {
 
   chip.addEventListener('click', e => { e.stopPropagation(); openPanel('edit', task.date, task.id); });
   return chip;
+}
+
+function buildDueDateMarker(task, dateStr) {
+  const el = document.createElement('div');
+  el.className = 'duedate-marker';
+  el.dataset.taskId = task.id;
+  el.textContent = '🏁 Project Due Date';
+  el.draggable = true;
+  el.title = 'Drag to move · Click to delete';
+  el.addEventListener('dragstart', e => {
+    if (isResizing) { e.preventDefault(); return; }
+    dragPayload = { type: 'move', taskId: task.id };
+    e.dataTransfer.setData('text', JSON.stringify(dragPayload));
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  el.addEventListener('dragend', () => { dragPayload = null; });
+  el.addEventListener('click', e => {
+    e.stopPropagation();
+    if (!confirm('Remove Project Due Date marker?')) return;
+    const proj = getProject(activeProjectId);
+    if (proj) { proj.tasks = proj.tasks.filter(t => t.id !== task.id); saveState(); renderCalendar(); }
+  });
+  return el;
 }
 
 function buildReviewBlock(task, dateStr) {
@@ -1455,7 +1484,7 @@ function buildHTMLExport() {
   if (!activeProjectId) return { html: '<em>(No project selected)</em>', plain: '(No project selected)' };
   const proj = getProject(activeProjectId);
   if (!proj) return { html: '', plain: '' };
-  const sorted = [...proj.tasks].sort((a, b) => a.date.localeCompare(b.date));
+  const sorted = [...proj.tasks].filter(t => !t.isDueDate).sort((a, b) => a.date.localeCompare(b.date));
   if (!sorted.length) return { html: '<em>(No tasks scheduled)</em>', plain: '(No tasks scheduled)' };
 
   const rawDates = sorted.map(t => fmtDateRange(t));
@@ -1510,7 +1539,7 @@ function buildTSV() {
   if (!activeProjectId) return '';
   const proj = getProject(activeProjectId);
   if (!proj) return '';
-  const sorted = [...proj.tasks].sort((a, b) => a.date.localeCompare(b.date));
+  const sorted = [...proj.tasks].filter(t => !t.isDueDate).sort((a, b) => a.date.localeCompare(b.date));
   const esc = s => (s || '').replace(/[\t\n\r]/g, ' ');
   const toDate = str => new Date(str + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const header = 'Start Date\tEnd Date\tTask\tPerson\tRole\tCategory\tType';
@@ -1822,7 +1851,7 @@ function getPlanywayCat(task) {
 function buildPlanyway() {
   const proj = getProject(activeProjectId);
   if (!proj) return [];
-  const sorted = [...proj.tasks].sort((a, b) => a.date.localeCompare(b.date));
+  const sorted = [...proj.tasks].filter(t => !t.isDueDate).sort((a, b) => a.date.localeCompare(b.date));
   const items = [];
 
   sorted.forEach(task => {
