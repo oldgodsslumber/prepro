@@ -2174,8 +2174,11 @@ function exportPNG() {
         ctx.clip();
         const loeStr  = task.loe ? LOE_EMOJI[task.loe] + ' ' : '';
         const roleStr = exportPNGRoles && !task.isReview && task.role ? ` (${task.role})` : '';
+        const attStr  = task.isReview && task.attendees && task.attendees.length
+          ? ' — ' + task.attendees.map(a => a.person || a.role).join(', ')
+          : '';
         const label   = task.isReview
-          ? (task.reviewLabel || 'REVIEW') + ': ' + (task.taskName || '')
+          ? (task.reviewLabel || 'REVIEW') + ': ' + (task.taskName || '') + attStr
           : loeStr + ((task.person || '') + (task.person && task.taskName ? ' · ' : '') + (task.taskName || task.role)) + roleStr;
         ctx.fillText(label, chipX + 5*SC, ty + 10*SC);
         ctx.restore();
