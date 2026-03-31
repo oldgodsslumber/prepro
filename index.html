@@ -52,7 +52,11 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .sidebar-head-label { font-size: 10px; font-weight: 600; color: var(--dim); letter-spacing: .08em; text-transform: uppercase; }
 .sidebar-tree { flex: 1; overflow-y: auto; padding: 6px 0; }
 
-.tree-node { display: flex; align-items: center; gap: 4px; padding: 5px 8px 5px 0; cursor: pointer; border-radius: 5px; margin: 1px 6px; user-select: none; }
+.tree-node { display: flex; align-items: center; gap: 4px; padding: 5px 8px 5px 0; cursor: pointer; border-radius: 5px; margin: 1px 6px; user-select: none; flex-wrap: wrap; }
+.tree-due  { width: 100%; padding: 1px 0 3px 26px; font-size: 10px; color: rgba(255,255,255,.55); display: flex; align-items: center; gap: 4px; }
+.tree-due input[type=date] { background: transparent; border: none; border-bottom: 1px solid rgba(255,255,255,.2); color: inherit; font-size: 10px; outline: none; cursor: pointer; padding: 1px 2px; width: 100px; }
+.tree-node:not(.active) .tree-due { color: var(--dim); }
+.tree-node:not(.active) .tree-due input[type=date] { border-bottom-color: var(--border); color: var(--dim); }
 .tree-node:hover { background: var(--card); }
 .tree-node.active { background: var(--accent); }
 .tree-node.active .tree-more, .tree-node.active .tree-toggle, .tree-node.active .tree-label { color: #fff; }
@@ -329,7 +333,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
         <div class="panel-divider"></div>
         <div class="panel-fields">
           <div class="panel-field panel-field-loe" id="panelFieldLOE">
-            <label>Effort <span class="htip">?<span class="htip-popup">Optional level of effort: 🟢 Low, 🟡 Medium, 🔴 High. Shows as a dot on the task chip and feeds into the Planyway export.</span></span></label>
+            <label>Effort <span class="htip">?<span class="htip-popup">Optional level of effort: 🟢 Low, 🟡 Medium, 🔴 High. Shows as a dot on the task chip and feeds into the Trello Export.</span></span></label>
             <select id="panelLOE">
               <option value="">—</option>
               <option value="low">🟢 Low</option>
@@ -364,14 +368,14 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
       <div class="export-panel">
         <div class="export-toggle" id="exportToggle">
           <span>Export Schedule</span>
-          <span class="htip" style="margin-left:6px;">?<span class="htip-popup">Four export formats: Text (paste into email/Word/Slack), Table/Excel (TSV), PNG (high-res calendar image), Planyway (checklist for Trello/Planyway — only the category column is copied).</span></span>
+          <span class="htip" style="margin-left:6px;">?<span class="htip-popup">Four export formats: Text (paste into email/Word/Slack), Table/Excel (TSV), PNG (high-res calendar image), Trello Export (checklist for Trello/Planyway — only the category column is copied).</span></span>
         </div>
         <div class="export-body" id="exportBody">
           <div class="export-tabs">
             <div class="export-tab active" data-tab="text">Text</div>
             <div class="export-tab" data-tab="table">Table / Excel</div>
             <div class="export-tab" data-tab="png">PNG</div>
-            <div class="export-tab" data-tab="planyway">Planyway</div>
+            <div class="export-tab" data-tab="planyway">Trello Export</div>
           </div>
           <div class="export-content" id="exportContent"></div>
         </div>
@@ -425,9 +429,9 @@ let dragPayload     = null;
 let panelContext    = null;
 let exportTabActive  = localStorage.getItem('prepro_export_tab') || 'text';
 let exportOpen       = true;
-let exportOptBold    = false;
+let exportOptBold    = true;
 let exportOptRoles   = true;
-let exportOptAlign   = false;
+let exportOptAlign   = true;
 let exportPNGRoles   = true;
 let showWeekends    = false;
 let resizeState     = null;
@@ -509,7 +513,7 @@ function getDescendantIds(id) {
   return ids;
 }
 function addProject(name, parentId) {
-  const p = { id: genId(), name, parentId: parentId || null, tasks: [], roster: {} };
+  const p = { id: genId(), name, parentId: parentId || null, tasks: [], roster: {}, dueDate: null };
   state.projects.push(p); saveState(); return p;
 }
 function deleteProject(id) {
@@ -559,6 +563,23 @@ function renderTreeLevel(parentId, depth, container) {
     more.textContent = '···';
     more.addEventListener('click', e => { e.stopPropagation(); openContextMenu(e, proj.id); });
     node.appendChild(more);
+
+    // Due date row
+    const dueRow = document.createElement('div');
+    dueRow.className = 'tree-due';
+    dueRow.innerHTML = '🏁 Due:';
+    const duePicker = document.createElement('input');
+    duePicker.type  = 'date';
+    duePicker.value = proj.dueDate || '';
+    duePicker.title = 'Project Due Date';
+    duePicker.addEventListener('click', e => e.stopPropagation());
+    duePicker.addEventListener('change', e => {
+      e.stopPropagation();
+      proj.dueDate = duePicker.value || null;
+      saveState();
+    });
+    dueRow.appendChild(duePicker);
+    node.appendChild(dueRow);
 
     node.addEventListener('click', () => {
       activeProjectId = proj.id;
@@ -1698,7 +1719,7 @@ function renderExportPanel() {
     actions.appendChild(mkCopyBtn('Copy', copyText));
     const pwNote = document.createElement('span');
     pwNote.className = 'export-note';
-    pwNote.textContent = 'Copies category column only · Reference columns are for your use';
+    pwNote.textContent = 'Copies category column only · Reviews, Stakeholders, External & Vendors excluded';
     actions.appendChild(pwNote);
 
     const wrap = document.createElement('div');
@@ -1777,13 +1798,10 @@ const PW_PRE  = ['script','scripting','storyboard','storyboarding','meeting','re
 const PW_POST = ['revision','revisions','revise','post','post-production','color','colour','grade','delivery','deliverable','feedback','approval','sign-off','sign off'];
 
 function getPlanywayCat(task) {
-  if (task.isReview) {
-    const lbl = (task.reviewLabel || '').toLowerCase();
-    if (lbl.includes('studio') || lbl.includes('location')) return 'Production';
-    return 'Pre-Production'; // regular review = meeting
-  }
+  if (task.isReview) return null; // Reviews excluded
   if (['External','Vendors'].includes(task.roleCategory)) return null;
   const role = (task.role || '').toLowerCase();
+  if (role === 'stakeholder') return null; // Stakeholders excluded
   const name = (task.taskName || '').toLowerCase();
   if (role === 'editor')   return 'Editing';
   if (role === 'animator') return 'Animation';
@@ -1792,7 +1810,7 @@ function getPlanywayCat(task) {
     if (PW_POST.some(k => name.includes(k))) return 'Post-Producing';
     return 'Producing';
   }
-  return null; // Other/Copywriter/Designer/Stakeholder/etc — omit
+  return null;
 }
 
 function buildPlanyway() {
@@ -2112,15 +2130,17 @@ function init() {
     renderCalendar();
   });
 
-  // Weekend toggle — re-snap viewStart to correct start day for new mode
+  // Weekend toggle — keep the same Monday/Sunday anchor, just show/hide weekend cols
   const wkBtn = document.getElementById('wkndToggle');
   wkBtn.addEventListener('click', () => {
-    showWeekends = !showWeekends;
-    // Snap to the right weekday anchor for the new column count
+    // Find the Monday of the week containing viewStart
     const d   = new Date(viewStart + 'T00:00:00');
-    const dow = d.getDay();
-    const sub = showWeekends ? dow : (dow + 6) % 7;
-    d.setDate(d.getDate() - sub);
+    const dow = d.getDay(); // 0=Sun … 6=Sat
+    const toMon = (dow + 6) % 7; // days since Monday
+    d.setDate(d.getDate() - toMon);
+    showWeekends = !showWeekends;
+    // In weekday mode start on Monday; in weekend mode start on Sunday before that Monday
+    if (showWeekends) d.setDate(d.getDate() - 1);
     viewStart = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
     wkBtn.textContent = showWeekends ? 'Hide Weekends' : 'Show Weekends';
     wkBtn.classList.toggle('on', !showWeekends);
@@ -2148,6 +2168,10 @@ function init() {
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') { closePanel(); closeContextMenu(); }
     if (e.key === 'Enter' && panelContext && e.target.tagName === 'INPUT') { e.preventDefault(); savePanel(); }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && panelContext && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'SELECT') {
+      const btn = document.getElementById('panelDelete');
+      if (btn && !btn.classList.contains('hidden')) { e.preventDefault(); deleteFromPanel(); }
+    }
   });
 
   // Dismiss context menu
