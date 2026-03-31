@@ -1295,6 +1295,12 @@ function savePanel() {
   const proj = getProject(activeProjectId);
   if (!proj) return;
 
+  // If Other… was used, save name to roster + history so it's pre-selectable next time
+  const personSel = document.getElementById('panelPerson');
+  if (person && personSel && personSel.value === '__other__' && panelContext.role) {
+    addToRoster(panelContext.role, person); // also calls recordNameHistory internally
+  }
+
   const loe = (document.getElementById('panelLOE').value) || null;
 
   if (panelContext.mode === 'create') {
