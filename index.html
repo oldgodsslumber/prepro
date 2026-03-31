@@ -189,6 +189,9 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .panel-field label { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .07em; white-space: nowrap; }
 .panel-field input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 5px 9px; color: var(--text); font-size: 13px; outline: none; transition: border-color .15s; min-width: 100px; }
 .panel-field input:focus { border-color: var(--accent); }
+.panel-field-loe { flex: 0 0 auto; }
+.panel-field-loe select { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 5px 7px; color: var(--text); font-size: 12px; outline: none; cursor: pointer; transition: border-color .15s; width: 88px; }
+.panel-field-loe select:focus { border-color: var(--accent); }
 .panel-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
 
 /* ── EXPORT PANEL ── */
@@ -295,6 +298,15 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
             <label id="panelTaskLabel">Task</label>
             <input type="text" id="panelTask" placeholder="e.g. Script Review" autocomplete="off">
           </div>
+          <div class="panel-field panel-field-loe" id="panelFieldLOE">
+            <label>Effort</label>
+            <select id="panelLOE">
+              <option value="">—</option>
+              <option value="low">🟢 Low</option>
+              <option value="medium">🟡 Med</option>
+              <option value="high">🔴 High</option>
+            </select>
+          </div>
         </div>
         <div class="panel-actions">
           <button class="btn btn-danger hidden" id="panelDelete">Delete</button>
@@ -314,6 +326,8 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
         <div class="export-tabs">
           <div class="export-tab active" data-tab="text">Text</div>
           <div class="export-tab" data-tab="table">Table / Excel</div>
+          <div class="export-tab" data-tab="png">PNG</div>
+          <div class="export-tab" data-tab="planyway">Planyway</div>
         </div>
         <div class="export-content" id="exportContent"></div>
       </div>
@@ -336,6 +350,7 @@ const ROLE_CATS = [
   { label: 'Other',         color: '#4cba6a', roles: ['Other'] }
 ];
 const REVIEW_COLOR = '#c0394f';
+const LOE_EMOJI    = { low: '🟢', medium: '🟡', high: '🔴' };
 const MONTHS   = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DOW_ALL  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const DOW_WD   = ['Mon','Tue','Wed','Thu','Fri'];
@@ -352,6 +367,7 @@ let exportOpen       = false;
 let exportOptBold    = false;
 let exportOptRoles   = true;
 let exportOptAlign   = false;
+let exportPNGRoles   = true;
 let showWeekends    = false;
 let resizeState     = null;
 let isResizing      = false;
@@ -634,10 +650,11 @@ function buildChip(task, dateStr) {
   chip.draggable = true;
 
   if (pos === 'solo' || pos === 'start') {
+    const loe = task.loe ? LOE_EMOJI[task.loe] + ' ' : '';
     const txt = task.person && task.taskName
       ? `${task.person} · ${task.taskName}`
       : task.person || task.taskName || task.role;
-    chip.textContent = txt;
+    chip.textContent = loe + txt;
   }
   chip.title = `${task.role}${task.person ? ': ' + task.person : ''}${task.taskName ? ' — ' + task.taskName : ''}${endDate !== task.date ? ' (' + task.date + ' \u2192 ' + endDate + ')' : ''}`;
 
@@ -1025,14 +1042,17 @@ function openPanel(mode, dateStr, taskId, role, category, color) {
 
   const fieldPerson = document.getElementById('panelFieldPerson');
   const fieldTask   = document.getElementById('panelFieldTask');
+  const fieldLOE    = document.getElementById('panelFieldLOE');
   const taskLabel   = document.getElementById('panelTaskLabel');
   const taskInput   = document.getElementById('panelTask');
 
   // Reset field visibility
   fieldPerson.style.display = '';
   fieldTask.style.display   = '';
+  fieldLOE.style.display    = '';
   taskLabel.textContent     = 'Task';
   taskInput.placeholder     = 'e.g. Script Review';
+  document.getElementById('panelLOE').value = '';
 
   if (mode === 'create') {
     panelContext = { mode, date: dateStr, role, category, color };
@@ -1054,6 +1074,7 @@ function openPanel(mode, dateStr, taskId, role, category, color) {
     document.getElementById('panelDateLabel').textContent      = fmtDateLabel(task.date);
     document.getElementById('panelPerson').value = task.person   || '';
     taskInput.value                              = task.taskName || '';
+    document.getElementById('panelLOE').value   = task.loe      || '';
     document.getElementById('panelDelete').classList.remove('hidden');
 
   } else if (mode === 'create-review') {
@@ -1063,6 +1084,7 @@ function openPanel(mode, dateStr, taskId, role, category, color) {
     document.getElementById('panelRoleBadge').style.background = REVIEW_COLOR;
     document.getElementById('panelDateLabel').textContent      = fmtDateLabel(dateStr);
     fieldPerson.style.display = 'none';
+    fieldLOE.style.display    = 'none';
     taskLabel.textContent     = lbl + ' Name';
     taskInput.placeholder     = 'e.g. ' + lbl + ' — Apr 1';
     taskInput.value = '';
@@ -1079,6 +1101,7 @@ function openPanel(mode, dateStr, taskId, role, category, color) {
     document.getElementById('panelRoleBadge').style.background = REVIEW_COLOR;
     document.getElementById('panelDateLabel').textContent      = fmtDateLabel(task.date);
     fieldPerson.style.display = 'none';
+    fieldLOE.style.display    = 'none';
     taskLabel.textContent     = lbl + ' Name';
     taskInput.placeholder     = 'e.g. ' + lbl + ' — Apr 1';
     taskInput.value           = task.taskName || '';
@@ -1095,6 +1118,7 @@ function openPanel(mode, dateStr, taskId, role, category, color) {
     document.getElementById('panelDateLabel').textContent      = fmtDateLabel(task.date) + ' · ' + (task.taskName || 'Review');
     document.getElementById('panelPerson').value = '';
     fieldTask.style.display = 'none';
+    fieldLOE.style.display  = 'none';
     document.getElementById('panelDelete').classList.add('hidden');
   }
 
@@ -1115,6 +1139,8 @@ function savePanel() {
   const proj = getProject(activeProjectId);
   if (!proj) return;
 
+  const loe = (document.getElementById('panelLOE').value) || null;
+
   if (panelContext.mode === 'create') {
     if (!person && !taskName) { document.getElementById('panelPerson').focus(); return; }
     proj.tasks.push({
@@ -1122,14 +1148,14 @@ function savePanel() {
       date: panelContext.date,
       role: panelContext.role,
       roleCategory: panelContext.category,
-      person, taskName,
+      person, taskName, loe,
       color: panelContext.color
     });
 
   } else if (panelContext.mode === 'edit') {
     if (!person && !taskName) { document.getElementById('panelPerson').focus(); return; }
     const task = proj.tasks.find(t => t.id === panelContext.taskId);
-    if (task) { task.person = person; task.taskName = taskName; }
+    if (task) { task.person = person; task.taskName = taskName; task.loe = loe; }
 
   } else if (panelContext.mode === 'create-review') {
     const lbl  = panelContext.label || 'Review';
@@ -1370,12 +1396,6 @@ function renderExportPanel() {
     actions.className = 'export-actions';
     // Rich copy button: writes text/html (Word/PPT) + text/plain (**) simultaneously
     actions.appendChild(mkRichCopyBtn('Copy', () => buildHTMLExport()));
-    const pngBtn = document.createElement('button');
-    pngBtn.className = 'btn btn-ghost';
-    pngBtn.textContent = 'Download PNG';
-    pngBtn.style.cssText = 'font-size:11px;padding:3px 10px';
-    pngBtn.addEventListener('click', exportPNG);
-    actions.appendChild(pngBtn);
     const note = document.createElement('span');
     note.className = 'export-note';
     note.textContent = 'Pastes as rich text in Word & PowerPoint';
@@ -1390,6 +1410,63 @@ function renderExportPanel() {
     content.appendChild(opts);
     content.appendChild(actions);
     content.appendChild(preview);
+  } else if (exportTabActive === 'png') {
+    const opts = document.createElement('div');
+    opts.className = 'export-opts';
+    const lbl = document.createElement('label');
+    lbl.className = 'export-opt';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.checked = exportPNGRoles;
+    cb.addEventListener('change', () => { exportPNGRoles = cb.checked; });
+    lbl.appendChild(cb); lbl.appendChild(document.createTextNode('Include roles'));
+    opts.appendChild(lbl);
+
+    const actions = document.createElement('div');
+    actions.className = 'export-actions';
+    const pngBtn = document.createElement('button');
+    pngBtn.className = 'btn btn-primary';
+    pngBtn.textContent = 'Download PNG';
+    pngBtn.style.cssText = 'font-size:11px;padding:3px 10px';
+    pngBtn.addEventListener('click', exportPNG);
+    actions.appendChild(pngBtn);
+    const pngNote = document.createElement('span');
+    pngNote.className = 'export-note';
+    pngNote.textContent = '4-week view from today, extended if tasks exist beyond';
+    actions.appendChild(pngNote);
+    content.appendChild(opts);
+    content.appendChild(actions);
+
+  } else if (exportTabActive === 'planyway') {
+    const rows = buildPlanyway();
+    const tsv  = buildPlanywayTSV(rows);
+
+    const actions = document.createElement('div');
+    actions.className = 'export-actions';
+    actions.appendChild(mkCopyBtn('Copy as TSV', tsv));
+    const pwNote = document.createElement('span');
+    pwNote.className = 'export-note';
+    pwNote.textContent = 'External/Vendor tasks excluded · Multi-person events duplicated per person';
+    actions.appendChild(pwNote);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'export-table-wrap';
+    const table = document.createElement('table');
+    table.className = 'export-table';
+    const hrow = table.createTHead().insertRow();
+    ['Start','End','Category','Task','Person'].forEach(h => {
+      const th = document.createElement('th'); th.textContent = h; hrow.appendChild(th);
+    });
+    const tbody = table.createTBody();
+    rows.forEach(r => {
+      const row = tbody.insertRow();
+      [r.startDate, r.endDate, r.category, r.task, r.person].forEach(v => {
+        row.insertCell().textContent = v || '';
+      });
+    });
+    wrap.appendChild(table);
+    content.appendChild(actions);
+    content.appendChild(wrap);
+
   } else {
     const tsv  = buildTSV();
     const proj = getProject(activeProjectId);
@@ -1438,6 +1515,65 @@ function renderExportPanel() {
     content.appendChild(actions);
     content.appendChild(wrap);
   }
+}
+
+// ── PLANYWAY EXPORT ──
+const PW_PRE  = ['script','scripting','storyboard','storyboarding','meeting','review','brief','concept','planning','prep','pre-production'];
+const PW_POST = ['revision','revisions','revise','post','post-production','color','colour','grade','delivery','deliverable','feedback','approval','sign-off','sign off'];
+
+function getPlanywayCat(task) {
+  if (task.isReview) {
+    const lbl = (task.reviewLabel || '').toLowerCase();
+    if (lbl.includes('studio') || lbl.includes('location')) return 'Production';
+    return 'Pre-Production'; // regular review = meeting
+  }
+  if (['External','Vendors'].includes(task.roleCategory)) return null;
+  const role = (task.role || '').toLowerCase();
+  const name = (task.taskName || '').toLowerCase();
+  if (role === 'editor')   return 'Editing';
+  if (role === 'animator') return 'Animation';
+  if (role === 'producer') {
+    if (PW_PRE.some(k  => name.includes(k))) return 'Pre-Production';
+    if (PW_POST.some(k => name.includes(k))) return 'Post-Producing';
+    return 'Producing';
+  }
+  return null; // Other/Copywriter/Designer/Stakeholder/etc — omit
+}
+
+function buildPlanyway() {
+  const proj = getProject(activeProjectId);
+  if (!proj) return [];
+  const toDate = s => new Date(s + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const sorted = [...proj.tasks].sort((a, b) => a.date.localeCompare(b.date));
+  const rows = [];
+
+  sorted.forEach(task => {
+    const cat = getPlanywayCat(task);
+    if (!cat) return;
+    const loeStr = task.loe ? LOE_EMOJI[task.loe] + ' ' : '';
+    const catLabel  = loeStr + cat;
+    const startDate = toDate(task.date);
+    const endDate   = task.endDate ? toDate(task.endDate) : startDate;
+    const taskName  = task.taskName || (task.isReview ? (task.reviewLabel || 'Review') : task.role);
+
+    if (task.isReview) {
+      // Duplicate one row per attendee (Planyway can't assign to multiple people)
+      const people = task.attendees && task.attendees.length ? task.attendees : [null];
+      people.forEach(att => {
+        rows.push({ startDate, endDate, category: catLabel, task: taskName,
+          person: att ? (att.person || att.role || '') : '' });
+      });
+    } else {
+      rows.push({ startDate, endDate, category: catLabel, task: taskName, person: task.person || '' });
+    }
+  });
+  return rows;
+}
+
+function buildPlanywayTSV(rows) {
+  const esc = s => (s || '').replace(/[\t\n\r]/g, ' ');
+  const hdr = 'Start Date\tEnd Date\tCategory\tTask\tPerson';
+  return [hdr, ...rows.map(r => [r.startDate, r.endDate, r.category, r.task, r.person].map(esc).join('\t'))].join('\n');
 }
 
 function mkCopyBtn(label, text) {
@@ -1660,9 +1796,11 @@ function exportPNG() {
         ctx.save();
         ctx.rect(chipX + 3*SC, ty, chipW - 6*SC, chipH);
         ctx.clip();
-        const label = task.isReview
-          ? 'REVIEW: ' + (task.taskName || '')
-          : (task.person || '') + (task.person && task.taskName ? ' · ' : '') + (task.taskName || task.role);
+        const loeStr  = task.loe ? LOE_EMOJI[task.loe] + ' ' : '';
+        const roleStr = exportPNGRoles && !task.isReview && task.role ? ` (${task.role})` : '';
+        const label   = task.isReview
+          ? (task.reviewLabel || 'REVIEW') + ': ' + (task.taskName || '')
+          : loeStr + ((task.person || '') + (task.person && task.taskName ? ' · ' : '') + (task.taskName || task.role)) + roleStr;
         ctx.fillText(label, chipX + 5*SC, ty + 10*SC);
         ctx.restore();
       }
