@@ -842,9 +842,9 @@ function buildDueDateMarker(task, dateStr) {
   const el = document.createElement('div');
   el.className = 'duedate-marker';
   el.dataset.taskId = task.id;
-  el.textContent = '🏁 Project Due Date';
+  el.textContent = '🏁 ' + (task.taskName || 'Project Due Date');
   el.draggable = true;
-  el.title = 'Drag to move · Click to delete';
+  el.title = 'Click to edit · Drag to move';
   el.addEventListener('dragstart', e => {
     if (isResizing) { e.preventDefault(); return; }
     dragPayload = { type: 'move', taskId: task.id };
@@ -854,9 +854,7 @@ function buildDueDateMarker(task, dateStr) {
   el.addEventListener('dragend', () => { dragPayload = null; });
   el.addEventListener('click', e => {
     e.stopPropagation();
-    if (!confirm('Remove Project Due Date marker?')) return;
-    const proj = getProject(activeProjectId);
-    if (proj) { proj.tasks = proj.tasks.filter(t => t.id !== task.id); saveState(); renderCalendar(); }
+    openPanel('edit-duedate', null, task.id);
   });
   return el;
 }
@@ -1300,6 +1298,22 @@ function openPanel(mode, dateStr, taskId, role, category, color) {
     fieldTask.style.display = 'none';
     fieldLOE.style.display  = 'none';
     document.getElementById('panelDelete').classList.add('hidden');
+
+  } else if (mode === 'edit-duedate') {
+    const proj = getProject(activeProjectId);
+    if (!proj) return;
+    const task = proj.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    panelContext = { mode: 'edit-duedate', taskId };
+    document.getElementById('panelRoleBadge').textContent      = '🏁';
+    document.getElementById('panelRoleBadge').style.background = '#444';
+    document.getElementById('panelDateLabel').textContent      = fmtDateLabel(task.date);
+    fieldPerson.style.display = 'none';
+    fieldLOE.style.display    = 'none';
+    taskLabel.textContent     = 'Label';
+    taskInput.placeholder     = 'e.g. Final Delivery to Client';
+    taskInput.value           = task.taskName || '';
+    document.getElementById('panelDelete').classList.remove('hidden');
   }
 
   document.getElementById('taskPanel').classList.add('open');
@@ -1381,6 +1395,10 @@ function savePanel() {
         color: panelContext.color
       });
     }
+
+  } else if (panelContext.mode === 'edit-duedate') {
+    const task = proj.tasks.find(t => t.id === panelContext.taskId);
+    if (task) task.taskName = taskName || null;
   }
 
   saveState();
@@ -1518,8 +1536,9 @@ function buildHTMLExport() {
     const label = t.reviewLabel || 'Review';
 
     if (t.isDueDate) {
-      hLines.push(`${fmtHtml(raw)}${escHtml(sep)}\uD83C\uDFC1 Project Due Date`);
-      pLines.push(`${fmtPlain(raw)}${sep}🏁 Project Due Date`);
+      const dueLbl = '🏁 ' + (t.taskName || 'Project Due Date');
+      hLines.push(`${fmtHtml(raw)}${escHtml(sep)}${escHtml(dueLbl)}`);
+      pLines.push(`${fmtPlain(raw)}${sep}${dueLbl}`);
     } else if (t.isReview) {
       const name = t.taskName || label;
       hLines.push(`${fmtHtml(raw)}${escHtml(sep)}${escHtml(name)} [${escHtml(label.toUpperCase())}]`);
@@ -1561,7 +1580,7 @@ function buildTSV() {
     const sl = toDate(t.date);
     const el = t.endDate ? toDate(t.endDate) : sl;
     if (t.isDueDate) {
-      rows.push([sl, sl, '🏁 Project Due Date', '', '', '', 'Due Date'].join('\t'));
+      rows.push([sl, sl, '🏁 ' + (t.taskName || 'Project Due Date'), '', '', '', 'Due Date'].join('\t'));
     } else if (t.isReview) {
       rows.push([sl, el, esc(t.taskName), '', 'Review', 'Review', 'Review'].join('\t'));
       if (t.attendees) {
@@ -1835,7 +1854,7 @@ function renderExportPanel() {
       const el = t.endDate ? toDate(t.endDate) : sl;
       if (t.isDueDate) {
         const row = tbody.insertRow();
-        ['🏁 Project Due Date', sl, sl, '', '', '', 'Due Date'].forEach((val, i) => {
+        ['🏁 ' + (t.taskName || 'Project Due Date'), sl, sl, '', '', '', 'Due Date'].forEach((val, i) => {
           const td = row.insertCell(); td.textContent = val;
           if (i === 0) td.style.fontWeight = '700';
         });
@@ -1862,56 +1881,72 @@ function renderExportPanel() {
   }
 }
 
-// ── PLANYWAY EXPORT ──
-const PW_PRE  = ['script','scripting','storyboard','storyboarding','meeting','review','brief','concept','planning','prep','pre-production'];
-const PW_POST = ['revision','revisions','revise','post','post-production','color','colour','grade','delivery','deliverable','feedback','approval','sign-off','sign off'];
+// ── TRELLO EXPORT ──
+const PW_PRE  = ['script','scripting','storyboard','storyboarding','schedules','schedule','copywriting','copywrite','meeting','brief','concept','planning','prep','pre-production'];
+const PW_POST = ['animation','editing','drafting','v1','v2','vf','revision','revisions','revise','post','post-production','color','colour','grade','delivery','deliverable','feedback','approval','sign-off','sign off'];
+
+function getProducerCat(name) {
+  const n = (name || '').toLowerCase();
+  if (PW_PRE.some(k  => n.includes(k))) return 'Pre-Production';
+  if (PW_POST.some(k => n.includes(k))) return 'Post-Producing';
+  return 'Producing';
+}
 
 function getPlanywayCat(task) {
-  if (task.isReview) return null; // Reviews excluded
+  if (task.isReview) return null; // handled separately in buildPlanyway
   if (['External','Vendors'].includes(task.roleCategory)) return null;
   const role = (task.role || '').toLowerCase();
-  if (role === 'stakeholder') return null; // Stakeholders excluded
+  if (role === 'stakeholder') return null;
   const name = (task.taskName || '').toLowerCase();
   if (role === 'editor')   return 'Editing';
   if (role === 'animator') return 'Animation';
-  if (role === 'producer') {
-    if (PW_PRE.some(k  => name.includes(k))) return 'Pre-Production';
-    if (PW_POST.some(k => name.includes(k))) return 'Post-Producing';
-    return 'Producing';
-  }
+  if (role === 'producer') return getProducerCat(name);
   return null;
+}
+
+// Returns the person name of the most frequently used Producer in the project
+function getMostUsedProducer(proj) {
+  const counts = {};
+  (proj.tasks || []).forEach(t => {
+    if ((t.role || '').toLowerCase() === 'producer' && t.person) {
+      counts[t.person] = (counts[t.person] || 0) + 1;
+    }
+  });
+  const entries = Object.entries(counts);
+  if (!entries.length) return null;
+  return entries.sort((a, b) => b[1] - a[1])[0][0];
 }
 
 function buildPlanyway() {
   const proj = getProject(activeProjectId);
   if (!proj) return [];
   const sorted = [...proj.tasks].filter(t => !t.isDueDate).sort((a, b) => a.date.localeCompare(b.date));
+  const topProducer = getMostUsedProducer(proj);
   const items = [];
 
   sorted.forEach(task => {
+    if (task.isReview) {
+      // Single entry per review, assigned to most-used producer, categorised by task name
+      const cat  = getProducerCat(task.taskName);
+      const loe  = task.loe || 'medium'; // default yellow if not set
+      const line = LOE_EMOJI[loe] + ' ' + cat;
+      items.push({
+        line,
+        date:    task.date,
+        endDate: task.endDate || null,
+        person:  topProducer || 'Producer'
+      });
+      return;
+    }
     const cat = getPlanywayCat(task);
     if (!cat) return;
     const line = (task.loe ? LOE_EMOJI[task.loe] + ' ' : '') + cat;
-
-    if (task.isReview) {
-      const attendees = task.attendees && task.attendees.length ? task.attendees : [];
-      const count = attendees.length || 1;
-      for (let i = 0; i < count; i++) {
-        items.push({
-          line,
-          date: task.date,
-          endDate: task.endDate || null,
-          person: attendees[i] ? (attendees[i].person || attendees[i].role) : (task.reviewLabel || 'Review')
-        });
-      }
-    } else {
-      items.push({
-        line,
-        date: task.date,
-        endDate: task.endDate || null,
-        person: task.person || task.role
-      });
-    }
+    items.push({
+      line,
+      date:    task.date,
+      endDate: task.endDate || null,
+      person:  task.person || task.role
+    });
   });
   return items;
 }
