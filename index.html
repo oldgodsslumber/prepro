@@ -1437,35 +1437,22 @@ function renderExportPanel() {
     content.appendChild(actions);
 
   } else if (exportTabActive === 'planyway') {
-    const rows = buildPlanyway();
-    const tsv  = buildPlanywayTSV(rows);
+    const lines = buildPlanyway();
+    const text  = lines.join('\n') || '(No tasks)';
 
     const actions = document.createElement('div');
     actions.className = 'export-actions';
-    actions.appendChild(mkCopyBtn('Copy as TSV', tsv));
+    actions.appendChild(mkCopyBtn('Copy', text));
     const pwNote = document.createElement('span');
     pwNote.className = 'export-note';
-    pwNote.textContent = 'External/Vendor tasks excluded · Multi-person events duplicated per person';
+    pwNote.textContent = 'External/Vendor tasks excluded · Multi-person events duplicated per attendee';
     actions.appendChild(pwNote);
 
-    const wrap = document.createElement('div');
-    wrap.className = 'export-table-wrap';
-    const table = document.createElement('table');
-    table.className = 'export-table';
-    const hrow = table.createTHead().insertRow();
-    ['Start','End','Category','Task','Person'].forEach(h => {
-      const th = document.createElement('th'); th.textContent = h; hrow.appendChild(th);
-    });
-    const tbody = table.createTBody();
-    rows.forEach(r => {
-      const row = tbody.insertRow();
-      [r.startDate, r.endDate, r.category, r.task, r.person].forEach(v => {
-        row.insertCell().textContent = v || '';
-      });
-    });
-    wrap.appendChild(table);
+    const pre = document.createElement('pre');
+    pre.className = 'export-pre';
+    pre.textContent = text;
     content.appendChild(actions);
-    content.appendChild(wrap);
+    content.appendChild(pre);
 
   } else {
     const tsv  = buildTSV();
@@ -1543,37 +1530,23 @@ function getPlanywayCat(task) {
 function buildPlanyway() {
   const proj = getProject(activeProjectId);
   if (!proj) return [];
-  const toDate = s => new Date(s + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const sorted = [...proj.tasks].sort((a, b) => a.date.localeCompare(b.date));
-  const rows = [];
+  const lines = [];
 
   sorted.forEach(task => {
     const cat = getPlanywayCat(task);
     if (!cat) return;
-    const loeStr = task.loe ? LOE_EMOJI[task.loe] + ' ' : '';
-    const catLabel  = loeStr + cat;
-    const startDate = toDate(task.date);
-    const endDate   = task.endDate ? toDate(task.endDate) : startDate;
-    const taskName  = task.taskName || (task.isReview ? (task.reviewLabel || 'Review') : task.role);
+    const line = (task.loe ? LOE_EMOJI[task.loe] + ' ' : '') + cat;
 
     if (task.isReview) {
-      // Duplicate one row per attendee (Planyway can't assign to multiple people)
-      const people = task.attendees && task.attendees.length ? task.attendees : [null];
-      people.forEach(att => {
-        rows.push({ startDate, endDate, category: catLabel, task: taskName,
-          person: att ? (att.person || att.role || '') : '' });
-      });
+      // One line per attendee so each can be assigned separately in Planyway
+      const count = task.attendees && task.attendees.length ? task.attendees.length : 1;
+      for (let i = 0; i < count; i++) lines.push(line);
     } else {
-      rows.push({ startDate, endDate, category: catLabel, task: taskName, person: task.person || '' });
+      lines.push(line);
     }
   });
-  return rows;
-}
-
-function buildPlanywayTSV(rows) {
-  const esc = s => (s || '').replace(/[\t\n\r]/g, ' ');
-  const hdr = 'Start Date\tEnd Date\tCategory\tTask\tPerson';
-  return [hdr, ...rows.map(r => [r.startDate, r.endDate, r.category, r.task, r.person].map(esc).join('\t'))].join('\n');
+  return lines;
 }
 
 function mkCopyBtn(label, text) {
