@@ -368,8 +368,8 @@ let viewStart       = null; // YYYY-MM-DD of first visible day
 let collapsedIds    = new Set();
 let dragPayload     = null;
 let panelContext    = null;
-let exportTabActive  = 'text';
-let exportOpen       = false;
+let exportTabActive  = localStorage.getItem('prepro_export_tab') || 'text';
+let exportOpen       = true;
 let exportOptBold    = false;
 let exportOptRoles   = true;
 let exportOptAlign   = false;
@@ -1841,6 +1841,11 @@ function init() {
   renderSidebar();
   renderCalendar();
 
+  // Open export panel on load
+  document.getElementById('exportToggle').classList.add('open');
+  document.getElementById('exportBody').classList.add('visible');
+  renderExportPanel();
+
   // New project
   document.getElementById('btnNewProject').addEventListener('click', () => {
     const name = prompt('Project name:');
@@ -1900,8 +1905,11 @@ function init() {
   });
 
   document.querySelectorAll('.export-tab').forEach(tab => {
+    if (tab.dataset.tab === exportTabActive) tab.classList.add('active');
+    else tab.classList.remove('active');
     tab.addEventListener('click', () => {
       exportTabActive = tab.dataset.tab;
+      localStorage.setItem('prepro_export_tab', exportTabActive);
       document.querySelectorAll('.export-tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
       if (exportOpen) renderExportPanel();
