@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PRE-PRO — How to Use</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #0f1117;
+    --panel:   #181c24;
+    --card:    #1e2330;
+    --border:  #2a3042;
+    --text:    #e4e8f0;
+    --dim:     #7a839a;
+    --accent:  #4a7cf7;
+    --danger:  #e05555;
+    --green:   #4cba6a;
+    --orange:  #e07b39;
+    --red:     #c0394f;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── DECK SHELL ── */
+  .deck {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 60px 80px;
+    opacity: 0;
+    transform: translateX(40px);
+    transition: opacity .35s ease, transform .35s ease;
+    pointer-events: none;
+    text-align: center;
+  }
+  .slide.active {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: auto;
+  }
+  .slide.exit {
+    opacity: 0;
+    transform: translateX(-40px);
+  }
+
+  /* ── SLIDE CONTENT ── */
+  .slide-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 14px;
+  }
+  .slide h1 {
+    font-size: clamp(28px, 4vw, 52px);
+    font-weight: 800;
+    line-height: 1.15;
+    margin-bottom: 18px;
+    letter-spacing: -.02em;
+  }
+  .slide h2 {
+    font-size: clamp(22px, 3vw, 38px);
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 16px;
+    letter-spacing: -.01em;
+  }
+  .slide p {
+    font-size: clamp(14px, 1.6vw, 18px);
+    color: var(--dim);
+    line-height: 1.7;
+    max-width: 640px;
+    margin-bottom: 10px;
+  }
+  .slide p strong { color: var(--text); font-weight: 600; }
+  .slide .sub {
+    font-size: 13px;
+    color: var(--dim);
+    margin-top: 6px;
+  }
+
+  /* ── STEP LIST ── */
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-width: 580px;
+    width: 100%;
+    text-align: left;
+    margin-top: 10px;
+  }
+  .step {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+  }
+  .step-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .step-body { flex: 1; }
+  .step-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+  .step-desc  { font-size: 12px; color: var(--dim); line-height: 1.5; }
+
+  /* ── CHIPS ── */
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    margin-top: 18px;
+    max-width: 640px;
+  }
+  .chip {
+    border-radius: 20px;
+    padding: 5px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+  }
+  .chip.blue   { background: #4a90d9; }
+  .chip.orange { background: #e07b39; }
+  .chip.purple { background: #7c5cbf; }
+  .chip.green  { background: #4cba6a; }
+  .chip.red    { background: #c0394f; }
+
+  /* ── DIAGRAM BOXES ── */
+  .diagram {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 700px;
+  }
+  .dia-box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 20px;
+    min-width: 130px;
+    text-align: center;
+  }
+  .dia-box .dia-icon { font-size: 24px; margin-bottom: 6px; }
+  .dia-box .dia-label { font-size: 12px; font-weight: 600; color: var(--text); }
+  .dia-box .dia-sub   { font-size: 11px; color: var(--dim); margin-top: 3px; }
+  .dia-arrow { display: flex; align-items: center; color: var(--dim); font-size: 20px; }
+
+  /* ── EXPORT TABS MOCK ── */
+  .mock-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    gap: 0;
+    margin-top: 20px;
+    background: var(--panel);
+    border-radius: 8px 8px 0 0;
+    overflow: hidden;
+    max-width: 500px;
+    width: 100%;
+  }
+  .mock-tab {
+    padding: 9px 18px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--dim);
+    border-bottom: 2px solid transparent;
+    cursor: default;
+  }
+  .mock-tab.on { color: var(--accent); border-bottom-color: var(--accent); }
+  .mock-tab-body {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    padding: 14px 18px;
+    max-width: 500px;
+    width: 100%;
+    text-align: left;
+    font-size: 12px;
+    color: var(--dim);
+    line-height: 1.8;
+  }
+
+  /* ── TITLE SLIDE ACCENT ── */
+  .hero-title { color: var(--accent); }
+  .hero-rule {
+    width: 48px;
+    height: 3px;
+    background: var(--accent);
+    border-radius: 2px;
+    margin: 18px auto;
+  }
+
+  /* ── NAV BAR ── */
+  nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 14px 24px;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+    background: var(--panel);
+  }
+  .nav-btn {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 7px 20px;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  .nav-btn:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .nav-btn:disabled { opacity: .3; cursor: default; }
+  .nav-counter { font-size: 12px; color: var(--dim); min-width: 60px; text-align: center; }
+
+  /* ── PROGRESS DOTS ── */
+  .dots {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--border);
+    cursor: pointer;
+    transition: background .2s, transform .2s;
+  }
+  .dot.on { background: var(--accent); transform: scale(1.3); }
+</style>
+</head>
+<body>
+
+<div class="deck" id="deck">
+
+  <!-- 1. TITLE -->
+  <div class="slide active">
+    <div class="slide-label">Team Guide</div>
+    <h1><span class="hero-title">PRE-PRO</span></h1>
+    <div class="hero-rule"></div>
+    <p>The corporate video pre-production scheduler.<br>This guide walks you through everything you need to know.</p>
+    <p class="sub">Use arrow keys or the buttons below to navigate.</p>
+  </div>
+
+  <!-- 2. OVERVIEW -->
+  <div class="slide">
+    <div class="slide-label">Overview</div>
+    <h2>How it works</h2>
+    <div class="diagram">
+      <div class="dia-box">
+        <div class="dia-icon">📁</div>
+        <div class="dia-label">Create a Project</div>
+        <div class="dia-sub">One per video</div>
+      </div>
+      <div class="dia-arrow">→</div>
+      <div class="dia-box">
+        <div class="dia-icon">👥</div>
+        <div class="dia-label">Add Your Team</div>
+        <div class="dia-sub">Role Assignees</div>
+      </div>
+      <div class="dia-arrow">→</div>
+      <div class="dia-box">
+        <div class="dia-icon">📅</div>
+        <div class="dia-label">Schedule Tasks</div>
+        <div class="dia-sub">Drag onto calendar</div>
+      </div>
+      <div class="dia-arrow">→</div>
+      <div class="dia-box">
+        <div class="dia-icon">📤</div>
+        <div class="dia-label">Export</div>
+        <div class="dia-sub">Text, Excel, PNG…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. NEW PROJECT -->
+  <div class="slide">
+    <div class="slide-label">Step 1</div>
+    <h2>Create a Project</h2>
+    <p>Click <strong>+ New Project</strong> in the top-right corner and give it a name — usually the video title.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Click "+ New Project"</div>
+          <div class="step-desc">Top-right header button. Type the project name and press Enter.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Sub-projects for phases</div>
+          <div class="step-desc">Right-click any project in the sidebar to add a child — useful for Pre-Production and Post-Production phases.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. ROLE ASSIGNEES -->
+  <div class="slide">
+    <div class="slide-label">Step 2</div>
+    <h2>Set Up Role Assignees</h2>
+    <p>The <strong>Role Assignees</strong> panel lives at the bottom-right. Each project gets its own team — add the people working on this video.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Click a suggested name</div>
+          <div class="step-desc">Dashed chips show everyone who's ever been on a project. Click to add them to this one instantly.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Or type a new name</div>
+          <div class="step-desc">Type in the "Add name…" box and press Enter. Focus stays so you can keep adding quickly.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Remove with ✕</div>
+          <div class="step-desc">Click ✕ on any name chip to remove them from this project. They'll still appear as a suggestion next time.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. ROLE TYPES -->
+  <div class="slide">
+    <div class="slide-label">Step 3</div>
+    <h2>The Role Palette</h2>
+    <p>The palette bar across the top shows all role types. <strong>Drag any chip onto a calendar day</strong> to create a task for that role.</p>
+    <div class="chips">
+      <div class="chip blue">Producer</div>
+      <div class="chip blue">Editor</div>
+      <div class="chip blue">Animator</div>
+      <div class="chip orange">Copywriter</div>
+      <div class="chip orange">Designer</div>
+      <div class="chip orange">Stakeholder</div>
+      <div class="chip purple">External Vendor</div>
+      <div class="chip green">Other</div>
+      <div class="chip red">Review</div>
+      <div class="chip red">Studio Shoot</div>
+      <div class="chip red">On-Location Shoot</div>
+    </div>
+    <p style="margin-top:18px;">Blue = Internal · Orange = External · Purple = Vendor · Red = Events</p>
+  </div>
+
+  <!-- 6. CREATING TASKS -->
+  <div class="slide">
+    <div class="slide-label">Step 3 continued</div>
+    <h2>Creating & Editing Tasks</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Drag a role chip onto a day</div>
+          <div class="step-desc">A panel slides up. Choose the <strong>Person</strong> from the dropdown (populated from your Role Assignees), add a task name, and set the Effort level.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Drag tasks to move them</div>
+          <div class="step-desc">Grab any task on the calendar and drop it on a new day. Hold <strong>Alt</strong> while dragging to duplicate it.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Resize for multi-day tasks</div>
+          <div class="step-desc">Drag the right edge of a task to stretch it across multiple days. The bar stays unbroken across the week.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. REVIEWS & EVENTS -->
+  <div class="slide">
+    <div class="slide-label">Step 3 continued</div>
+    <h2>Reviews, Shoots &amp; Events</h2>
+    <p>Red chips create <strong>calendar event blocks</strong> — these work differently from regular tasks.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Drag a Review, Studio Shoot, or On-Location Shoot</div>
+          <div class="step-desc">Give the event a name, then resize it to span multiple days if needed.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Add attendees by dropping role chips onto the event</div>
+          <div class="step-desc">Drop any role chip onto an existing red block to add that person as an attendee. Their name badge appears on the block.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. EFFORT -->
+  <div class="slide">
+    <div class="slide-label">Tips</div>
+    <h2>Level of Effort</h2>
+    <p>When creating or editing a task, set the <strong>Effort</strong> level using the dropdown on the left of the panel.</p>
+    <div class="chips" style="margin-top: 20px; gap: 16px;">
+      <div class="dia-box">
+        <div class="dia-icon">🟢</div>
+        <div class="dia-label">Low</div>
+        <div class="dia-sub">Light lift</div>
+      </div>
+      <div class="dia-box">
+        <div class="dia-icon">🟡</div>
+        <div class="dia-label">Medium</div>
+        <div class="dia-sub">Standard</div>
+      </div>
+      <div class="dia-box">
+        <div class="dia-icon">🔴</div>
+        <div class="dia-label">High</div>
+        <div class="dia-sub">Heavy lift</div>
+      </div>
+    </div>
+    <p style="margin-top: 18px;">Effort shows as a dot on the task chip and feeds into the Planyway export.</p>
+  </div>
+
+  <!-- 9. NAVIGATION -->
+  <div class="slide">
+    <div class="slide-label">Tips</div>
+    <h2>Navigating the Calendar</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">←</div>
+        <div class="step-body">
+          <div class="step-title">Prev / Next arrows</div>
+          <div class="step-desc">Step backward or forward two weeks at a time.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">📅</div>
+        <div class="step-body">
+          <div class="step-title">Today button</div>
+          <div class="step-desc">Jump back to the current week instantly.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">Sa</div>
+        <div class="step-body">
+          <div class="step-title">Weekend toggle</div>
+          <div class="step-desc">Show or hide Saturday and Sunday columns to keep the view focused on work days.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 10. EXPORTING -->
+  <div class="slide">
+    <div class="slide-label">Step 4</div>
+    <h2>Exporting Your Schedule</h2>
+    <p>The <strong>Export Schedule</strong> panel at the bottom has four tabs. All persist your last-used tab between sessions.</p>
+    <div class="mock-tabs">
+      <div class="mock-tab on">Text</div>
+      <div class="mock-tab">Table / Excel</div>
+      <div class="mock-tab">PNG</div>
+      <div class="mock-tab">Planyway</div>
+    </div>
+    <div class="mock-tab-body">
+      <strong style="color:var(--text);">Text</strong> — Formatted schedule ready to paste into email, Slack, or Word.<br>
+      Options: Bold dates · Toggle roles · Align tasks in columns.
+    </div>
+  </div>
+
+  <!-- 11. EXPORT TABS -->
+  <div class="slide">
+    <div class="slide-label">Step 4 continued</div>
+    <h2>Export Tab Details</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">📝</div>
+        <div class="step-body">
+          <div class="step-title">Text</div>
+          <div class="step-desc">Formatted plain text. Copy button writes real bold for Word/PowerPoint and ** markers for Slack/Notion simultaneously.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">📊</div>
+        <div class="step-body">
+          <div class="step-title">Table / Excel</div>
+          <div class="step-desc">Tab-separated values. Copy as TSV, or select all in the table and paste directly into Excel.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">🖼</div>
+        <div class="step-body">
+          <div class="step-title">PNG</div>
+          <div class="step-desc">Downloads a high-resolution image of the next 4 weeks (or longer if tasks extend beyond that).</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">✅</div>
+        <div class="step-body">
+          <div class="step-title">Planyway</div>
+          <div class="step-desc">Copies a checklist of categories (with effort emoji) to paste into Planyway or Trello. Reference columns show dates and assignees — they are not copied.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 12. DONE -->
+  <div class="slide">
+    <div class="slide-label">You're ready</div>
+    <h1>That's it.</h1>
+    <div class="hero-rule"></div>
+    <p>Create project → Add team → Drag tasks → Export.</p>
+    <p style="margin-top:10px;">Questions? Ask your producer or right-click anything on the calendar for quick options.</p>
+    <div class="chips" style="margin-top: 28px;">
+      <div class="chip blue">PRE-PRO</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- NAV -->
+<nav>
+  <button class="nav-btn" id="btnPrev">← Back</button>
+  <div class="dots" id="dots"></div>
+  <span class="nav-counter" id="counter"></span>
+  <button class="nav-btn" id="btnNext">Next →</button>
+</nav>
+
+<script>
+  const slides = [...document.querySelectorAll('.slide')];
+  let cur = 0;
+
+  const dotsEl   = document.getElementById('dots');
+  const counter  = document.getElementById('counter');
+  const btnPrev  = document.getElementById('btnPrev');
+  const btnNext  = document.getElementById('btnNext');
+
+  // Build dots
+  slides.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i === 0 ? ' on' : '');
+    d.addEventListener('click', () => goTo(i));
+    dotsEl.appendChild(d);
+  });
+
+  function goTo(n) {
+    if (n < 0 || n >= slides.length) return;
+    slides[cur].classList.remove('active');
+    slides[cur].classList.add('exit');
+    setTimeout(() => slides[cur === n ? n : cur].classList.remove('exit'), 380);
+    cur = n;
+    slides[cur].classList.add('active');
+    dotsEl.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('on', i === cur));
+    counter.textContent = (cur + 1) + ' / ' + slides.length;
+    btnPrev.disabled = cur === 0;
+    btnNext.disabled = cur === slides.length - 1;
+  }
+
+  btnPrev.addEventListener('click', () => goTo(cur - 1));
+  btnNext.addEventListener('click', () => goTo(cur + 1));
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goTo(cur + 1);
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   goTo(cur - 1);
+  });
+
+  goTo(0);
+</script>
+</body>
+</html>

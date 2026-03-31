@@ -418,9 +418,24 @@ let isResizing      = false;
 let rosterOpen = true;
 // Name history: global record of all names ever used, per role { role: Set-as-array }
 let nameHistory = {};
+const DEFAULT_NAME_HISTORY = {
+  'Producer':        ['Silvia','Jason','Chuck','Anna','Kevin','Liz'],
+  'Editor':          ['Liz','Jake','Chuck','Jason','Kevin'],
+  'Animator':        ['Bala','Adam'],
+  'Copywriter':      ['Zach','Julie','Diana'],
+  'Designer':        ['Colleen','Jenna','Katie','Ali'],
+  'Stakeholder':     ['Carlos','Kait','Brenner'],
+  'External Vendor': ['Big','Minutemen','Salamandra']
+};
 function loadNameHistory() {
   try { const r = localStorage.getItem('prepro_name_history'); if (r) nameHistory = JSON.parse(r); } catch(e) {}
   if (!nameHistory || typeof nameHistory !== 'object') nameHistory = {};
+  // Seed defaults for any role not yet in history
+  Object.entries(DEFAULT_NAME_HISTORY).forEach(([role, names]) => {
+    if (!nameHistory[role]) nameHistory[role] = [];
+    names.forEach(n => { if (!nameHistory[role].includes(n)) nameHistory[role].push(n); });
+  });
+  saveNameHistory();
 }
 function saveNameHistory() { localStorage.setItem('prepro_name_history', JSON.stringify(nameHistory)); }
 function recordNameHistory(role, name) {
