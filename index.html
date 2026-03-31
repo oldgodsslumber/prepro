@@ -1392,38 +1392,41 @@ function buildTSV() {
 }
 
 function renderRefPanel() {
-  const list = document.getElementById('refList');
-  if (!list) return;
+  const panel = document.querySelector('.ref-panel');
+  const list  = document.getElementById('refList');
+  if (!list || !panel) return;
+
+  // Only show on Planyway tab and when export is open
+  const visible = exportOpen && exportTabActive === 'planyway';
+  panel.style.display = visible ? '' : 'none';
+  if (!visible) return;
+
   list.innerHTML = '';
-  const proj = getProject(activeProjectId);
-  if (!proj || !proj.tasks.length) {
+  const toDateStr = str => new Date(str + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const items = buildPlanyway();
+
+  if (!items.length) {
     const em = document.createElement('div');
     em.className = 'ref-empty';
-    em.textContent = 'No tasks yet';
+    em.textContent = 'No Planyway items';
     list.appendChild(em);
     return;
   }
-  const toDateStr = str => new Date(str + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  const sorted = [...proj.tasks].sort((a, b) => a.date.localeCompare(b.date));
-  sorted.forEach(task => {
+
+  items.forEach(({ date, endDate, person }) => {
     const item = document.createElement('div');
     item.className = 'ref-item';
+
     const dateDiv = document.createElement('div');
     dateDiv.className = 'ref-item-date';
-    const start = toDateStr(task.date);
-    const end   = task.endDate && task.endDate > task.date ? ' – ' + toDateStr(task.endDate) : '';
+    const start = toDateStr(date);
+    const end   = endDate && endDate > date ? ' – ' + toDateStr(endDate) : '';
     dateDiv.textContent = start + end;
+
     const personDiv = document.createElement('div');
     personDiv.className = 'ref-item-person';
-    if (task.isReview) {
-      const label = task.reviewLabel || 'Review';
-      const attendees = task.attendees && task.attendees.length
-        ? task.attendees.map(a => a.person || a.role).join(', ')
-        : '—';
-      personDiv.textContent = label + ': ' + attendees;
-    } else {
-      personDiv.textContent = (task.person || task.role) + (task.taskName ? ' — ' + task.taskName : '');
-    }
+    personDiv.textContent = person || '—';
+
     item.appendChild(dateDiv);
     item.appendChild(personDiv);
     list.appendChild(item);
@@ -1498,8 +1501,8 @@ function renderExportPanel() {
     content.appendChild(actions);
 
   } else if (exportTabActive === 'planyway') {
-    const lines = buildPlanyway();
-    const text  = lines.join('\n') || '(No tasks)';
+    const items = buildPlanyway();
+    const text  = items.map(i => i.line).join('\n') || '(No tasks)';
 
     const actions = document.createElement('div');
     actions.className = 'export-actions';
@@ -1592,7 +1595,7 @@ function buildPlanyway() {
   const proj = getProject(activeProjectId);
   if (!proj) return [];
   const sorted = [...proj.tasks].sort((a, b) => a.date.localeCompare(b.date));
-  const lines = [];
+  const items = [];
 
   sorted.forEach(task => {
     const cat = getPlanywayCat(task);
@@ -1600,14 +1603,26 @@ function buildPlanyway() {
     const line = (task.loe ? LOE_EMOJI[task.loe] + ' ' : '') + cat;
 
     if (task.isReview) {
-      // One line per attendee so each can be assigned separately in Planyway
-      const count = task.attendees && task.attendees.length ? task.attendees.length : 1;
-      for (let i = 0; i < count; i++) lines.push(line);
+      const attendees = task.attendees && task.attendees.length ? task.attendees : [];
+      const count = attendees.length || 1;
+      for (let i = 0; i < count; i++) {
+        items.push({
+          line,
+          date: task.date,
+          endDate: task.endDate || null,
+          person: attendees[i] ? (attendees[i].person || attendees[i].role) : (task.reviewLabel || 'Review')
+        });
+      }
     } else {
-      lines.push(line);
+      items.push({
+        line,
+        date: task.date,
+        endDate: task.endDate || null,
+        person: task.person || task.role
+      });
     }
   });
-  return lines;
+  return items;
 }
 
 function mkCopyBtn(label, text) {
@@ -1923,7 +1938,7 @@ function init() {
     exportOpen = !exportOpen;
     document.getElementById('exportToggle').classList.toggle('open', exportOpen);
     document.getElementById('exportBody').classList.toggle('visible', exportOpen);
-    if (exportOpen) renderExportPanel();
+    if (exportOpen) renderExportPanel(); else renderRefPanel();
   });
 
   document.querySelectorAll('.export-tab').forEach(tab => {
