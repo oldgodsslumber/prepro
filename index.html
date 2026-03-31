@@ -431,6 +431,7 @@ let exportOpen       = true;
 let exportOptBold    = true;
 let exportOptRoles   = true;
 let exportOptAlign   = true;
+let exportOptDueDate = true;
 let exportPNGRoles   = true;
 let showWeekends    = false;
 let resizeState     = null;
@@ -1484,11 +1485,15 @@ function buildHTMLExport() {
   if (!activeProjectId) return { html: '<em>(No project selected)</em>', plain: '(No project selected)' };
   const proj = getProject(activeProjectId);
   if (!proj) return { html: '', plain: '' };
+  const dueTasks = exportOptDueDate
+    ? [...proj.tasks].filter(t => t.isDueDate).sort((a, b) => a.date.localeCompare(b.date))
+    : [];
   const sorted = [...proj.tasks].filter(t => !t.isDueDate).sort((a, b) => a.date.localeCompare(b.date));
-  if (!sorted.length) return { html: '<em>(No tasks scheduled)</em>', plain: '(No tasks scheduled)' };
+  if (!sorted.length && !dueTasks.length) return { html: '<em>(No tasks scheduled)</em>', plain: '(No tasks scheduled)' };
 
-  const rawDates = sorted.map(t => fmtDateRange(t));
-  const maxLen   = exportOptAlign ? Math.max(...rawDates.map(s => s.length)) : 0;
+  const allForDates = [...sorted, ...dueTasks].sort((a, b) => a.date.localeCompare(b.date));
+  const rawDates = allForDates.map(t => fmtDateRange(t));
+  const maxLen   = exportOptAlign && rawDates.length ? Math.max(...rawDates.map(s => s.length)) : 0;
 
   const fmtHtml = raw => {
     const pad = exportOptAlign ? ' '.repeat(maxLen - raw.length) : '';
@@ -1505,11 +1510,14 @@ function buildHTMLExport() {
 
   const hLines = [], pLines = [];
 
-  sorted.forEach((t, i) => {
+  allForDates.forEach((t, i) => {
     const raw   = rawDates[i];
     const label = t.reviewLabel || 'Review';
 
-    if (t.isReview) {
+    if (t.isDueDate) {
+      hLines.push(`${fmtHtml(raw)}${escHtml(sep)}\uD83C\uDFC1 Project Due Date`);
+      pLines.push(`${fmtPlain(raw)}${sep}🏁 Project Due Date`);
+    } else if (t.isReview) {
       const name = t.taskName || label;
       hLines.push(`${fmtHtml(raw)}${escHtml(sep)}${escHtml(name)} [${escHtml(label.toUpperCase())}]`);
       pLines.push(`${fmtPlain(raw)}${sep}${name} [${label.toUpperCase()}]`);
@@ -1539,15 +1547,19 @@ function buildTSV() {
   if (!activeProjectId) return '';
   const proj = getProject(activeProjectId);
   if (!proj) return '';
-  const sorted = [...proj.tasks].filter(t => !t.isDueDate).sort((a, b) => a.date.localeCompare(b.date));
   const esc = s => (s || '').replace(/[\t\n\r]/g, ' ');
   const toDate = str => new Date(str + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const header = 'Start Date\tEnd Date\tTask\tPerson\tRole\tCategory\tType';
   const rows = [];
-  sorted.forEach(t => {
+  const allTasks = [...proj.tasks]
+    .filter(t => !t.isDueDate || exportOptDueDate)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  allTasks.forEach(t => {
     const sl = toDate(t.date);
     const el = t.endDate ? toDate(t.endDate) : sl;
-    if (t.isReview) {
+    if (t.isDueDate) {
+      rows.push([sl, sl, '🏁 Project Due Date', '', '', '', 'Due Date'].join('\t'));
+    } else if (t.isReview) {
       rows.push([sl, el, esc(t.taskName), '', 'Review', 'Review', 'Review'].join('\t'));
       if (t.attendees) {
         t.attendees.forEach(a => {
@@ -1696,9 +1708,10 @@ function renderExportPanel() {
       el.appendChild(document.createTextNode(lbl));
       opts.appendChild(el);
     };
-    mkOpt('Bold dates',    exportOptBold,  v => { exportOptBold  = v; });
-    mkOpt('Include roles', exportOptRoles, v => { exportOptRoles = v; });
-    mkOpt('Align tasks',   exportOptAlign, v => { exportOptAlign = v; });
+    mkOpt('Bold dates',    exportOptBold,    v => { exportOptBold    = v; });
+    mkOpt('Include roles', exportOptRoles,   v => { exportOptRoles   = v; });
+    mkOpt('Align tasks',   exportOptAlign,   v => { exportOptAlign   = v; });
+    mkOpt('Show due date', exportOptDueDate, v => { exportOptDueDate = v; });
 
     const actions = document.createElement('div');
     actions.className = 'export-actions';
@@ -1779,14 +1792,22 @@ function renderExportPanel() {
     content.appendChild(wrap);
 
   } else {
-    const tsv  = buildTSV();
     const proj = getProject(activeProjectId);
-    const sorted = proj ? [...proj.tasks].sort((a, b) => a.date.localeCompare(b.date)) : [];
     const toDate = str => new Date(str + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    const opts = document.createElement('div');
+    opts.className = 'export-opts';
+    const dueLbl = document.createElement('label');
+    dueLbl.className = 'export-opt';
+    const dueCb = document.createElement('input');
+    dueCb.type = 'checkbox'; dueCb.checked = exportOptDueDate;
+    dueCb.addEventListener('change', () => { exportOptDueDate = dueCb.checked; renderExportPanel(); });
+    dueLbl.appendChild(dueCb); dueLbl.appendChild(document.createTextNode('Show due date'));
+    opts.appendChild(dueLbl);
 
     const actions = document.createElement('div');
     actions.className = 'export-actions';
-    actions.appendChild(mkCopyBtn('Copy as TSV', tsv));
+    actions.appendChild(mkCopyBtn('Copy as TSV', buildTSV()));
     const note = document.createElement('span');
     note.className = 'export-note';
     note.textContent = 'Or select all in the table and paste into Excel';
@@ -1803,10 +1824,19 @@ function renderExportPanel() {
       hrow.appendChild(th);
     });
     const tbody = table.createTBody();
-    sorted.forEach(t => {
+    const allTasks = proj
+      ? [...proj.tasks].filter(t => !t.isDueDate || exportOptDueDate).sort((a, b) => a.date.localeCompare(b.date))
+      : [];
+    allTasks.forEach(t => {
       const sl = toDate(t.date);
       const el = t.endDate ? toDate(t.endDate) : sl;
-      if (t.isReview) {
+      if (t.isDueDate) {
+        const row = tbody.insertRow();
+        ['🏁 Project Due Date', sl, sl, '', '', '', 'Due Date'].forEach((val, i) => {
+          const td = row.insertCell(); td.textContent = val;
+          if (i === 0) td.style.fontWeight = '700';
+        });
+      } else if (t.isReview) {
         const rrow = tbody.insertRow();
         [sl, el, t.taskName || 'Review', '', 'Review', 'Review', 'Review'].forEach(val => { rrow.insertCell().textContent = val; });
         if (t.attendees) {
@@ -1823,6 +1853,7 @@ function renderExportPanel() {
       }
     });
     wrap.appendChild(table);
+    content.appendChild(opts);
     content.appendChild(actions);
     content.appendChild(wrap);
   }
