@@ -195,7 +195,16 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .panel-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
 
 /* ── EXPORT PANEL ── */
-.export-panel { background: var(--panel); border-top: 1px solid var(--border); flex-shrink: 0; display: flex; flex-direction: column; }
+.export-row   { display: flex; align-items: stretch; border-top: 1px solid var(--border); flex-shrink: 0; }
+.export-panel { background: var(--panel); flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ref-panel    { width: 220px; flex-shrink: 0; background: var(--panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+.ref-header   { padding: 8px 14px; font-size: 11px; font-weight: 700; color: var(--dim); letter-spacing: .07em; text-transform: uppercase; flex-shrink: 0; border-bottom: 1px solid var(--border); height: 34px; box-sizing: border-box; display: flex; align-items: center; }
+.ref-list     { flex: 1; overflow-y: auto; padding: 6px 0; min-height: 0; }
+.ref-item     { padding: 3px 14px; display: flex; flex-direction: column; gap: 1px; }
+.ref-item-date { font-size: 10px; color: var(--dim); }
+.ref-item-person { font-size: 11px; color: var(--text); }
+.ref-item + .ref-item { border-top: 1px solid var(--border); padding-top: 5px; margin-top: 2px; }
+.ref-empty    { padding: 12px 14px; font-size: 11px; color: var(--dim); font-style: italic; }
 .export-toggle { display: flex; align-items: center; gap: 8px; padding: 8px 14px; cursor: pointer; font-size: 11px; font-weight: 700; color: var(--dim); letter-spacing: .07em; text-transform: uppercase; user-select: none; transition: color .15s; }
 .export-toggle:hover { color: var(--text); }
 .export-chevron { font-size: 9px; transition: transform .2s; }
@@ -316,21 +325,32 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
       </div>
     </div>
 
-    <!-- EXPORT PANEL -->
-    <div class="export-panel">
-      <div class="export-toggle" id="exportToggle">
-        <span class="export-chevron">▲</span>
-        <span>Export Schedule</span>
-      </div>
-      <div class="export-body" id="exportBody">
-        <div class="export-tabs">
-          <div class="export-tab active" data-tab="text">Text</div>
-          <div class="export-tab" data-tab="table">Table / Excel</div>
-          <div class="export-tab" data-tab="png">PNG</div>
-          <div class="export-tab" data-tab="planyway">Planyway</div>
+    <!-- EXPORT ROW -->
+    <div class="export-row">
+
+      <!-- EXPORT PANEL -->
+      <div class="export-panel">
+        <div class="export-toggle" id="exportToggle">
+          <span class="export-chevron">▲</span>
+          <span>Export Schedule</span>
         </div>
-        <div class="export-content" id="exportContent"></div>
+        <div class="export-body" id="exportBody">
+          <div class="export-tabs">
+            <div class="export-tab active" data-tab="text">Text</div>
+            <div class="export-tab" data-tab="table">Table / Excel</div>
+            <div class="export-tab" data-tab="png">PNG</div>
+            <div class="export-tab" data-tab="planyway">Planyway</div>
+          </div>
+          <div class="export-content" id="exportContent"></div>
+        </div>
       </div>
+
+      <!-- REFERENCE PANEL -->
+      <div class="ref-panel">
+        <div class="ref-header">Schedule Reference</div>
+        <div class="ref-list" id="refList"></div>
+      </div>
+
     </div>
 
   </div>
@@ -519,6 +539,7 @@ function renderPalette() {
 function renderCalendar() {
   const empty   = document.getElementById('emptyState');
   const calArea = document.getElementById('calendarArea');
+  renderRefPanel();
   if (!activeProjectId || !getProject(activeProjectId)) {
     empty.classList.remove('hidden');
     calArea.classList.add('hidden');
@@ -1370,9 +1391,49 @@ function buildTSV() {
   return [header, ...rows].join('\n');
 }
 
+function renderRefPanel() {
+  const list = document.getElementById('refList');
+  if (!list) return;
+  list.innerHTML = '';
+  const proj = getProject(activeProjectId);
+  if (!proj || !proj.tasks.length) {
+    const em = document.createElement('div');
+    em.className = 'ref-empty';
+    em.textContent = 'No tasks yet';
+    list.appendChild(em);
+    return;
+  }
+  const toDateStr = str => new Date(str + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const sorted = [...proj.tasks].sort((a, b) => a.date.localeCompare(b.date));
+  sorted.forEach(task => {
+    const item = document.createElement('div');
+    item.className = 'ref-item';
+    const dateDiv = document.createElement('div');
+    dateDiv.className = 'ref-item-date';
+    const start = toDateStr(task.date);
+    const end   = task.endDate && task.endDate > task.date ? ' – ' + toDateStr(task.endDate) : '';
+    dateDiv.textContent = start + end;
+    const personDiv = document.createElement('div');
+    personDiv.className = 'ref-item-person';
+    if (task.isReview) {
+      const label = task.reviewLabel || 'Review';
+      const attendees = task.attendees && task.attendees.length
+        ? task.attendees.map(a => a.person || a.role).join(', ')
+        : '—';
+      personDiv.textContent = label + ': ' + attendees;
+    } else {
+      personDiv.textContent = (task.person || task.role) + (task.taskName ? ' — ' + task.taskName : '');
+    }
+    item.appendChild(dateDiv);
+    item.appendChild(personDiv);
+    list.appendChild(item);
+  });
+}
+
 function renderExportPanel() {
   const content = document.getElementById('exportContent');
   content.innerHTML = '';
+  renderRefPanel();
 
   if (exportTabActive === 'text') {
     // ── Format options ──
