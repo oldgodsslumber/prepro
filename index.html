@@ -2169,6 +2169,7 @@ function exportPNG() {
         ctx.font = `${8*SC}px system-ui,sans-serif`;
         ctx.textAlign = 'left';
         ctx.save();
+        ctx.beginPath();
         ctx.rect(chipX + 3*SC, ty, chipW - 6*SC, chipH);
         ctx.clip();
         const loeStr  = task.loe ? LOE_EMOJI[task.loe] + ' ' : '';
@@ -2189,7 +2190,8 @@ function exportPNG() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = (proj.name.replace(/[^a-z0-9_\-]/gi,'_') || 'schedule') + '.png';
+    const ts = new Date().toISOString().slice(0,16).replace('T','_').replace(':','');
+    a.download = (proj.name.replace(/[^a-z0-9_\-]/gi,'_') || 'schedule') + '_' + ts + '.png';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
