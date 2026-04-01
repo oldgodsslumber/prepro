@@ -1042,7 +1042,6 @@ function buildDueDateMarker(task, dateStr) {
   badge.addEventListener('click', e => { e.stopPropagation(); openTypeSwitcher(e, task.id, isMilestone ? 'Milestone' : 'Project Due Date'); });
   const titleSpan = document.createElement('span');
   titleSpan.className = 'review-title';
-  titleSpan.style.color = '#111';
   titleSpan.textContent = task.taskName || (isMilestone ? 'Milestone' : 'Project Due Date');
   hd.appendChild(badge);
   hd.appendChild(titleSpan);
@@ -1475,13 +1474,15 @@ function openPanel(mode, dateStr, taskId, role, category, color) {
   const taskLabel   = document.getElementById('panelTaskLabel');
   const taskInput   = document.getElementById('panelTask');
 
-  // Reset field visibility
+  // Reset field visibility and badge state
   fieldPerson.style.display = '';
   fieldTask.style.display   = '';
   fieldLOE.style.display    = '';
   taskLabel.textContent     = 'Task';
   taskInput.placeholder     = 'e.g. Script Review';
   document.getElementById('panelLOE').value = '';
+  const _badge = document.getElementById('panelRoleBadge');
+  _badge.onclick = null; _badge.style.cursor = ''; _badge.title = '';
 
   if (mode === 'create') {
     panelContext = { mode, date: dateStr, role, category, color };
@@ -1535,8 +1536,12 @@ function openPanel(mode, dateStr, taskId, role, category, color) {
     if (!task) return;
     panelContext = { mode: 'edit-review', taskId, date: task.date };
     const lbl = task.reviewLabel || 'Review';
-    document.getElementById('panelRoleBadge').textContent      = lbl;
-    document.getElementById('panelRoleBadge').style.background = REVIEW_COLOR;
+    const badge = document.getElementById('panelRoleBadge');
+    badge.textContent      = lbl;
+    badge.style.background = REVIEW_COLOR;
+    badge.style.cursor     = 'pointer';
+    badge.title            = 'Click to change type';
+    badge.onclick          = e => { closePanel(); openTypeSwitcher(e, taskId, lbl); };
     document.getElementById('panelDateLabel').textContent      = fmtDateLabel(task.date);
     fieldPerson.style.display = 'none';
     fieldLOE.style.display    = 'none';
@@ -1564,9 +1569,14 @@ function openPanel(mode, dateStr, taskId, role, category, color) {
     if (!proj) return;
     const task = proj.tasks.find(t => t.id === taskId);
     if (!task) return;
+    const isMilestone = task.milestoneType === 'milestone';
     panelContext = { mode: 'edit-duedate', taskId };
-    document.getElementById('panelRoleBadge').textContent      = '🏁';
-    document.getElementById('panelRoleBadge').style.background = '#444';
+    const badge2 = document.getElementById('panelRoleBadge');
+    badge2.textContent      = isMilestone ? '🎯' : '🏁';
+    badge2.style.background = '#444';
+    badge2.style.cursor     = 'pointer';
+    badge2.title            = 'Click to change type';
+    badge2.onclick          = e => { closePanel(); openTypeSwitcher(e, taskId, isMilestone ? 'Milestone' : 'Project Due Date'); };
     document.getElementById('panelDateLabel').textContent      = fmtDateLabel(task.date);
     fieldPerson.style.display = 'none';
     fieldLOE.style.display    = 'none';
