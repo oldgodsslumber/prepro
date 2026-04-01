@@ -2137,15 +2137,22 @@ function exportPNG() {
       ctx.fillText(d.toLocaleDateString('en-US',{month:'short'}), cx + 25*SC, cy + 18*SC);
     }
 
-    // tasks
-    const tasks = getTasksForDate(activeProjectId, dateStr);
+    // tasks — split milestones (isDueDate) out so they render in their own section
+    const allTasks   = getTasksForDate(activeProjectId, dateStr);
+    const tasks      = allTasks.filter(t => !t.isDueDate);
+    const milestones = allTasks.filter(t => t.isDueDate);
     let ty = cy + 28*SC;
+
     tasks.forEach(task => {
-      const endDate = task.endDate || task.date;
-      const isStart = task.date === dateStr;
-      const isEnd   = endDate === dateStr;
-      const chipH   = 14 * SC;
-      const pad     = 4 * SC;
+      const endDate  = task.endDate || task.date;
+      const isStart  = task.date === dateStr;
+      const isEnd    = endDate === dateStr;
+      const pad      = 4 * SC;
+      // Reviews grow taller to fit attendee rows
+      const attCount = task.isReview && task.attendees ? task.attendees.length : 0;
+      const chipH    = (14 + attCount * 10) * SC;
+
+      if (ty + chipH > cy + CH - 4*SC) return; // no room
 
       const chipX = isStart ? cx + pad : cx;
       const chipW = isEnd   ? CW - (isStart ? pad : 0) - pad : CW - (isStart ? pad : 0);
@@ -2165,28 +2172,76 @@ function exportPNG() {
       }
 
       if (isStart) {
-        ctx.fillStyle = '#fff';
-        ctx.font = `${8*SC}px system-ui,sans-serif`;
-        ctx.textAlign = 'left';
         ctx.save();
         ctx.beginPath();
         ctx.rect(chipX + 3*SC, ty, chipW - 6*SC, chipH);
         ctx.clip();
-        const loeStr  = task.loe ? LOE_EMOJI[task.loe] + ' ' : '';
+
+        // Title row
+        const loeStr = task.loe ? LOE_EMOJI[task.loe] + ' ' : '';
         const roleStr = exportPNGRoles && !task.isReview && task.role ? ` (${task.role})` : '';
-        const attStr  = task.isReview && task.attendees && task.attendees.length
-          ? ' — ' + task.attendees.map(a => a.person || a.role).join(', ')
-          : '';
-        const label   = task.isReview
-          ? (task.reviewLabel || 'REVIEW') + ': ' + (task.taskName || '') + attStr
+        const title = task.isReview
+          ? (task.reviewLabel || 'REVIEW') + ': ' + (task.taskName || '')
           : loeStr + ((task.person || '') + (task.person && task.taskName ? ' · ' : '') + (task.taskName || task.role)) + roleStr;
-        ctx.fillText(label, chipX + 5*SC, ty + 10*SC);
+        ctx.fillStyle = '#fff';
+        ctx.font = `${8*SC}px system-ui,sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.fillText(title, chipX + 5*SC, ty + 10*SC);
+
+        // Attendee bullet rows (reviews / shoots only)
+        if (task.isReview && task.attendees) {
+          task.attendees.forEach((att, i) => {
+            const ay = ty + 18*SC + i * 10*SC;
+            // Coloured dot
+            ctx.fillStyle = att.color || REVIEW_COLOR;
+            ctx.beginPath();
+            ctx.arc(chipX + 9*SC, ay, 2.5*SC, 0, Math.PI * 2);
+            ctx.fill();
+            // Name
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            ctx.font = `${7*SC}px system-ui,sans-serif`;
+            ctx.fillText((att.person || att.role), chipX + 14*SC, ay + 4*SC);
+          });
+        }
+
         ctx.restore();
       }
 
       ty += chipH + 3*SC;
-      if (ty + chipH > cy + CH - 4*SC) return; // clip overflow
     });
+
+    // ── Milestones section ──
+    if (milestones.length && ty + 8*SC < cy + CH - 4*SC) {
+      // Category label
+      ctx.fillStyle = '#606080';
+      ctx.font = `bold ${5.5*SC}px system-ui,sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.fillText('MILESTONES', cx + 4*SC, ty + 6*SC);
+      ty += 9*SC;
+
+      milestones.forEach(m => {
+        const mH = 13*SC;
+        if (ty + mH > cy + CH - 4*SC) return;
+        // White outline chip
+        ctx.fillStyle = 'rgba(255,255,255,0.1)';
+        canvasRoundRect(ctx, cx + 4*SC, ty, CW - 8*SC, mH, 3*SC);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+        ctx.lineWidth = SC;
+        ctx.stroke();
+        // Flag label
+        ctx.fillStyle = '#fff';
+        ctx.font = `${7*SC}px system-ui,sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(cx + 5*SC, ty, CW - 10*SC, mH);
+        ctx.clip();
+        ctx.fillText('🏁 ' + (m.taskName || 'Project Due Date'), cx + 7*SC, ty + 9*SC);
+        ctx.restore();
+        ty += mH + 2*SC;
+      });
+    }
   });
 
   canvas.toBlob(blob => {
