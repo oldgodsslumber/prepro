@@ -74,8 +74,11 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .role-chip:hover { opacity: .9; transform: translateY(-1px); }
 .role-chip:active { cursor: grabbing; transform: scale(.97); }
 .chip-duedate { background: #ffffff !important; color: #111 !important; border: 1.5px solid #ccc; }
-.duedate-marker { background: #fff; color: #111; border-radius: 4px; padding: 3px 8px; font-size: 11px; font-weight: 700; cursor: grab; user-select: none; white-space: nowrap; flex-shrink: 0; border-left: 3px solid #111; transition: opacity .12s; }
+.duedate-marker { background: #fff; color: #111; border-radius: 4px; padding: 4px 8px; font-size: 11px; font-weight: 700; cursor: grab; user-select: none; flex-shrink: 0; border-left: 3px solid #111; transition: opacity .12s; display: flex; flex-direction: column; gap: 2px; }
 .duedate-marker:hover { opacity: .85; }
+.duedate-hd { font-weight: 700; white-space: nowrap; }
+.duedate-marker.drag-accepting { outline: 2px solid rgba(0,0,0,.3); outline-offset: -1px; }
+.duedate-marker.drag-accepting .review-drop-hint { display: block; }
 
 /* ── CALENDAR WRAPPER ── */
 .cal-wrap { flex: 1; overflow-y: auto; padding: 12px 14px 8px; min-height: 0; }
@@ -516,6 +519,31 @@ function addProject(name, parentId) {
   const p = { id: genId(), name, parentId: parentId || null, tasks: [], roster: {}, dueDate: null };
   state.projects.push(p); saveState(); return p;
 }
+function duplicateProject(id) {
+  const allIds = [id, ...getDescendantIds(id)];
+  const idMap  = {};
+  allIds.forEach(oid => { idMap[oid] = genId(); });
+  const copies = allIds.map(oid => {
+    const p = getProject(oid);
+    const newTasks = (p.tasks || []).map(t => {
+      const nt = Object.assign({}, t, { id: genId() });
+      if (t.attendees) nt.attendees = t.attendees.map(a => Object.assign({}, a, { id: genId() }));
+      return nt;
+    });
+    return {
+      id: idMap[oid],
+      name: oid === id ? p.name + ' (copy)' : p.name,
+      parentId: oid === id ? p.parentId : idMap[p.parentId],
+      tasks: newTasks,
+      roster: JSON.parse(JSON.stringify(p.roster || {})),
+      dueDate: p.dueDate || null
+    };
+  });
+  const insertIdx = state.projects.findIndex(p => p.id === id);
+  state.projects.splice(insertIdx + 1, 0, ...copies);
+  saveState();
+  return copies[0];
+}
 function deleteProject(id) {
   const del = new Set([id, ...getDescendantIds(id)]);
   state.projects = state.projects.filter(p => !del.has(p.id));
@@ -576,6 +604,28 @@ function renderTreeLevel(parentId, depth, container) {
       document.getElementById('rosterBody').classList.remove('visible');
     });
     node.addEventListener('contextmenu', e => { e.preventDefault(); openContextMenu(e, proj.id); });
+
+    // Alt+drag to duplicate
+    node.draggable = true;
+    node.addEventListener('dragstart', e => {
+      if (!e.altKey) { e.preventDefault(); return; }
+      dragPayload = { type: 'dup-project', projectId: proj.id };
+      e.dataTransfer.setData('text', JSON.stringify(dragPayload));
+      e.dataTransfer.effectAllowed = 'copy';
+      node.style.opacity = '.5';
+    });
+    node.addEventListener('dragend', () => {
+      node.style.opacity = '';
+      if (dragPayload && dragPayload.type === 'dup-project' && dragPayload.projectId === proj.id) {
+        const newProj = duplicateProject(proj.id);
+        dragPayload = null;
+        if (newProj) {
+          activeProjectId = newProj.id;
+          renderSidebar(); renderCalendar();
+          if (exportOpen) renderExportPanel();
+        }
+      }
+    });
 
     container.appendChild(node);
     if (hasKids && !isCollapsed) renderTreeLevel(proj.id, depth + 1, container);
@@ -753,6 +803,7 @@ function makeCell(dayNum, dateStr, todayStr, laneArr) {
 
   cell.addEventListener('dragover', e => {
     if (!dragPayload && !e.dataTransfer.types.includes('text')) return;
+    if (dragPayload && dragPayload.type === 'dup-project') return;
     e.preventDefault();
     cell.classList.add('drag-over');
   });
@@ -764,7 +815,7 @@ function makeCell(dayNum, dateStr, todayStr, laneArr) {
     cell.classList.remove('drag-over');
     let pl = dragPayload;
     if (!pl) { try { pl = JSON.parse(e.dataTransfer.getData('text')); } catch(_) { return; } }
-    if (!pl || !activeProjectId) return;
+    if (!pl || !activeProjectId || pl.type === 'dup-project') return;
     if (pl.type === 'move') {
       moveTask(pl.taskId, dateStr);
     } else if (pl.type === 'copy') {
@@ -772,7 +823,7 @@ function makeCell(dayNum, dateStr, todayStr, laneArr) {
     } else if (pl.type === 'duedate') {
       const proj = getProject(activeProjectId);
       if (!proj) return;
-      proj.tasks.push({ id: genId(), date: dateStr, isDueDate: true, color: '#ffffff', role: '', roleCategory: '' });
+      proj.tasks.push({ id: genId(), date: dateStr, isDueDate: true, color: '#ffffff', role: '', roleCategory: '', attendees: [] });
       saveState(); renderCalendar(); if (exportOpen) renderExportPanel();
     } else if (pl.type === 'review') {
       openPanel('create-review', dateStr, null, pl.label || 'Review', null, REVIEW_COLOR);
@@ -842,9 +893,45 @@ function buildDueDateMarker(task, dateStr) {
   const el = document.createElement('div');
   el.className = 'duedate-marker';
   el.dataset.taskId = task.id;
-  el.textContent = '🏁 ' + (task.taskName || 'Project Due Date');
+  el.title = 'Click to edit · Drag to move · Drop a role to add attendee';
+
+  // Header
+  const hd = document.createElement('div');
+  hd.className = 'duedate-hd';
+  hd.textContent = '🏁 ' + (task.taskName || 'Project Due Date');
+  el.appendChild(hd);
+
+  // Attendees list
+  if (task.attendees && task.attendees.length) {
+    const list = document.createElement('div');
+    list.className = 'review-att-list';
+    task.attendees.forEach(att => {
+      const row = document.createElement('div');
+      row.className = 'review-att';
+      const dot = document.createElement('span');
+      dot.className = 'review-att-dot';
+      dot.style.background = att.color;
+      const name = document.createElement('span');
+      name.className = 'review-att-name';
+      name.textContent = (att.person ? att.person + ' ' : '') + '(' + att.role + ')';
+      const rm = document.createElement('button');
+      rm.className = 'review-att-rm';
+      rm.textContent = '×';
+      rm.addEventListener('click', e => { e.stopPropagation(); removeAttendee(task.id, att.id); });
+      row.appendChild(dot); row.appendChild(name); row.appendChild(rm);
+      list.appendChild(row);
+    });
+    el.appendChild(list);
+  }
+
+  // Drop hint
+  const hint = document.createElement('div');
+  hint.className = 'review-drop-hint';
+  hint.textContent = '+ drop a role to add attendee';
+  el.appendChild(hint);
+
+  // Drag to move
   el.draggable = true;
-  el.title = 'Click to edit · Drag to move';
   el.addEventListener('dragstart', e => {
     if (isResizing) { e.preventDefault(); return; }
     dragPayload = { type: 'move', taskId: task.id };
@@ -852,10 +939,32 @@ function buildDueDateMarker(task, dateStr) {
     e.dataTransfer.effectAllowed = 'move';
   });
   el.addEventListener('dragend', () => { dragPayload = null; });
+
+  // Click to edit (ignore clicks on remove buttons)
   el.addEventListener('click', e => {
+    if (e.target.classList.contains('review-att-rm')) return;
     e.stopPropagation();
     openPanel('edit-duedate', null, task.id);
   });
+
+  // Accept role drops
+  el.addEventListener('dragover', e => {
+    if (!dragPayload || dragPayload.type === 'move' || dragPayload.type === 'copy' || dragPayload.type === 'review' || dragPayload.type === 'duedate' || dragPayload.type === 'dup-project') return;
+    e.preventDefault(); e.stopPropagation();
+    el.classList.add('drag-accepting');
+  });
+  el.addEventListener('dragleave', e => {
+    if (!el.contains(e.relatedTarget)) el.classList.remove('drag-accepting');
+  });
+  el.addEventListener('drop', e => {
+    e.preventDefault(); e.stopPropagation();
+    el.classList.remove('drag-accepting');
+    let pl = dragPayload;
+    if (!pl) { try { pl = JSON.parse(e.dataTransfer.getData('text')); } catch(_) { return; } }
+    if (!pl || pl.type === 'move' || pl.type === 'copy' || pl.type === 'review' || pl.type === 'duedate' || pl.type === 'dup-project') return;
+    openPanel('add-attendee', task.date, task.id, pl.role, pl.category, pl.color);
+  });
+
   return el;
 }
 
@@ -1426,6 +1535,7 @@ function openContextMenu(e, projectId) {
   menu.innerHTML = '';
   [
     { label: 'Rename',         action: 'rename' },
+    { label: 'Duplicate',      action: 'duplicate' },
     { label: 'Add Subproject', action: 'addSub' },
     { label: 'Delete',         action: 'delete', danger: true }
   ].forEach(({ label, action, danger }) => {
@@ -1445,6 +1555,13 @@ function closeContextMenu() { document.getElementById('ctxMenu').classList.add('
 function handleContextAction(action, projectId) {
   if (action === 'rename') {
     startRename(projectId);
+  } else if (action === 'duplicate') {
+    const newProj = duplicateProject(projectId);
+    if (newProj) {
+      activeProjectId = newProj.id;
+      renderSidebar(); renderCalendar();
+      if (exportOpen) renderExportPanel();
+    }
   } else if (action === 'addSub') {
     const name = prompt('Subproject name:');
     if (name && name.trim()) {
@@ -2220,7 +2337,8 @@ function exportPNG() {
       ty += 9*SC;
 
       milestones.forEach(m => {
-        const mH = 13*SC;
+        const mAttCount = m.attendees ? m.attendees.length : 0;
+        const mH = (13 + mAttCount * 10) * SC;
         if (ty + mH > cy + CH - 4*SC) return;
         // White outline chip
         ctx.fillStyle = 'rgba(255,255,255,0.1)';
@@ -2229,15 +2347,28 @@ function exportPNG() {
         ctx.strokeStyle = 'rgba(255,255,255,0.5)';
         ctx.lineWidth = SC;
         ctx.stroke();
-        // Flag label
-        ctx.fillStyle = '#fff';
-        ctx.font = `${7*SC}px system-ui,sans-serif`;
-        ctx.textAlign = 'left';
         ctx.save();
         ctx.beginPath();
         ctx.rect(cx + 5*SC, ty, CW - 10*SC, mH);
         ctx.clip();
+        // Flag label
+        ctx.fillStyle = '#fff';
+        ctx.font = `${7*SC}px system-ui,sans-serif`;
+        ctx.textAlign = 'left';
         ctx.fillText('🏁 ' + (m.taskName || 'Project Due Date'), cx + 7*SC, ty + 9*SC);
+        // Attendee bullet rows
+        if (m.attendees) {
+          m.attendees.forEach((att, i) => {
+            const ay = ty + 17*SC + i * 10*SC;
+            ctx.fillStyle = att.color || '#888';
+            ctx.beginPath();
+            ctx.arc(cx + 10*SC, ay, 2.5*SC, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(0,0,0,0.75)';
+            ctx.font = `${7*SC}px system-ui,sans-serif`;
+            ctx.fillText((att.person || att.role), cx + 15*SC, ay + 4*SC);
+          });
+        }
         ctx.restore();
         ty += mH + 2*SC;
       });
