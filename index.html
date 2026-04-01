@@ -81,13 +81,15 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .duedate-marker.drag-accepting .review-drop-hint { display: block; }
 
 /* ── CALENDAR WRAPPER ── */
-.cal-wrap { flex: 1; overflow-y: auto; padding: 12px 14px 8px; min-height: 0; }
-.cal-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.cal-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 12px 14px 0; min-height: 0; }
+#calendarArea { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.cal-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-shrink: 0; }
 .cal-nav-title { font-size: 15px; font-weight: 700; flex: 1; }
-.cal-nav-btn { width: 28px; height: 28px; border-radius: 6px; background: var(--card); color: var(--text); border: 1px solid var(--border); font-size: 16px; display: flex; align-items: center; justify-content: center; line-height: 1; }
-.cal-nav-btn:hover { background: var(--border); }
+.cal-dow-row { display: grid; flex-shrink: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 8px 8px 0 0; border-bottom: none; }
+.cal-scroll { flex: 1; overflow-y: auto; overflow-anchor: none; min-height: 0; padding-bottom: 12px; }
+.cal-sentinel { height: 1px; }
 
-.cal-grid { display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.cal-grid { display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px; overflow: hidden; }
 
 .cal-dow  { background: var(--card); text-align: center; font-size: 10px; font-weight: 700; color: var(--dim); padding: 6px 2px; text-transform: uppercase; letter-spacing: .07em; }
 
@@ -314,14 +316,17 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
       </div>
       <div id="calendarArea" class="hidden">
         <div class="cal-nav">
-          <button class="cal-nav-btn" id="calPrev">&#8249;</button>
           <div class="cal-nav-title" id="calTitle"></div>
-          <button class="cal-nav-btn" id="calNext">&#8250;</button>
           <button class="btn-toggle" id="calToday">Today</button>
           <button class="btn-toggle on" id="wkndToggle">Show Weekends</button>
-          <span class="htip">?<span class="htip-popup">← → navigate two weeks at a time. Today snaps back to the current week. Toggle weekends to show or hide Sat/Sun columns. Drag tasks to move them; hold Alt while dragging to duplicate.</span></span>
+          <span class="htip">?<span class="htip-popup">Scroll up/down to move through time. Today snaps back to the current week. Toggle weekends to show or hide Sat/Sun columns. Drag tasks to move them; hold Alt while dragging to duplicate.</span></span>
         </div>
-        <div class="cal-grid" id="calGrid"></div>
+        <div class="cal-dow-row" id="calDowRow"></div>
+        <div class="cal-scroll" id="calScroll">
+          <div id="calTopSentinel" class="cal-sentinel"></div>
+          <div class="cal-grid" id="calGrid"></div>
+          <div id="calBottomSentinel" class="cal-sentinel"></div>
+        </div>
       </div>
     </div>
 
@@ -439,6 +444,12 @@ let exportPNGRoles   = true;
 let showWeekends    = false;
 let resizeState     = null;
 let isResizing      = false;
+
+// ── INFINITE CALENDAR ──
+let calEarliestDate = null; // YYYY-MM-DD, first rendered date
+let calLatestDate   = null; // YYYY-MM-DD, first day of last rendered week
+let calObserver     = null;
+let calScrollRaf    = null;
 
 // ── ROSTER ──
 let rosterOpen = true;
@@ -594,6 +605,7 @@ function renderTreeLevel(parentId, depth, container) {
 
     node.addEventListener('click', () => {
       activeProjectId = proj.id;
+      calEarliestDate = null;
       closePanel();
       renderSidebar();
       renderCalendar();
@@ -621,6 +633,7 @@ function renderTreeLevel(parentId, depth, container) {
         dragPayload = null;
         if (newProj) {
           activeProjectId = newProj.id;
+          calEarliestDate = null;
           renderSidebar(); renderCalendar();
           if (exportOpen) renderExportPanel();
         }
@@ -720,56 +733,156 @@ function renderPalette() {
 }
 
 // ── CALENDAR ──
+function resetCalRange() {
+  teardownCalObserver();
+  const ws = getWeekStart();
+  const d  = new Date(ws + 'T00:00:00');
+  d.setDate(d.getDate() - 12 * 7);                 // 12 weeks before today
+  calEarliestDate = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+  const e = new Date(ws + 'T00:00:00');
+  e.setDate(e.getDate() + 24 * 7);                 // 24 weeks after today
+  calLatestDate = fmtDate(e.getFullYear(), e.getMonth() + 1, e.getDate());
+}
+
+function renderDowHeader() {
+  const row  = document.getElementById('calDowRow');
+  const cols = showWeekends ? 7 : 5;
+  row.innerHTML = '';
+  row.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  (showWeekends ? DOW_ALL : DOW_WD).forEach(d => {
+    const hdr = document.createElement('div');
+    hdr.className = 'cal-dow';
+    hdr.textContent = d;
+    row.appendChild(hdr);
+  });
+}
+
+function rebuildCalGrid(adjustScrollTop) {
+  const calScroll = document.getElementById('calScroll');
+  const prevScrollTop = calScroll.scrollTop;
+  const prevHeight    = calScroll.scrollHeight;
+
+  const grid = document.getElementById('calGrid');
+  const cols = showWeekends ? 7 : 5;
+  grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  grid.innerHTML = '';
+
+  const today    = new Date();
+  const todayStr = fmtDate(today.getFullYear(), today.getMonth() + 1, today.getDate());
+
+  const allDates = [];
+  const cur = new Date(calEarliestDate + 'T00:00:00');
+  // Build through the end of calLatestDate's week
+  const endBound = new Date(calLatestDate + 'T00:00:00');
+  endBound.setDate(endBound.getDate() + 6);
+  while (cur <= endBound) {
+    if (showWeekends || !isWeekend(cur.getDay()))
+      allDates.push(fmtDate(cur.getFullYear(), cur.getMonth() + 1, cur.getDate()));
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  const layout = buildTaskLayout(allDates);
+  allDates.forEach(dateStr => {
+    const d = new Date(dateStr + 'T00:00:00');
+    grid.appendChild(makeCell(d.getDate(), dateStr, todayStr, layout.get(dateStr) || []));
+  });
+
+  if (adjustScrollTop) {
+    calScroll.scrollTop = prevScrollTop + (calScroll.scrollHeight - prevHeight);
+  }
+}
+
+function extendCalendar(direction) {
+  const WEEKS = 8;
+  if (direction === 'bottom') {
+    const d = new Date(calLatestDate + 'T00:00:00');
+    d.setDate(d.getDate() + WEEKS * 7);
+    calLatestDate = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+    rebuildCalGrid(false);
+  } else {
+    const d = new Date(calEarliestDate + 'T00:00:00');
+    d.setDate(d.getDate() - WEEKS * 7);
+    calEarliestDate = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+    rebuildCalGrid(true);  // adjust scrollTop to compensate for prepended content
+  }
+  updateCalTitle();
+  setupCalObserver();
+}
+
+function scrollToToday() {
+  const calScroll = document.getElementById('calScroll');
+  const todayCell = calScroll.querySelector('.cal-day.today');
+  if (!todayCell) return;
+  let top = 0, el = todayCell;
+  while (el && el !== calScroll) { top += el.offsetTop; el = el.offsetParent; }
+  calScroll.scrollTop = top - 20;
+}
+
+function setupCalObserver() {
+  if (calObserver) return;
+  calObserver = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (!e.isIntersecting) return;
+      if (e.target.id === 'calTopSentinel')    extendCalendar('top');
+      if (e.target.id === 'calBottomSentinel') extendCalendar('bottom');
+    });
+  }, { root: document.getElementById('calScroll'), rootMargin: '400px 0px', threshold: 0 });
+  calObserver.observe(document.getElementById('calTopSentinel'));
+  calObserver.observe(document.getElementById('calBottomSentinel'));
+}
+
+function teardownCalObserver() {
+  if (calObserver) { calObserver.disconnect(); calObserver = null; }
+}
+
+function updateCalTitle() {
+  const calScroll = document.getElementById('calScroll');
+  if (!calScroll) return;
+  const rect = calScroll.getBoundingClientRect();
+  const topEl = document.elementFromPoint(rect.left + 40, rect.top + 4);
+  const botEl = document.elementFromPoint(rect.left + 40, rect.bottom - 4);
+  const firstDate = topEl?.closest?.('[data-date]')?.dataset?.date;
+  const lastDate  = botEl?.closest?.('[data-date]')?.dataset?.date;
+  if (!firstDate) return;
+  const fmt = (s, y) => new Date(s + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(y ? { year: 'numeric' } : {}) });
+  document.getElementById('calTitle').textContent = fmt(firstDate) + (lastDate && lastDate !== firstDate ? ' \u2013 ' + fmt(lastDate, true) : '');
+}
+
 function renderCalendar() {
   const empty   = document.getElementById('emptyState');
   const calArea = document.getElementById('calendarArea');
   if (!activeProjectId || !getProject(activeProjectId)) {
     empty.classList.remove('hidden');
     calArea.classList.add('hidden');
+    teardownCalObserver();
     return;
   }
   empty.classList.add('hidden');
   calArea.classList.remove('hidden');
 
-  // Title: "Mar 24 – Apr 6, 2026"
-  const startD = new Date(viewStart + 'T00:00:00');
-  const endD   = new Date(startD);
-  endD.setDate(startD.getDate() + 41);
-  const sFmt = startD.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  const eFmt = endD.toLocaleDateString('en-US',   { month: 'short', day: 'numeric', year: 'numeric' });
-  document.getElementById('calTitle').textContent = `${sFmt} \u2013 ${eFmt}`;
+  const isFirst = !calEarliestDate;
+  if (isFirst) resetCalRange();
 
-  const grid = document.getElementById('calGrid');
-  grid.innerHTML = '';
-  const cols = showWeekends ? 7 : 5;
-  grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  renderDowHeader();
 
-  (showWeekends ? DOW_ALL : DOW_WD).forEach(d => {
-    const hdr = document.createElement('div');
-    hdr.className = 'cal-dow';
-    hdr.textContent = d;
-    grid.appendChild(hdr);
-  });
+  const calScroll = document.getElementById('calScroll');
+  const prevTop = isFirst ? 0 : calScroll.scrollTop;
+  rebuildCalGrid(false);
 
-  const today    = new Date();
-  const todayStr = fmtDate(today.getFullYear(), today.getMonth() + 1, today.getDate());
-
-  // Collect dates first, then build the lane layout, then render cells
-  const target = showWeekends ? 42 : 30;
-  const cur    = new Date(startD);
-  const allDates = [];  // [[dayNum, dateStr], ...]
-  let shown    = 0;
-  while (shown < target) {
-    if (!showWeekends && isWeekend(cur.getDay())) { cur.setDate(cur.getDate() + 1); continue; }
-    allDates.push([cur.getDate(), fmtDate(cur.getFullYear(), cur.getMonth() + 1, cur.getDate())]);
-    shown++;
-    cur.setDate(cur.getDate() + 1);
+  if (isFirst) {
+    scrollToToday();
+  } else {
+    calScroll.scrollTop = prevTop;
   }
 
-  const layout = buildTaskLayout(allDates.map(([, d]) => d));
-  allDates.forEach(([dayNum, dateStr]) => {
-    grid.appendChild(makeCell(dayNum, dateStr, todayStr, layout.get(dateStr) || []));
-  });
+  updateCalTitle();
+  setupCalObserver();
+  if (!calScrollRaf) {
+    calScroll.addEventListener('scroll', () => {
+      if (calScrollRaf) return;
+      calScrollRaf = requestAnimationFrame(() => { calScrollRaf = null; updateCalTitle(); });
+    }, { passive: true });
+  }
 }
 
 function isWeekend(dow) { return dow === 0 || dow === 6; }
@@ -1571,6 +1684,7 @@ function handleContextAction(action, projectId) {
     const newProj = duplicateProject(projectId);
     if (newProj) {
       activeProjectId = newProj.id;
+      calEarliestDate = null;
       renderSidebar(); renderCalendar();
       if (exportOpen) renderExportPanel();
     }
@@ -2453,6 +2567,7 @@ function init() {
     if (name && name.trim()) {
       const p = addProject(name.trim(), null);
       activeProjectId = p.id;
+      calEarliestDate = null;
       renderSidebar();
       renderCalendar();
       // Open roster for new projects so team can be set up immediately
@@ -2464,27 +2579,19 @@ function init() {
   });
 
   // Calendar nav
-  document.getElementById('calPrev').addEventListener('click', () => navigateWeeks(-1));
-  document.getElementById('calNext').addEventListener('click', () => navigateWeeks(1));
   document.getElementById('calToday').addEventListener('click', () => {
-    viewStart = getWeekStart();
-    renderCalendar();
+    const todayCell = document.getElementById('calScroll')?.querySelector('.cal-day.today');
+    if (!todayCell) { calEarliestDate = null; renderCalendar(); } else { scrollToToday(); }
   });
 
-  // Weekend toggle — keep the same Monday/Sunday anchor, just show/hide weekend cols
+  // Weekend toggle — keep same Monday anchor, reset infinite range
   const wkBtn = document.getElementById('wkndToggle');
   wkBtn.addEventListener('click', () => {
-    // Find the Monday of the week containing viewStart
-    const d   = new Date(viewStart + 'T00:00:00');
-    const dow = d.getDay(); // 0=Sun … 6=Sat
-    const toMon = (dow + 6) % 7; // days since Monday
-    d.setDate(d.getDate() - toMon);
     showWeekends = !showWeekends;
-    // In weekday mode start on Monday; in weekend mode start on Sunday before that Monday
-    if (showWeekends) d.setDate(d.getDate() - 1);
-    viewStart = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+    viewStart = getWeekStart();
     wkBtn.textContent = showWeekends ? 'Hide Weekends' : 'Show Weekends';
     wkBtn.classList.toggle('on', !showWeekends);
+    calEarliestDate = null;
     renderCalendar();
   });
 
