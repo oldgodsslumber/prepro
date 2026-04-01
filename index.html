@@ -2248,14 +2248,9 @@ function getProducerCat(name) {
 
 function getPlanywayCat(task) {
   if (task.isReview) return null; // handled separately in buildPlanyway
+  if (task.roleCategory !== 'Internal Team') return null;
   const role = (task.role || '').toLowerCase();
-  if (role === 'stakeholder') return null;
   const name = (task.taskName || '').toLowerCase();
-  // For External/Vendor roles, still include if task name has pre/post keywords
-  if (['External','Vendors'].includes(task.roleCategory)) {
-    const cat = getProducerCat(name);
-    return cat !== 'Producing' ? cat : null; // only include if keyword matched
-  }
   if (role === 'editor')   return 'Editing';
   if (role === 'animator') return 'Animation';
   if (role === 'producer') return getProducerCat(name);
@@ -2288,29 +2283,21 @@ function buildPlanyway() {
     if (task.isReview) {
       const isShoot = SHOOT_LABELS.includes(task.reviewLabel);
       const loe  = task.loe || 'medium';
+      const internalAtts = (task.attendees || []).filter(a => a.category === 'Internal Team');
       if (isShoot) {
-        // One Trello entry per attendee so every crew member is accounted for
-        const attendees = task.attendees && task.attendees.length ? task.attendees : null;
         const line = LOE_EMOJI[loe] + ' Production';
-        if (attendees) {
-          attendees.forEach(att => {
-            items.push({
-              line,
-              date:    task.date,
-              endDate: task.endDate || null,
-              person:  att.person || att.role
-            });
+        if (internalAtts.length) {
+          internalAtts.forEach(att => {
+            items.push({ line, date: task.date, endDate: task.endDate || null, person: att.person || att.role });
           });
         } else {
           items.push({ line, date: task.date, endDate: task.endDate || null, person: topProducer || 'Producer' });
         }
       } else {
-        // Regular review: one entry per attendee if any, else fall back to top producer
         const cat  = getProducerCat(task.taskName);
         const line = LOE_EMOJI[loe] + ' ' + cat;
-        const attendees = task.attendees && task.attendees.length ? task.attendees : null;
-        if (attendees) {
-          attendees.forEach(att => {
+        if (internalAtts.length) {
+          internalAtts.forEach(att => {
             items.push({ line, date: task.date, endDate: task.endDate || null, person: att.person || att.role });
           });
         } else {
