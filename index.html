@@ -272,6 +272,14 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .ctx-item:hover { background: var(--card); }
 .ctx-item.danger       { color: var(--danger); }
 .ctx-item.danger:hover { background: rgba(224,85,85,.1); }
+.type-switcher { position: fixed; background: var(--panel); border: 1px solid var(--border); border-radius: 7px; padding: 4px; z-index: 300; min-width: 160px; box-shadow: 0 8px 24px rgba(0,0,0,.55); }
+.type-switcher.hidden { display: none; }
+.type-sw-item  { padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; color: var(--text); display: flex; align-items: center; gap: 7px; }
+.type-sw-item:hover { background: var(--card); }
+.type-sw-item.current { opacity: .45; cursor: default; }
+.type-sw-item.current:hover { background: transparent; }
+.type-sw-dot   { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.type-sw-sep   { height: 1px; background: var(--border); margin: 3px 0; }
 
 /* ── SCROLLBAR ── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -407,6 +415,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 
 <!-- CONTEXT MENU -->
 <div class="ctx-menu hidden" id="ctxMenu"></div>
+<div class="type-switcher hidden" id="typeSwitcher"></div>
 
 <!-- HELP BUTTON -->
 <a href="guide.html" target="_blank" class="help-btn" title="Open guide">?</a>
@@ -948,7 +957,7 @@ function makeCell(dayNum, dateStr, todayStr, laneArr) {
     } else if (pl.type === 'duedate') {
       const proj = getProject(activeProjectId);
       if (!proj) return;
-      proj.tasks.push({ id: genId(), date: dateStr, isDueDate: true, color: '#ffffff', role: '', roleCategory: '', attendees: [], taskName: pl.defaultLabel || null });
+      proj.tasks.push({ id: genId(), date: dateStr, isDueDate: true, milestoneType: pl.defaultLabel === 'Milestone' ? 'milestone' : 'due-date', color: '#ffffff', role: '', roleCategory: '', attendees: [], taskName: pl.defaultLabel || null });
       saveState(); renderCalendar(); if (exportOpen) renderExportPanel();
     } else if (pl.type === 'review') {
       openPanel('create-review', dateStr, null, pl.label || 'Review', null, REVIEW_COLOR);
@@ -1023,7 +1032,19 @@ function buildDueDateMarker(task, dateStr) {
   // Header
   const hd = document.createElement('div');
   hd.className = 'duedate-hd';
-  hd.textContent = '🏁 ' + (task.taskName || 'Project Due Date');
+  const isMilestone = task.milestoneType === 'milestone';
+  const badge = document.createElement('span');
+  badge.className = 'review-badge';
+  badge.style.cssText = 'background:#444;cursor:pointer;';
+  badge.textContent = isMilestone ? '🎯 Milestone' : '🏁 Key Date';
+  badge.title = 'Click to change type';
+  badge.addEventListener('click', e => { e.stopPropagation(); openTypeSwitcher(e, task.id, isMilestone ? 'Milestone' : 'Project Due Date'); });
+  const titleSpan = document.createElement('span');
+  titleSpan.className = 'review-title';
+  titleSpan.style.color = '#111';
+  titleSpan.textContent = task.taskName || (isMilestone ? 'Milestone' : 'Project Due Date');
+  hd.appendChild(badge);
+  hd.appendChild(titleSpan);
   el.appendChild(hd);
 
   // Attendees list
@@ -1114,6 +1135,9 @@ function buildReviewBlock(task, dateStr) {
   const badge = document.createElement('span');
   badge.className = 'review-badge';
   badge.textContent = task.reviewLabel || 'Review';
+  badge.title = 'Click to change type';
+  badge.style.cursor = 'pointer';
+  badge.addEventListener('click', e => { e.stopPropagation(); openTypeSwitcher(e, task.id, task.reviewLabel || 'Review'); });
   const title = document.createElement('span');
   title.className = 'review-title';
   title.textContent = task.taskName || 'Untitled Review';
@@ -1676,6 +1700,73 @@ function openContextMenu(e, projectId) {
 }
 
 function closeContextMenu() { document.getElementById('ctxMenu').classList.add('hidden'); }
+
+// ── TYPE SWITCHER ──
+const TYPE_SWITCHER_DEFS = [
+  { label: 'Review',            dot: '#c0394f' },
+  { label: 'Studio Shoot',      dot: '#c0394f' },
+  { label: 'On-Location Shoot', dot: '#c0394f' },
+  { sep: true },
+  { label: 'Project Due Date',  dot: '#555' },
+  { label: 'Milestone',         dot: '#555' },
+];
+
+function openTypeSwitcher(e, taskId, currentType) {
+  e.stopPropagation();
+  const sw = document.getElementById('typeSwitcher');
+  sw.innerHTML = '';
+  TYPE_SWITCHER_DEFS.forEach(def => {
+    if (def.sep) { const s = document.createElement('div'); s.className = 'type-sw-sep'; sw.appendChild(s); return; }
+    const item = document.createElement('div');
+    item.className = 'type-sw-item' + (def.label === currentType ? ' current' : '');
+    const dot = document.createElement('span');
+    dot.className = 'type-sw-dot';
+    dot.style.background = def.dot;
+    item.appendChild(dot);
+    item.appendChild(document.createTextNode(def.label));
+    if (def.label !== currentType) {
+      item.addEventListener('click', ev => { ev.stopPropagation(); closeTypeSwitcher(); convertTask(taskId, def.label); });
+    }
+    sw.appendChild(item);
+  });
+  sw.style.left = Math.min(e.clientX, window.innerWidth  - 180) + 'px';
+  sw.style.top  = Math.min(e.clientY + 6, window.innerHeight - 200) + 'px';
+  sw.classList.remove('hidden');
+}
+
+function closeTypeSwitcher() { document.getElementById('typeSwitcher').classList.add('hidden'); }
+
+function convertTask(taskId, newType) {
+  const proj = getProject(activeProjectId);
+  if (!proj) return;
+  const task = proj.tasks.find(t => t.id === taskId);
+  if (!task) return;
+  const REVIEW_TYPES = ['Review', 'Studio Shoot', 'On-Location Shoot'];
+  if (REVIEW_TYPES.includes(newType)) {
+    task.isReview     = true;
+    task.isDueDate    = false;
+    task.milestoneType = undefined;
+    task.reviewLabel  = newType;
+    task.color        = REVIEW_COLOR;
+    task.role         = task.role || '';
+    task.roleCategory = task.roleCategory || '';
+    if (!task.attendees) task.attendees = [];
+    if (!task.taskName) task.taskName = newType;
+  } else {
+    task.isDueDate    = true;
+    task.isReview     = false;
+    task.milestoneType = newType === 'Milestone' ? 'milestone' : 'due-date';
+    task.reviewLabel  = undefined;
+    task.color        = '#ffffff';
+    task.role         = '';
+    task.roleCategory = '';
+    delete task.endDate; // milestones are point-in-time
+    if (!task.attendees) task.attendees = [];
+  }
+  saveState();
+  renderCalendar();
+  if (exportOpen) renderExportPanel();
+}
 
 function handleContextAction(action, projectId) {
   if (action === 'rename') {
@@ -2622,9 +2713,10 @@ function init() {
     }
   });
 
-  // Dismiss context menu
+  // Dismiss context menu + type switcher
   document.addEventListener('click', e => {
     if (!document.getElementById('ctxMenu').contains(e.target)) closeContextMenu();
+    if (!document.getElementById('typeSwitcher').contains(e.target)) closeTypeSwitcher();
   });
 
   // Export panel
