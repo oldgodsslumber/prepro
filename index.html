@@ -1999,7 +1999,15 @@ function renderExportPanel() {
 }
 
 // ── TRELLO EXPORT ──
-const PW_PRE  = ['script','scripting','storyboard','storyboarding','schedules','schedule','copywriting','copywrite','meeting','brief','concept','planning','prep','pre-production'];
+const PW_PRE  = [
+  'script','scripting','scripts','storyboard','storyboarding','storyboards',
+  'schedules','schedule','copywriting','copywrite','copyediting','copyedit',
+  'meeting','brief','concept','concepting','conceptual','planning','prep',
+  'pre-production','writing','write','design','designing','discovery',
+  'brainstorm','brainstorming','location scouting','location scout','scouting',
+  'scout','shotlist','shot list','shot-list','treatment','outline','research',
+  'interview','kickoff','kick-off','kick off','casting','cast'
+];
 const PW_POST = ['animation','editing','drafting','v1','v2','vf','revision','revisions','revise','post','post-production','color','colour','grade','delivery','deliverable','feedback','approval','sign-off','sign off'];
 
 function getProducerCat(name) {
@@ -2041,18 +2049,39 @@ function buildPlanyway() {
   const topProducer = getMostUsedProducer(proj);
   const items = [];
 
+  const SHOOT_LABELS = ['Studio Shoot', 'On-Location Shoot'];
+
   sorted.forEach(task => {
     if (task.isReview) {
-      // Single entry per review, assigned to most-used producer, categorised by task name
-      const cat  = getProducerCat(task.taskName);
-      const loe  = task.loe || 'medium'; // default yellow if not set
-      const line = LOE_EMOJI[loe] + ' ' + cat;
-      items.push({
-        line,
-        date:    task.date,
-        endDate: task.endDate || null,
-        person:  topProducer || 'Producer'
-      });
+      const isShoot = SHOOT_LABELS.includes(task.reviewLabel);
+      const loe  = task.loe || 'medium';
+      if (isShoot) {
+        // One Trello entry per attendee so every crew member is accounted for
+        const attendees = task.attendees && task.attendees.length ? task.attendees : null;
+        const line = LOE_EMOJI[loe] + ' Production';
+        if (attendees) {
+          attendees.forEach(att => {
+            items.push({
+              line,
+              date:    task.date,
+              endDate: task.endDate || null,
+              person:  att.person || att.role
+            });
+          });
+        } else {
+          items.push({ line, date: task.date, endDate: task.endDate || null, person: topProducer || 'Producer' });
+        }
+      } else {
+        // Regular review: single entry assigned to most-used producer
+        const cat  = getProducerCat(task.taskName);
+        const line = LOE_EMOJI[loe] + ' ' + cat;
+        items.push({
+          line,
+          date:    task.date,
+          endDate: task.endDate || null,
+          person:  topProducer || 'Producer'
+        });
+      }
       return;
     }
     const cat = getPlanywayCat(task);
