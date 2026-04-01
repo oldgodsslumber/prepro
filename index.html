@@ -693,7 +693,14 @@ function renderPalette() {
   sep2.style.cssText = 'width:1px;height:20px;background:var(--border);margin:0 4px;align-self:center';
   pal.appendChild(sep2);
 
-  // Milestone chips (Project Due Date + generic Milestone)
+  // Key Dates group
+  const keyGrp = document.createElement('div');
+  keyGrp.className = 'pal-cat';
+  const keyLbl = document.createElement('span');
+  keyLbl.className = 'pal-label';
+  keyLbl.textContent = 'Key Dates';
+  keyGrp.appendChild(keyLbl);
+
   const mkDueChip = (label, emoji, defaultLabel) => {
     const chip = document.createElement('div');
     chip.className = 'role-chip chip-duedate';
@@ -707,8 +714,9 @@ function renderPalette() {
     chip.addEventListener('dragend', () => { dragPayload = null; });
     return chip;
   };
-  pal.appendChild(mkDueChip('Project Due Date', '🏁', 'Project Due Date'));
-  pal.appendChild(mkDueChip('Milestone', '🎯', 'Milestone'));
+  keyGrp.appendChild(mkDueChip('Project Due Date', '🏁', 'Project Due Date'));
+  keyGrp.appendChild(mkDueChip('Milestone', '🎯', 'Milestone'));
+  pal.appendChild(keyGrp);
 }
 
 // ── CALENDAR ──
@@ -2366,7 +2374,7 @@ function exportPNG() {
       ctx.fillStyle = '#606080';
       ctx.font = `bold ${5.5*SC}px system-ui,sans-serif`;
       ctx.textAlign = 'left';
-      ctx.fillText('MILESTONES', cx + 4*SC, ty + 6*SC);
+      ctx.fillText('KEY DATES', cx + 4*SC, ty + 6*SC);
       ty += 9*SC;
 
       milestones.forEach(m => {
