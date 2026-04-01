@@ -73,15 +73,13 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .role-chip { padding: 4px 11px; border-radius: 12px; font-size: 11px; font-weight: 600; color: #fff; cursor: grab; user-select: none; white-space: nowrap; transition: opacity .1s, transform .1s; }
 .role-chip:hover { opacity: .9; transform: translateY(-1px); }
 .role-chip:active { cursor: grabbing; transform: scale(.97); }
-.chip-duedate { background: #ffffff !important; color: #111 !important; border: 1.5px solid #ccc; }
-.duedate-marker { background: #fff; color: #111; border-radius: 4px; padding: 4px 8px; font-size: 11px; font-weight: 700; cursor: grab; user-select: none; flex-shrink: 0; border-left: 3px solid #111; transition: opacity .12s; display: flex; flex-direction: column; gap: 2px; }
+.chip-duedate { background: #3a3a52 !important; color: var(--text) !important; border: 1.5px solid #606080; }
+.duedate-marker { background: #3a3a52; color: var(--text); border-radius: 4px; padding: 4px 8px; font-size: 11px; font-weight: 700; cursor: grab; user-select: none; flex-shrink: 0; border-left: 3px solid #8080a0; transition: opacity .12s; display: flex; flex-direction: column; gap: 2px; }
 .duedate-marker:hover { opacity: .85; }
 .duedate-hd { font-weight: 700; white-space: nowrap; }
-.duedate-marker.drag-accepting { outline: 2px solid rgba(0,0,0,.3); outline-offset: -1px; }
+.duedate-marker.drag-accepting { outline: 2px solid rgba(128,128,160,.5); outline-offset: -1px; }
 .duedate-marker.drag-accepting .review-drop-hint { display: block; }
-.duedate-marker .review-att { color: #333; }
-.duedate-marker .review-att-rm { color: #999; }
-.duedate-marker .review-drop-hint { color: rgba(0,0,0,.45); }
+.duedate-marker .review-drop-hint { color: rgba(200,200,220,.6); }
 
 /* ── CALENDAR WRAPPER ── */
 .cal-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 12px 14px 0; min-height: 0; }
@@ -960,7 +958,7 @@ function makeCell(dayNum, dateStr, todayStr, laneArr) {
     } else if (pl.type === 'duedate') {
       const proj = getProject(activeProjectId);
       if (!proj) return;
-      proj.tasks.push({ id: genId(), date: dateStr, isDueDate: true, milestoneType: pl.defaultLabel === 'Milestone' ? 'milestone' : 'due-date', color: '#ffffff', role: '', roleCategory: '', attendees: [], taskName: pl.defaultLabel || null });
+      proj.tasks.push({ id: genId(), date: dateStr, isDueDate: true, milestoneType: pl.defaultLabel === 'Milestone' ? 'milestone' : 'due-date', color: '#3a3a52', role: '', roleCategory: '', attendees: [], taskName: pl.defaultLabel || null });
       saveState(); renderCalendar(); if (exportOpen) renderExportPanel();
     } else if (pl.type === 'review') {
       openPanel('create-review', dateStr, null, pl.label || 'Review', null, REVIEW_COLOR);
@@ -1761,7 +1759,7 @@ function convertTask(taskId, newType) {
     task.isReview     = false;
     task.milestoneType = newType === 'Milestone' ? 'milestone' : 'due-date';
     task.reviewLabel  = undefined;
-    task.color        = '#ffffff';
+    task.color        = '#3a3a52';
     task.role         = '';
     task.roleCategory = '';
     delete task.endDate; // milestones are point-in-time

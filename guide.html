@@ -157,6 +157,7 @@
   .chip.purple { background: #7c5cbf; }
   .chip.green  { background: #4cba6a; }
   .chip.red    { background: #c0394f; }
+  .chip.gray   { background: #3a3a52; border: 1px solid #606080; }
 
   /* ── DIAGRAM BOXES ── */
   .diagram {
@@ -395,8 +396,10 @@
       <div class="chip red">Review</div>
       <div class="chip red">Studio Shoot</div>
       <div class="chip red">On-Location Shoot</div>
+      <div class="chip gray">🏁 Project Due Date</div>
+      <div class="chip gray">🎯 Milestone</div>
     </div>
-    <p style="margin-top:18px;">Blue = Internal · Orange = External · Purple = Vendor · Red = Events</p>
+    <p style="margin-top:18px;">Blue = Internal · Orange = External · Purple = Vendor · Red = Events · Gray = Key Dates</p>
   </div>
 
   <!-- 6. CREATING TASKS -->
@@ -431,21 +434,28 @@
   <!-- 7. REVIEWS & EVENTS -->
   <div class="slide">
     <div class="slide-label">Step 3 continued</div>
-    <h2>Reviews, Shoots &amp; Events</h2>
-    <p>Red chips create <strong>calendar event blocks</strong> — these work differently from regular tasks.</p>
+    <h2>Reviews, Shoots &amp; Key Dates</h2>
+    <p>Red chips create event blocks. Gray chips mark <strong>Key Dates</strong>. Both work differently from regular tasks.</p>
     <div class="steps">
       <div class="step">
         <div class="step-num">1</div>
         <div class="step-body">
-          <div class="step-title">Drag a Review, Studio Shoot, or On-Location Shoot</div>
-          <div class="step-desc">Give the event a name, then resize it to span multiple days if needed.</div>
+          <div class="step-title">Drag a Review, Shoot, or Key Date chip</div>
+          <div class="step-desc">Give it a name, then resize to span multiple days. Key Dates (🏁 Project Due Date, 🎯 Milestone) appear as gray markers.</div>
         </div>
       </div>
       <div class="step">
         <div class="step-num">2</div>
         <div class="step-body">
           <div class="step-title">Add attendees by dropping role chips onto the event</div>
-          <div class="step-desc">Drop any role chip onto an existing red block to add that person as an attendee. Their name badge appears on the block.</div>
+          <div class="step-desc">Drop any role chip onto a red block or gray Key Date to add an attendee. Their name badge appears on the block.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Switch event type by clicking the badge</div>
+          <div class="step-desc">Click the colored label badge on any event (e.g. "Review") to convert it to a different type — Review, Studio Shoot, On-Location Shoot, Project Due Date, or Milestone.</div>
         </div>
       </div>
     </div>
@@ -482,17 +492,17 @@
     <h2>Navigating the Calendar</h2>
     <div class="steps">
       <div class="step">
-        <div class="step-num">←</div>
+        <div class="step-num">↕</div>
         <div class="step-body">
-          <div class="step-title">Prev / Next arrows</div>
-          <div class="step-desc">Step backward or forward two weeks at a time.</div>
+          <div class="step-title">Infinite scroll</div>
+          <div class="step-desc">Scroll up or down to move through time — the calendar extends automatically in both directions with no paging.</div>
         </div>
       </div>
       <div class="step">
         <div class="step-num">📅</div>
         <div class="step-body">
           <div class="step-title">Today button</div>
-          <div class="step-desc">Jump back to the current week instantly.</div>
+          <div class="step-desc">Jump back to the current week instantly. The date range shown in the sticky nav bar always reflects what's visible on screen.</div>
         </div>
       </div>
       <div class="step">
@@ -514,7 +524,7 @@
       <div class="mock-tab on">Text</div>
       <div class="mock-tab">Table / Excel</div>
       <div class="mock-tab">PNG</div>
-      <div class="mock-tab">Planyway</div>
+      <div class="mock-tab">Trello Export</div>
     </div>
     <div class="mock-tab-body">
       <strong style="color:var(--text);">Text</strong> — Formatted schedule ready to paste into email, Slack, or Word.<br>
@@ -551,14 +561,36 @@
       <div class="step">
         <div class="step-num">✅</div>
         <div class="step-body">
-          <div class="step-title">Planyway</div>
-          <div class="step-desc">Copies a checklist of categories (with effort emoji) to paste into Planyway or Trello. Reference columns show dates and assignees — they are not copied.</div>
+          <div class="step-title">Trello Export</div>
+          <div class="step-desc">Copies a checklist of producer categories (with effort emoji) to paste into Trello or Planyway. Reviews, shoots, and vendor tasks with matching keywords are automatically routed to Pre-Production, Producing, or Post-Producing.</div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- 12. DONE -->
+  <!-- 12. PROJECT MANAGEMENT -->
+  <div class="slide">
+    <div class="slide-label">Tips</div>
+    <h2>Managing Projects</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">⋯</div>
+        <div class="step-body">
+          <div class="step-title">Right-click any project for options</div>
+          <div class="step-desc">Rename, Add Subproject, Duplicate, or Delete. Deleting a project removes all its subprojects too.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">⎇</div>
+        <div class="step-body">
+          <div class="step-title">Alt + drag to duplicate</div>
+          <div class="step-desc">Hold Alt and drag a project in the sidebar to create a full copy — including all tasks, subprojects, and attendees.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 13. DONE -->
   <div class="slide">
     <div class="slide-label">You're ready</div>
     <h1>That's it.</h1>
