@@ -446,11 +446,13 @@ let dragPayload     = null;
 let panelContext    = null;
 let exportTabActive  = localStorage.getItem('prepro_export_tab') || 'text';
 let exportOpen       = true;
-let exportOptBold    = true;
-let exportOptRoles   = false;
-let exportOptAlign   = true;
-let exportOptDueDate = true;
-let exportPNGRoles   = true;
+let exportOptBold       = true;
+let exportOptRoles      = false;
+let exportOptAlign      = true;
+let exportOptDueDate    = true;
+let exportOptAttendees  = true;
+let exportPNGRoles      = true;
+let exportPNGAttendees  = true;
 let showWeekends    = false;
 let resizeState     = null;
 let isResizing      = false;
@@ -1889,7 +1891,7 @@ function buildHTMLExport() {
       const name = t.taskName || label;
       hLines.push(`${fmtHtml(raw)}${escHtml(sep)}${escHtml(name)} [${escHtml(label.toUpperCase())}]`);
       pLines.push(`${fmtPlain(raw)}${sep}${name} [${label.toUpperCase()}]`);
-      if (t.attendees && t.attendees.length) {
+      if (exportOptAttendees && t.attendees && t.attendees.length) {
         const indent = ' '.repeat(exportOptAlign ? maxLen + sep.length : 4);
         t.attendees.forEach(a => {
           const role = exportOptRoles ? ` (${a.role})` : '';
@@ -2076,10 +2078,11 @@ function renderExportPanel() {
       el.appendChild(document.createTextNode(lbl));
       opts.appendChild(el);
     };
-    mkOpt('Bold dates',    exportOptBold,    v => { exportOptBold    = v; });
-    mkOpt('Include roles', exportOptRoles,   v => { exportOptRoles   = v; });
-    mkOpt('Align tasks',   exportOptAlign,   v => { exportOptAlign   = v; });
-    mkOpt('Show due date', exportOptDueDate, v => { exportOptDueDate = v; });
+    mkOpt('Bold dates',       exportOptBold,       v => { exportOptBold       = v; });
+    mkOpt('Include roles',    exportOptRoles,      v => { exportOptRoles      = v; });
+    mkOpt('Align tasks',      exportOptAlign,      v => { exportOptAlign      = v; });
+    mkOpt('Show due date',    exportOptDueDate,    v => { exportOptDueDate    = v; });
+    mkOpt('Show attendees',   exportOptAttendees,  v => { exportOptAttendees  = v; });
 
     const actions = document.createElement('div');
     actions.className = 'export-actions';
@@ -2102,13 +2105,17 @@ function renderExportPanel() {
   } else if (exportTabActive === 'png') {
     const opts = document.createElement('div');
     opts.className = 'export-opts';
-    const lbl = document.createElement('label');
-    lbl.className = 'export-opt';
-    const cb = document.createElement('input');
-    cb.type = 'checkbox'; cb.checked = exportPNGRoles;
-    cb.addEventListener('change', () => { exportPNGRoles = cb.checked; });
-    lbl.appendChild(cb); lbl.appendChild(document.createTextNode('Include roles'));
-    opts.appendChild(lbl);
+    const mkPNGOpt = (lbl, checked, onChange) => {
+      const el = document.createElement('label');
+      el.className = 'export-opt';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.checked = checked;
+      cb.addEventListener('change', () => onChange(cb.checked));
+      el.appendChild(cb); el.appendChild(document.createTextNode(lbl));
+      opts.appendChild(el);
+    };
+    mkPNGOpt('Include roles',    exportPNGRoles,     v => { exportPNGRoles     = v; });
+    mkPNGOpt('Show attendees',   exportPNGAttendees, v => { exportPNGAttendees = v; });
 
     const actions = document.createElement('div');
     actions.className = 'export-actions';
@@ -2527,7 +2534,7 @@ function exportPNG() {
       const isEnd    = endDate === dateStr;
       const pad      = 4 * SC;
       // Reviews grow taller to fit attendee rows
-      const attCount = task.isReview && task.attendees ? task.attendees.length : 0;
+      const attCount = exportPNGAttendees && task.isReview && task.attendees ? task.attendees.length : 0;
       const chipH    = (14 + attCount * 10) * SC;
 
       if (ty + chipH > cy + CH - 4*SC) return; // no room
@@ -2567,7 +2574,7 @@ function exportPNG() {
         ctx.fillText(title, chipX + 5*SC, ty + 10*SC);
 
         // Attendee bullet rows (reviews / shoots only)
-        if (task.isReview && task.attendees) {
+        if (exportPNGAttendees && task.isReview && task.attendees) {
           task.attendees.forEach((att, i) => {
             const ay = ty + 18*SC + i * 10*SC;
             // Coloured dot
@@ -2598,7 +2605,7 @@ function exportPNG() {
       ty += 9*SC;
 
       milestones.forEach(m => {
-        const mAttCount = m.attendees ? m.attendees.length : 0;
+        const mAttCount = exportPNGAttendees && m.attendees ? m.attendees.length : 0;
         const mH = (13 + mAttCount * 10) * SC;
         if (ty + mH > cy + CH - 4*SC) return;
         // White outline chip
@@ -2616,16 +2623,17 @@ function exportPNG() {
         ctx.fillStyle = '#fff';
         ctx.font = `${7*SC}px system-ui,sans-serif`;
         ctx.textAlign = 'left';
-        ctx.fillText('🏁 ' + (m.taskName || 'Project Due Date'), cx + 7*SC, ty + 9*SC);
+        const mIcon = m.milestoneType === 'milestone' ? '🎯' : '🏁';
+        ctx.fillText(mIcon + ' ' + (m.taskName || (m.milestoneType === 'milestone' ? 'Milestone' : 'Project Due Date')), cx + 7*SC, ty + 9*SC);
         // Attendee bullet rows
-        if (m.attendees) {
+        if (exportPNGAttendees && m.attendees) {
           m.attendees.forEach((att, i) => {
             const ay = ty + 17*SC + i * 10*SC;
             ctx.fillStyle = att.color || '#888';
             ctx.beginPath();
             ctx.arc(cx + 10*SC, ay, 2.5*SC, 0, Math.PI * 2);
             ctx.fill();
-            ctx.fillStyle = 'rgba(0,0,0,0.75)';
+            ctx.fillStyle = 'rgba(255,255,255,0.85)';
             ctx.font = `${7*SC}px system-ui,sans-serif`;
             ctx.fillText((att.person || att.role), cx + 15*SC, ay + 4*SC);
           });
