@@ -693,18 +693,22 @@ function renderPalette() {
   sep2.style.cssText = 'width:1px;height:20px;background:var(--border);margin:0 4px;align-self:center';
   pal.appendChild(sep2);
 
-  // Project Due Date chip
-  const dueChip = document.createElement('div');
-  dueChip.className = 'role-chip chip-duedate';
-  dueChip.draggable = true;
-  dueChip.textContent = '🏁 Project Due Date';
-  dueChip.addEventListener('dragstart', e => {
-    dragPayload = { type: 'duedate' };
-    e.dataTransfer.setData('text', JSON.stringify(dragPayload));
-    e.dataTransfer.effectAllowed = 'copy';
-  });
-  dueChip.addEventListener('dragend', () => { dragPayload = null; });
-  pal.appendChild(dueChip);
+  // Milestone chips (Project Due Date + generic Milestone)
+  const mkDueChip = (label, emoji, defaultLabel) => {
+    const chip = document.createElement('div');
+    chip.className = 'role-chip chip-duedate';
+    chip.draggable = true;
+    chip.textContent = emoji + ' ' + label;
+    chip.addEventListener('dragstart', e => {
+      dragPayload = { type: 'duedate', defaultLabel };
+      e.dataTransfer.setData('text', JSON.stringify(dragPayload));
+      e.dataTransfer.effectAllowed = 'copy';
+    });
+    chip.addEventListener('dragend', () => { dragPayload = null; });
+    return chip;
+  };
+  pal.appendChild(mkDueChip('Project Due Date', '🏁', 'Project Due Date'));
+  pal.appendChild(mkDueChip('Milestone', '🎯', 'Milestone'));
 }
 
 // ── CALENDAR ──
@@ -823,7 +827,7 @@ function makeCell(dayNum, dateStr, todayStr, laneArr) {
     } else if (pl.type === 'duedate') {
       const proj = getProject(activeProjectId);
       if (!proj) return;
-      proj.tasks.push({ id: genId(), date: dateStr, isDueDate: true, color: '#ffffff', role: '', roleCategory: '', attendees: [] });
+      proj.tasks.push({ id: genId(), date: dateStr, isDueDate: true, color: '#ffffff', role: '', roleCategory: '', attendees: [], taskName: pl.defaultLabel || null });
       saveState(); renderCalendar(); if (exportOpen) renderExportPanel();
     } else if (pl.type === 'review') {
       openPanel('create-review', dateStr, null, pl.label || 'Review', null, REVIEW_COLOR);
