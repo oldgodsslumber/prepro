@@ -2223,9 +2223,18 @@ const PW_PRE  = [
   'pre-production','writing','write','design','designing','discovery',
   'brainstorm','brainstorming','location scouting','location scout','scouting',
   'scout','shotlist','shot list','shot-list','treatment','outline','research',
-  'interview','kickoff','kick-off','kick off','casting','cast'
+  'interview','kickoff','kick-off','kick off','casting','cast',
+  'voice over','voice-over','voiceover','voice talent','voice artist','voice actor',
+  'vo session','vo direction','vendor billing','vendor prep','vendor payment',
+  'procurement','vendor onboard','vendor brief'
 ];
-const PW_POST = ['animation','editing','drafting','v1','v2','vf','revision','revisions','revise','post','post-production','color','colour','grade','delivery','deliverable','feedback','approval','sign-off','sign off'];
+const PW_POST = [
+  'animation','edit','editing','motion','vfx','visual effects',
+  'drafting','v1','v2','vf','revision','revisions','revise',
+  'post','post-production','color','colour','grade','color correct','colour correct',
+  'mix','audio mix','sound mix','sound design',
+  'delivery','deliverable','feedback','approval','sign-off','sign off'
+];
 
 function getProducerCat(name) {
   const n = (name || '').toLowerCase();
