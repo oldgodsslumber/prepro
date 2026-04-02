@@ -373,6 +373,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
         <div class="cal-nav">
           <div class="cal-nav-title" id="calTitle"></div>
           <button class="btn-toggle" id="calToday">Today</button>
+          <button class="btn-toggle on" id="ghostToggle">Team Conflicts</button>
           <button class="btn-toggle on" id="wkndToggle">Show Weekends</button>
           <span class="htip">?<span class="htip-popup">Scroll up/down to move through time. Today snaps back to the current week. Toggle weekends to show or hide Sat/Sun columns. Drag tasks to move them; hold Alt while dragging to duplicate.</span></span>
         </div>
@@ -490,6 +491,7 @@ let exportOptAttendees  = true;
 let exportPNGRoles      = true;
 let exportPNGAttendees  = true;
 let showWeekends    = false;
+let showGhosts      = true;
 let resizeState     = null;
 let isResizing      = false;
 
@@ -1021,8 +1023,8 @@ function rebuildCalGrid(adjustScrollTop) {
     cur.setDate(cur.getDate() + 1);
   }
 
-  const layout    = buildTaskLayout(allDates);
-  const ghostMap  = buildGhostMap();
+  const layout   = buildTaskLayout(allDates);
+  const ghostMap = showGhosts ? buildGhostMap() : new Map();
   allDates.forEach(dateStr => {
     const d = new Date(dateStr + 'T00:00:00');
     grid.appendChild(makeCell(d.getDate(), dateStr, todayStr, layout.get(dateStr) || [], ghostMap.get(dateStr) || []));
@@ -3116,6 +3118,15 @@ function init() {
   document.getElementById('calToday').addEventListener('click', () => {
     const todayCell = document.getElementById('calScroll')?.querySelector('.cal-day.today');
     if (!todayCell) { calEarliestDate = null; renderCalendar(); } else { scrollToToday(); }
+  });
+
+  // Ghost chip toggle
+  const ghostBtn = document.getElementById('ghostToggle');
+  ghostBtn.addEventListener('click', () => {
+    showGhosts = !showGhosts;
+    ghostBtn.classList.toggle('on', showGhosts);
+    calEarliestDate = null;
+    renderCalendar();
   });
 
   // Weekend toggle — keep same Monday anchor, reset infinite range
