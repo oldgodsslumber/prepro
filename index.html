@@ -89,11 +89,11 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .chip-duedate { background: #3a3a52 !important; color: var(--text) !important; border: 1.5px solid #606080; }
 .chip-person  { border: 1.5px dashed rgba(255,255,255,.45); opacity: .92; position: relative; }
 .chip-person::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.7); margin-right: 5px; vertical-align: middle; }
-.duedate-marker { background: #3a3a52; color: var(--text); border-radius: 4px; padding: 4px 8px; font-size: 11px; font-weight: 700; cursor: grab; user-select: none; flex-shrink: 0; border-left: 3px solid #8080a0; transition: opacity .12s; display: flex; flex-direction: column; gap: 2px; position: relative; }
+.duedate-marker { background: #3a3a52; color: var(--text); border-radius: 4px; padding: 4px 17px; font-size: 11px; font-weight: 700; cursor: grab; user-select: none; flex-shrink: 0; width: 100%; border-left: 3px solid #8080a0; transition: opacity .12s; display: flex; flex-direction: column; gap: 2px; position: relative; box-sizing: border-box; }
 .duedate-marker:hover { opacity: .85; }
-.duedate-marker.duedate-multi-start { border-radius: 4px 0 0 4px; border-right: none; margin-right: -7px; z-index: 1; }
+.duedate-marker.duedate-multi-start { border-radius: 4px 0 0 4px; border-right: none; margin-right: -7px; z-index: 1; width: calc(100% + 7px); }
 .duedate-marker .chip-handle-l,
-.duedate-marker .chip-handle-r { top: 10px; transform: none; }
+.duedate-marker .chip-handle-r { top: 50%; transform: translateY(-50%); }
 .duedate-marker:hover .chip-handle-l,
 .duedate-marker:hover .chip-handle-r { color: rgba(255,255,255,.9); }
 .duedate-hd { font-weight: 700; white-space: nowrap; }
@@ -101,9 +101,9 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .duedate-marker.drag-accepting .review-drop-hint { display: block; }
 .duedate-marker .review-drop-hint { color: rgba(200,200,220,.6); }
 /* slim continuation bars for multi-day key dates */
-.duedate-bar { height: 20px; flex-shrink: 0; position: relative; cursor: pointer; background: rgba(128,128,160,.45); font-size: 0; }
-.duedate-bar-mid { border-radius: 0; margin-left: -5px; margin-right: -6px; }
-.duedate-bar-end { border-radius: 0 4px 4px 0; margin-left: -5px; padding-right: 17px; }
+.duedate-bar { height: 20px; flex-shrink: 0; width: 100%; position: relative; cursor: pointer; background: rgba(128,128,160,.45); font-size: 0; box-sizing: border-box; }
+.duedate-bar-mid { border-radius: 0; margin-left: -5px; margin-right: -6px; width: calc(100% + 11px); }
+.duedate-bar-end { border-radius: 0 4px 4px 0; margin-left: -5px; padding-right: 17px; width: calc(100% + 5px); }
 
 /* ── CALENDAR WRAPPER ── */
 .cal-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 12px 14px 0; min-height: 0; }
