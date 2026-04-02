@@ -101,20 +101,52 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .ops-filter-action-btn { font-size: 10px; font-weight: 700; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; cursor: pointer; transition: all .15s; }
 .ops-filter-action-btn:hover { color: var(--text); border-color: var(--dim); }
 
-/* ── PERSON VIEW ── */
-.person-view { flex: 1; overflow-y: auto; min-height: 0; padding: 8px 12px; display: none; flex-direction: column; gap: 6px; }
+/* ── TIMELINE (PERSON) VIEW ── */
+.person-view { flex: 1; min-height: 0; display: none; flex-direction: column; overflow: hidden; }
 .person-view.visible { display: flex; }
-.person-row { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
-.person-row-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.person-row-name { font-size: 12px; font-weight: 700; color: var(--text); }
-.person-row-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.person-row-tasks { display: flex; flex-wrap: wrap; gap: 4px; }
-.person-task-chip { display: inline-flex; align-items: center; gap: 5px; border-radius: 4px; padding: 3px 8px; font-size: 10px; font-weight: 500; color: #fff; }
-.person-task-chip-date { font-size: 9px; opacity: .75; flex-shrink: 0; }
-.person-task-chip-cat { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; opacity: .85; flex-shrink: 0; }
-.person-task-chip-task { opacity: .9; }
-.person-task-chip-loe { font-size: 9px; }
-.person-row.dimmed { opacity: .25; }
+
+.tl-scroll { flex: 1; overflow: auto; position: relative; min-height: 0; }
+.tl-inner  { position: relative; display: inline-block; min-width: 100%; }
+
+/* Sticky header: month row + day row */
+.tl-header { position: sticky; top: 0; z-index: 20; background: var(--panel); border-bottom: 1px solid var(--border); user-select: none; }
+.tl-month-row, .tl-day-row { display: flex; }
+
+/* Name cells — sticky left in both header and person rows */
+.tl-name-hd   { flex-shrink: 0; width: 130px; position: sticky; left: 0; z-index: 25; background: var(--panel); border-right: 1px solid var(--border); }
+.tl-month-row .tl-name-hd { height: 20px; }
+.tl-day-row   .tl-name-hd { height: 26px; display: flex; align-items: center; justify-content: center; font-size: 9px; color: var(--dim); letter-spacing: .06em; }
+
+/* Month spanning cells */
+.tl-month-cell { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--accent); padding: 4px 6px; border-right: 1px solid var(--border); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex-shrink: 0; }
+
+/* Day header cells */
+.tl-day-cell  { width: 44px; flex-shrink: 0; font-size: 9px; font-weight: 600; color: var(--dim); text-align: center; padding: 4px 0; border-right: 1px solid rgba(44,44,62,.4); }
+.tl-day-cell.today   { background: rgba(108,99,255,.18); color: var(--accent); font-weight: 800; }
+.tl-day-cell.weekend { opacity: .4; }
+
+/* Person rows */
+.tl-person-row { display: flex; border-bottom: 1px solid var(--border); }
+.tl-person-row.dimmed { opacity: .18; pointer-events: none; }
+
+.tl-row-name { flex-shrink: 0; width: 130px; position: sticky; left: 0; z-index: 10; background: var(--card); border-right: 1px solid var(--border); display: flex; align-items: center; gap: 7px; padding: 0 10px; font-size: 11px; font-weight: 600; color: var(--text); word-break: break-word; }
+.tl-row-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+/* Scrollable track where task bars live */
+.tl-track { flex: 1; position: relative; background: var(--card); }
+
+/* Task bars */
+.tl-task-bar { position: absolute; border-radius: 3px; color: #fff; display: flex; align-items: center; overflow: hidden; cursor: default; }
+.tl-bar-inner { padding: 0 5px; display: flex; align-items: center; gap: 3px; overflow: hidden; min-width: 0; width: 100%; }
+.tl-bar-cat  { font-size: 7px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; opacity: .85; flex-shrink: 0; }
+.tl-bar-name { font-size: 9px; opacity: .9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.tl-bar-loe  { font-size: 8px; flex-shrink: 0; margin-left: auto; }
+
+/* Today column highlight overlay */
+.tl-today-col { position: absolute; top: 0; bottom: 0; width: 44px; background: rgba(108,99,255,.07); pointer-events: none; z-index: 1; }
+
+/* Sentinels for infinite horizontal scroll */
+.tl-sentinel-lr { position: absolute; top: 0; bottom: 0; width: 1px; pointer-events: none; }
 </style>
 </head>
 <body>
@@ -124,8 +156,8 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
   <span class="ops-header-sub">Internal team workload view</span>
   <div class="ops-header-spacer"></div>
   <div class="toggle-group" id="viewToggle" title="Switch calendar / person view">
-    <button class="toggle-btn active" data-view="calendar">Calendar</button>
-    <button class="toggle-btn" data-view="person">By Person</button>
+    <button class="toggle-btn" data-view="calendar">Calendar</button>
+    <button class="toggle-btn active" data-view="person">By Person</button>
   </div>
   <div class="toggle-group" id="chipDisplayToggle" title="Chip label: category abbreviation or task name">
     <button class="toggle-btn active" data-disp="categories">Categories</button>
@@ -148,7 +180,19 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
   <div id="calBottomSentinel" class="cal-sentinel"></div>
 </div>
 
-<div class="person-view" id="personView"></div>
+<div class="person-view" id="personView">
+  <div class="tl-scroll" id="tlScroll">
+    <div class="tl-inner" id="tlInner">
+      <div class="tl-header" id="tlHeader">
+        <div class="tl-month-row" id="tlMonthRow"></div>
+        <div class="tl-day-row"   id="tlDayRow"></div>
+      </div>
+      <div id="tlRows"></div>
+      <div class="tl-sentinel-lr" id="tlSentinelL" style="left:0"></div>
+      <div class="tl-sentinel-lr" id="tlSentinelR" style="right:0"></div>
+    </div>
+  </div>
+</div>
 
 <div class="ops-bottom">
   <div class="ops-workload">
@@ -193,14 +237,28 @@ const DOW_WD  = ['Mon','Tue','Wed','Thu','Fri'];
 const MONTHS  = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const SHOOT_LABELS = ['Studio Shoot','On-Location Shoot'];
 
+// ── TIMELINE CONSTANTS ──
+const TL_NAME_W      = 130;   // sticky name column width (px)
+const TL_COL_W       = 44;    // pixels per day
+const TL_BAR_H       = 22;    // task bar height (px)
+const TL_LANE_H      = TL_BAR_H + 3;  // bar + gap
+const TL_PAD         = 6;     // top/bottom track padding
+const TL_WEEKS_INIT  = 16;    // weeks before + after today on load
+const TL_WEEKS_EXT   = 8;     // weeks added per sentinel trigger
+
 // ── STATE ──
 let showWeekends = false;
-let hiddenPeople = new Set(); // person names toggled off
+let hiddenPeople = new Set();
 let calEarliestDate = null;
 let calLatestDate   = null;
 let calObserver     = null;
 let chipDisplay = 'categories'; // 'categories' | 'tasks'
-let viewMode    = 'calendar';   // 'calendar' | 'person'
+let viewMode    = 'person';     // 'calendar' | 'person'
+
+// Timeline-specific state
+let tlStart    = '';
+let tlEnd      = '';
+let tlObserver = null;
 
 // ── LOAD DATA ──
 function loadState() {
@@ -407,7 +465,7 @@ function renderFilterChips() {
       else hiddenPeople.add(person);
       renderFilterChips();
       renderWorkload();
-      if (viewMode === 'person') renderPersonView();
+      if (viewMode === 'person') renderTimeline();
       else renderCalendar();
     });
     container.appendChild(chip);
@@ -449,80 +507,229 @@ function buildOpsChip(entry) {
   return chip;
 }
 
-// ── PERSON VIEW ──
-function renderPersonView() {
-  const container = document.getElementById('personView');
-  container.innerHTML = '';
-  const people = getAllPeople();
+// ── TIMELINE HELPERS ──
+function daysBetweenDates(a, b) {
+  return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000);
+}
+
+function resetTlRange() {
+  const today = todayStr();
+  const mon = getWeekStart(today);
+  const before = new Date(mon + 'T00:00:00');
+  before.setDate(before.getDate() - TL_WEEKS_INIT * 7);
+  tlStart = fmtDate(before.getFullYear(), before.getMonth() + 1, before.getDate());
+  const after = new Date(mon + 'T00:00:00');
+  after.setDate(after.getDate() + TL_WEEKS_INIT * 7);
+  tlEnd = fmtDate(after.getFullYear(), after.getMonth() + 1, after.getDate());
+}
+
+// Greedy lane assignment: pack tasks into horizontal swim lanes without overlap
+function assignLanes(entries) {
+  const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
+  const laneEnds = []; // end date of last task assigned to each lane
+  return sorted.map(entry => {
+    const end = entry.endDate || entry.date;
+    let lane = laneEnds.findIndex(le => le < entry.date);
+    if (lane === -1) { lane = laneEnds.length; laneEnds.push(end); }
+    else laneEnds[lane] = end;
+    return { ...entry, lane };
+  });
+}
+
+// ── TIMELINE RENDER ──
+function renderTimeline() {
+  const today   = todayStr();
+  const numDays = daysBetweenDates(tlStart, tlEnd) + 1;
+  const totalW  = TL_NAME_W + numDays * TL_COL_W;
+
+  // Size the inner container
+  document.getElementById('tlInner').style.width = totalW + 'px';
+
+  // ── Month header row ──
+  const monthRow = document.getElementById('tlMonthRow');
+  monthRow.innerHTML = '';
+  const mNameHd = document.createElement('div');
+  mNameHd.className = 'tl-name-hd';
+  monthRow.appendChild(mNameHd);
+
+  let cur = new Date(tlStart + 'T00:00:00');
+  let curMonth = -1, curYear = -1, curCell = null, curCount = 0;
+  for (let i = 0; i < numDays; i++) {
+    const m = cur.getMonth(), y = cur.getFullYear();
+    if (m !== curMonth || y !== curYear) {
+      if (curCell) { curCell.style.width = (curCount * TL_COL_W) + 'px'; monthRow.appendChild(curCell); }
+      curCell  = document.createElement('div');
+      curCell.className = 'tl-month-cell';
+      curCell.textContent = MONTHS[m].slice(0,3).toUpperCase() + ' ' + y;
+      curMonth = m; curYear = y; curCount = 0;
+    }
+    curCount++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  if (curCell) { curCell.style.width = (curCount * TL_COL_W) + 'px'; monthRow.appendChild(curCell); }
+
+  // ── Day header row ──
+  const dayRow = document.getElementById('tlDayRow');
+  dayRow.innerHTML = '';
+  const dNameHd = document.createElement('div');
+  dNameHd.className = 'tl-name-hd';
+  dNameHd.textContent = 'PEOPLE';
+  dayRow.appendChild(dNameHd);
+
+  cur = new Date(tlStart + 'T00:00:00');
+  for (let i = 0; i < numDays; i++) {
+    const ds  = fmtDate(cur.getFullYear(), cur.getMonth() + 1, cur.getDate());
+    const dow = cur.getDay();
+    const cell = document.createElement('div');
+    cell.className = 'tl-day-cell'
+      + (ds === today ? ' today' : '')
+      + (dow === 0 || dow === 6 ? ' weekend' : '');
+    cell.textContent = cur.getDate();
+    dayRow.appendChild(cell);
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  // ── Person rows ──
+  const rows = document.getElementById('tlRows');
+  rows.innerHTML = '';
+
+  const allEntries = getOpsEntries();
+  const people     = getAllPeople();
+  const personColor = {};
+  allEntries.forEach(e => { if (e.person && !personColor[e.person]) personColor[e.person] = e.color; });
+
+  // Today column highlight (rendered once, covers all person rows)
+  const todayCol = daysBetweenDates(tlStart, today);
+
   if (!people.length) {
-    container.innerHTML = '<div class="ops-empty">No internal team tasks found.</div>';
+    rows.innerHTML = '<div style="padding:20px;color:var(--dim);font-size:12px">No internal team tasks found.</div>';
     return;
   }
 
-  const allEntries = getOpsEntries();
-  const personColors = {};
-  allEntries.forEach(e => { if (e.person && !personColors[e.person]) personColors[e.person] = e.color; });
-
   people.forEach(person => {
-    const entries = allEntries.filter(e => e.person === person).sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+    const entries = allEntries.filter(e => e.person === person);
     if (!entries.length) return;
 
+    const laned    = assignLanes(entries);
+    const numLanes = Math.max(...laned.map(e => e.lane)) + 1;
+    const trackH   = TL_PAD * 2 + numLanes * TL_LANE_H;
+
     const row = document.createElement('div');
-    row.className = 'person-row' + (hiddenPeople.has(person) ? ' dimmed' : '');
+    row.className = 'tl-person-row' + (hiddenPeople.has(person) ? ' dimmed' : '');
 
-    const header = document.createElement('div');
-    header.className = 'person-row-header';
+    // Sticky name cell
+    const nameCell = document.createElement('div');
+    nameCell.className = 'tl-row-name';
+    nameCell.style.height = trackH + 'px';
     const dot = document.createElement('span');
-    dot.className = 'person-row-dot';
-    dot.style.background = personColors[person] || '#6c63ff';
-    const name = document.createElement('span');
-    name.className = 'person-row-name';
-    name.textContent = person;
-    header.appendChild(dot);
-    header.appendChild(name);
-    row.appendChild(header);
+    dot.className = 'tl-row-dot';
+    dot.style.background = personColor[person] || '#6c63ff';
+    nameCell.appendChild(dot);
+    nameCell.appendChild(document.createTextNode(person));
+    row.appendChild(nameCell);
 
-    const tasksRow = document.createElement('div');
-    tasksRow.className = 'person-row-tasks';
+    // Track
+    const track = document.createElement('div');
+    track.className = 'tl-track';
+    track.style.height = trackH + 'px';
 
-    entries.forEach(entry => {
-      const chip = document.createElement('div');
-      chip.className = 'person-task-chip';
-      chip.style.background = entry.color;
-      chip.title = `${entry.date} · ${entry.cat} · ${entry.taskName} (${entry.projectName})`;
+    // Today column highlight
+    if (todayCol >= 0 && todayCol < numDays) {
+      const todayEl = document.createElement('div');
+      todayEl.className = 'tl-today-col';
+      todayEl.style.left = (todayCol * TL_COL_W) + 'px';
+      track.appendChild(todayEl);
+    }
 
-      const d = new Date(entry.date + 'T00:00:00');
-      const dateStr = (d.getMonth() + 1) + '/' + d.getDate();
+    laned.forEach(entry => {
+      const entryEnd = entry.endDate || entry.date;
 
-      const dateSpan = document.createElement('span');
-      dateSpan.className = 'person-task-chip-date';
-      dateSpan.textContent = dateStr;
+      // Clamp to visible range
+      const visStart = entry.date < tlStart ? tlStart : entry.date;
+      const visEnd   = entryEnd   > tlEnd   ? tlEnd   : entryEnd;
+      if (visEnd < visStart) return;
+
+      const startCol = daysBetweenDates(tlStart, visStart);
+      const endCol   = daysBetweenDates(tlStart, visEnd);
+      const left     = startCol * TL_COL_W + 2;
+      const width    = Math.max(TL_BAR_H, (endCol - startCol + 1) * TL_COL_W - 4);
+      const top      = TL_PAD + entry.lane * TL_LANE_H;
+
+      const bar = document.createElement('div');
+      bar.className = 'tl-task-bar';
+      bar.style.cssText = `left:${left}px;width:${width}px;top:${top}px;height:${TL_BAR_H}px;background:${entry.color};z-index:2;`;
+      bar.title = `${entry.person} · ${entry.cat} · ${entry.taskName}\n${entry.date}${entry.endDate && entry.endDate !== entry.date ? ' → ' + entry.endDate : ''} (${entry.projectName})`;
+
+      const inner = document.createElement('div');
+      inner.className = 'tl-bar-inner';
 
       if (chipDisplay === 'categories') {
-        const catSpan = document.createElement('span');
-        catSpan.className = 'person-task-chip-cat';
-        catSpan.textContent = SHORT_CAT[entry.cat] || entry.cat;
-        chip.appendChild(dateSpan);
-        chip.appendChild(catSpan);
+        const catSp = document.createElement('span');
+        catSp.className = 'tl-bar-cat';
+        catSp.textContent = SHORT_CAT[entry.cat] || entry.cat;
+        inner.appendChild(catSp);
       } else {
-        const taskSpan = document.createElement('span');
-        taskSpan.className = 'person-task-chip-task';
-        taskSpan.textContent = entry.taskName;
-        chip.appendChild(dateSpan);
-        chip.appendChild(taskSpan);
+        const nameSp = document.createElement('span');
+        nameSp.className = 'tl-bar-name';
+        nameSp.textContent = entry.taskName;
+        inner.appendChild(nameSp);
       }
 
-      const loeSpan = document.createElement('span');
-      loeSpan.className = 'person-task-chip-loe';
-      loeSpan.textContent = entry.loe === 'low' ? '🟢' : entry.loe === 'high' ? '🔴' : '🟡';
-      chip.appendChild(loeSpan);
+      const loeSp = document.createElement('span');
+      loeSp.className = 'tl-bar-loe';
+      loeSp.textContent = entry.loe === 'low' ? '🟢' : entry.loe === 'high' ? '🔴' : '🟡';
+      inner.appendChild(loeSp);
 
-      tasksRow.appendChild(chip);
+      bar.appendChild(inner);
+      track.appendChild(bar);
     });
 
-    row.appendChild(tasksRow);
-    container.appendChild(row);
+    row.appendChild(track);
+    rows.appendChild(row);
   });
+}
+
+function scrollTlToToday() {
+  const sc = document.getElementById('tlScroll');
+  if (!sc) return;
+  const today  = todayStr();
+  const col    = daysBetweenDates(tlStart, today);
+  const target = TL_NAME_W + col * TL_COL_W - Math.round((sc.clientWidth - TL_NAME_W) / 2);
+  sc.scrollLeft = Math.max(0, target);
+}
+
+function extendTimeline(direction) {
+  const sc = document.getElementById('tlScroll');
+  const prevSL = sc.scrollLeft;
+  const prevSW = sc.scrollWidth;
+
+  if (direction === 'right') {
+    const d = new Date(tlEnd + 'T00:00:00');
+    d.setDate(d.getDate() + TL_WEEKS_EXT * 7);
+    tlEnd = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+  } else {
+    const d = new Date(tlStart + 'T00:00:00');
+    d.setDate(d.getDate() - TL_WEEKS_EXT * 7);
+    tlStart = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+  }
+  renderTimeline();
+  if (direction === 'left') {
+    sc.scrollLeft = prevSL + (sc.scrollWidth - prevSW);
+  }
+}
+
+function setupTlObserver() {
+  if (tlObserver) { tlObserver.disconnect(); tlObserver = null; }
+  const sc = document.getElementById('tlScroll');
+  tlObserver = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (!e.isIntersecting) return;
+      if (e.target.id === 'tlSentinelL') extendTimeline('left');
+      if (e.target.id === 'tlSentinelR') extendTimeline('right');
+    });
+  }, { root: sc, rootMargin: '0px 600px', threshold: 0 });
+  tlObserver.observe(document.getElementById('tlSentinelL'));
+  tlObserver.observe(document.getElementById('tlSentinelR'));
 }
 
 // ── VIEW SWITCHER ──
@@ -533,15 +740,18 @@ function applyViewMode() {
   const calDow     = document.getElementById('calDowRow');
 
   if (viewMode === 'person') {
-    calScroll.style.display  = 'none';
-    calNav.style.display     = 'none';
-    calDow.style.display     = 'none';
+    calScroll.style.display = 'none';
+    calNav.style.display    = 'none';
+    calDow.style.display    = 'none';
     personView.classList.add('visible');
-    renderPersonView();
+    if (!tlStart) resetTlRange();
+    renderTimeline();
+    setTimeout(() => { scrollTlToToday(); setupTlObserver(); }, 30);
   } else {
-    calScroll.style.display  = '';
-    calNav.style.display     = '';
-    calDow.style.display     = '';
+    if (tlObserver) { tlObserver.disconnect(); tlObserver = null; }
+    calScroll.style.display = '';
+    calNav.style.display    = '';
+    calDow.style.display    = '';
     personView.classList.remove('visible');
     renderCalendar();
     scrollToToday();
@@ -706,22 +916,28 @@ function setupCalObserver() {
 
 // ── INIT ──
 function init() {
+  // Start in person (timeline) view
   resetCalRange();
-  renderCalendar();
+  resetTlRange();
   renderFilterChips();
   renderWorkload();
-  scrollToToday();
-  setupCalObserver();
+  applyViewMode(); // renders timeline + scrolls to today
 
+  // Calendar scroll title updater
   document.getElementById('calScroll').addEventListener('scroll', () => {
     clearTimeout(window._titleRaf);
     window._titleRaf = setTimeout(updateCalTitle, 80);
   });
 
+  // Today button: works for both views
   document.getElementById('btnToday').addEventListener('click', () => {
-    const todayCell = document.getElementById('calScroll').querySelector('.cal-day.today');
-    if (!todayCell) { resetCalRange(); renderCalendar(); setTimeout(scrollToToday, 50); }
-    else scrollToToday();
+    if (viewMode === 'person') {
+      scrollTlToToday();
+    } else {
+      const todayCell = document.getElementById('calScroll').querySelector('.cal-day.today');
+      if (!todayCell) { resetCalRange(); renderCalendar(); setTimeout(scrollToToday, 50); }
+      else scrollToToday();
+    }
   });
 
   document.getElementById('wkndBtn').addEventListener('click', () => {
@@ -745,7 +961,7 @@ function init() {
     if (!btn) return;
     chipDisplay = btn.dataset.disp;
     document.querySelectorAll('#chipDisplayToggle .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.disp === chipDisplay));
-    if (viewMode === 'person') renderPersonView();
+    if (viewMode === 'person') renderTimeline();
     else renderCalendar();
   });
 
@@ -754,7 +970,7 @@ function init() {
     hiddenPeople.clear();
     renderFilterChips();
     renderWorkload();
-    if (viewMode === 'person') renderPersonView();
+    if (viewMode === 'person') renderTimeline();
     else renderCalendar();
   });
 
@@ -762,7 +978,7 @@ function init() {
     getAllPeople().forEach(p => hiddenPeople.add(p));
     renderFilterChips();
     renderWorkload();
-    if (viewMode === 'person') renderPersonView();
+    if (viewMode === 'person') renderTimeline();
     else renderCalendar();
   });
 }
