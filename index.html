@@ -1016,7 +1016,9 @@ function updateCalTitle() {
   const lastDate  = botEl?.closest?.('[data-date]')?.dataset?.date;
   if (!firstDate) return;
   const fmt = (s, y) => new Date(s + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(y ? { year: 'numeric' } : {}) });
-  document.getElementById('calTitle').textContent = fmt(firstDate) + (lastDate && lastDate !== firstDate ? ' \u2013 ' + fmt(lastDate, true) : '');
+  const proj = getProject(activeProjectId);
+  const projName = proj ? proj.name + ' · ' : '';
+  document.getElementById('calTitle').textContent = projName + fmt(firstDate) + (lastDate && lastDate !== firstDate ? ' \u2013 ' + fmt(lastDate, true) : '');
 }
 
 function renderCalendar() {
@@ -1926,7 +1928,7 @@ function savePanel() {
 
 function deleteFromPanel() {
   if (!panelContext) return;
-  if (panelContext.mode !== 'edit' && panelContext.mode !== 'edit-review') return;
+  if (panelContext.mode !== 'edit' && panelContext.mode !== 'edit-review' && panelContext.mode !== 'edit-duedate') return;
   const proj = getProject(activeProjectId);
   if (!proj) return;
   proj.tasks = proj.tasks.filter(t => t.id !== panelContext.taskId);
@@ -2582,12 +2584,22 @@ function getPlanywayCat(task) {
   return null;
 }
 
-// Returns the person name of the most frequently used Producer in the project
+// Returns the person name of the most frequently used Producer in the project.
+// Counts direct producer tasks + appearances as an attendee in reviews/key dates.
 function getMostUsedProducer(proj) {
   const counts = {};
   (proj.tasks || []).forEach(t => {
+    // Direct producer tasks
     if ((t.role || '').toLowerCase() === 'producer' && t.person) {
       counts[t.person] = (counts[t.person] || 0) + 1;
+    }
+    // Producer attendees in reviews and key dates
+    if (t.isReview || t.isDueDate) {
+      (t.attendees || []).forEach(a => {
+        if ((a.role || '').toLowerCase() === 'producer' && a.person) {
+          counts[a.person] = (counts[a.person] || 0) + 1;
+        }
+      });
     }
   });
   const entries = Object.entries(counts);
