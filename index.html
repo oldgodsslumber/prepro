@@ -832,18 +832,17 @@ function renderPalette() {
   const proj = getProject(activeProjectId);
   if (!proj) return;
 
-  // Collect unique person+role+category+color from internal team tasks
+  // Collect unique person+role+category+color from all assigned tasks
   const seen = new Map(); // key: "person|role"
   (proj.tasks || []).forEach(t => {
     if (!t.person || t.isDueDate || t.isReview) return;
-    if (t.roleCategory !== 'Internal Team') return;
     const key = t.person + '|' + t.role;
     if (!seen.has(key)) seen.set(key, { person: t.person, role: t.role, category: t.roleCategory, color: t.color });
   });
   // Also include attendees from review tasks
   (proj.tasks || []).forEach(t => {
     if (!t.isReview) return;
-    (t.attendees || []).filter(a => a.category === 'Internal Team').forEach(a => {
+    (t.attendees || []).forEach(a => {
       if (!a.person) return;
       const key = a.person + '|' + a.role;
       if (!seen.has(key)) seen.set(key, { person: a.person, role: a.role, category: a.category, color: a.color });
@@ -869,9 +868,9 @@ function renderPalette() {
     const chip = document.createElement('div');
     chip.className = 'role-chip chip-person';
     chip.draggable = true;
-    chip.textContent = person;
+    chip.textContent = `${person} (${role})`;
     chip.style.background = color;
-    chip.title = `${person} (${role})`;
+    chip.title = `${person} · ${role} · drag to create task`;
     chip.addEventListener('dragstart', e => {
       dragPayload = { role, category, color, person };
       e.dataTransfer.setData('text', JSON.stringify(dragPayload));
