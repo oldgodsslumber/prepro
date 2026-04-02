@@ -135,6 +135,10 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .cal-day.today .cal-day-num span { background: var(--accent); color: #fff; }
 .cal-day-month-label { font-size: 9px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .07em; }
 
+/* ── GHOST CHIPS (cross-project busyness overlay) ── */
+.ghost-chip { font-size: 10px; font-weight: 500; border-radius: 4px; padding: 2px 6px; color: rgba(255,255,255,.45); background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); pointer-events: none; user-select: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; font-style: italic; }
+.ghost-name { font-weight: 600; color: rgba(255,255,255,.65); }
+
 /* ── TASK CHIPS ── */
 .task-chip { font-size: 10px; font-weight: 500; border-radius: 4px; padding: 2px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff; cursor: grab; line-height: 1.5; position: relative; flex-shrink: 0; }
 .task-chip:active { cursor: grabbing; }
@@ -939,6 +943,60 @@ function renderDowHeader() {
   });
 }
 
+// Build a map of dateStr → ghost entries from other projects for people on this project
+function buildGhostMap() {
+  if (!activeProjectId) return new Map();
+  const proj = getProject(activeProjectId);
+  if (!proj) return new Map();
+
+  // Collect every person associated with the active project (roster + task assignments)
+  const rosterPeople = new Set();
+  Object.values(proj.roster || {}).forEach(names => names.forEach(n => rosterPeople.add(n)));
+  (proj.tasks || []).forEach(t => {
+    if (t.person) rosterPeople.add(t.person);
+    (t.attendees || []).forEach(a => { if (a.person) rosterPeople.add(a.person); });
+  });
+  if (!rosterPeople.size) return new Map();
+
+  const map = new Map(); // dateStr → [{person, role, color, projectName}]
+  const addEntry = (dateStr, entry) => {
+    if (!map.has(dateStr)) map.set(dateStr, []);
+    map.get(dateStr).push(entry);
+  };
+
+  state.projects.forEach(p => {
+    if (p.id === activeProjectId || p.completed) return;
+    (p.tasks || []).forEach(t => {
+      if (t.isDueDate) return;
+      const endDate = t.endDate || t.date;
+
+      // Direct task assignment
+      if (t.person && rosterPeople.has(t.person)) {
+        let d = new Date(t.date + 'T00:00:00');
+        const end = new Date(endDate + 'T00:00:00');
+        while (d <= end) {
+          const ds = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+          addEntry(ds, { person: t.person, role: t.role, color: t.color, projectName: p.name });
+          d.setDate(d.getDate() + 1);
+        }
+      }
+
+      // Attendees on reviews / key dates
+      (t.attendees || []).forEach(a => {
+        if (!a.person || !rosterPeople.has(a.person)) return;
+        let d = new Date(t.date + 'T00:00:00');
+        const end = new Date(endDate + 'T00:00:00');
+        while (d <= end) {
+          const ds = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+          addEntry(ds, { person: a.person, role: a.role || t.reviewLabel || 'Review', color: a.color || REVIEW_COLOR, projectName: p.name });
+          d.setDate(d.getDate() + 1);
+        }
+      });
+    });
+  });
+  return map;
+}
+
 function rebuildCalGrid(adjustScrollTop) {
   const calScroll = document.getElementById('calScroll');
   const prevScrollTop = calScroll.scrollTop;
@@ -963,10 +1021,11 @@ function rebuildCalGrid(adjustScrollTop) {
     cur.setDate(cur.getDate() + 1);
   }
 
-  const layout = buildTaskLayout(allDates);
+  const layout    = buildTaskLayout(allDates);
+  const ghostMap  = buildGhostMap();
   allDates.forEach(dateStr => {
     const d = new Date(dateStr + 'T00:00:00');
-    grid.appendChild(makeCell(d.getDate(), dateStr, todayStr, layout.get(dateStr) || []));
+    grid.appendChild(makeCell(d.getDate(), dateStr, todayStr, layout.get(dateStr) || [], ghostMap.get(dateStr) || []));
   });
 
   if (adjustScrollTop) {
@@ -1085,7 +1144,7 @@ function getWeekStart() {
   return fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
 }
 
-function makeCell(dayNum, dateStr, todayStr, laneArr) {
+function makeCell(dayNum, dateStr, todayStr, laneArr, ghosts) {
   const cell = document.createElement('div');
   cell.className = 'cal-day' + (dateStr === todayStr ? ' today' : '');
   cell.dataset.date = dateStr;
@@ -1113,6 +1172,28 @@ function makeCell(dayNum, dateStr, todayStr, laneArr) {
       cell.appendChild(buildChip(taskOrNull, dateStr));
     }
   });
+
+  // Ghost chips: busyiness from other projects for people on this project
+  if (ghosts && ghosts.length) {
+    // Deduplicate by person+role per cell so multi-day tasks don't pile up
+    const seen = new Set();
+    ghosts.forEach(g => {
+      const key = g.person + '|' + g.role;
+      if (seen.has(key)) return;
+      seen.add(key);
+      const gc = document.createElement('div');
+      gc.className = 'ghost-chip';
+      gc.title = g.person + ' · ' + g.role + ' (' + g.projectName + ')';
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'ghost-name';
+      nameSpan.textContent = g.person;
+      gc.appendChild(nameSpan);
+      const projSpan = document.createElement('span');
+      projSpan.textContent = ' · ' + g.projectName;
+      gc.appendChild(projSpan);
+      cell.appendChild(gc);
+    });
+  }
 
   cell.addEventListener('dragover', e => {
     if (!dragPayload && !e.dataTransfer.types.includes('text')) return;
