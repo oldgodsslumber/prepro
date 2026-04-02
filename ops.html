@@ -89,6 +89,32 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 
 /* ── EMPTY STATE ── */
 .ops-empty { display: flex; align-items: center; justify-content: center; flex: 1; color: var(--dim); font-size: 13px; }
+
+/* ── VIEW / DISPLAY TOGGLES ── */
+.toggle-group { display: flex; background: var(--card); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; flex-shrink: 0; }
+.toggle-btn { font-size: 11px; font-weight: 600; color: var(--dim); background: transparent; border: none; padding: 4px 12px; cursor: pointer; transition: all .15s; }
+.toggle-btn.active { background: var(--accent); color: #fff; }
+.toggle-btn:not(.active):hover { color: var(--text); }
+
+/* ── FILTER ACTIONS ── */
+.ops-filter-actions { display: flex; gap: 5px; margin-bottom: 6px; }
+.ops-filter-action-btn { font-size: 10px; font-weight: 700; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; cursor: pointer; transition: all .15s; }
+.ops-filter-action-btn:hover { color: var(--text); border-color: var(--dim); }
+
+/* ── PERSON VIEW ── */
+.person-view { flex: 1; overflow-y: auto; min-height: 0; padding: 8px 12px; display: none; flex-direction: column; gap: 6px; }
+.person-view.visible { display: flex; }
+.person-row { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+.person-row-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.person-row-name { font-size: 12px; font-weight: 700; color: var(--text); }
+.person-row-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.person-row-tasks { display: flex; flex-wrap: wrap; gap: 4px; }
+.person-task-chip { display: inline-flex; align-items: center; gap: 5px; border-radius: 4px; padding: 3px 8px; font-size: 10px; font-weight: 500; color: #fff; }
+.person-task-chip-date { font-size: 9px; opacity: .75; flex-shrink: 0; }
+.person-task-chip-cat { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; opacity: .85; flex-shrink: 0; }
+.person-task-chip-task { opacity: .9; }
+.person-task-chip-loe { font-size: 9px; }
+.person-row.dimmed { opacity: .25; }
 </style>
 </head>
 <body>
@@ -97,6 +123,14 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
   <span class="ops-header-title">Ops</span>
   <span class="ops-header-sub">Internal team workload view</span>
   <div class="ops-header-spacer"></div>
+  <div class="toggle-group" id="viewToggle" title="Switch calendar / person view">
+    <button class="toggle-btn active" data-view="calendar">Calendar</button>
+    <button class="toggle-btn" data-view="person">By Person</button>
+  </div>
+  <div class="toggle-group" id="chipDisplayToggle" title="Chip label: category abbreviation or task name">
+    <button class="toggle-btn active" data-disp="categories">Categories</button>
+    <button class="toggle-btn" data-disp="tasks">Tasks</button>
+  </div>
   <button class="ops-wknd-btn" id="wkndBtn">Show Weekends</button>
   <a href="index.html" class="ops-back">← PRE-PRO</a>
 </div>
@@ -113,6 +147,8 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
   <div class="cal-grid" id="calGrid"></div>
   <div id="calBottomSentinel" class="cal-sentinel"></div>
 </div>
+
+<div class="person-view" id="personView"></div>
 
 <div class="ops-bottom">
   <div class="ops-workload">
@@ -131,6 +167,10 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
   </div>
   <div class="ops-filters">
     <div class="ops-filters-title">Filter Team</div>
+    <div class="ops-filter-actions">
+      <button class="ops-filter-action-btn" id="filterAllBtn">All</button>
+      <button class="ops-filter-action-btn" id="filterNoneBtn">None</button>
+    </div>
     <div class="ops-filter-chips" id="filterChips"></div>
   </div>
 </div>
@@ -159,6 +199,8 @@ let hiddenPeople = new Set(); // person names toggled off
 let calEarliestDate = null;
 let calLatestDate   = null;
 let calObserver     = null;
+let chipDisplay = 'categories'; // 'categories' | 'tasks'
+let viewMode    = 'calendar';   // 'calendar' | 'person'
 
 // ── LOAD DATA ──
 function loadState() {
@@ -365,10 +407,145 @@ function renderFilterChips() {
       else hiddenPeople.add(person);
       renderFilterChips();
       renderWorkload();
-      renderCalendar();
+      if (viewMode === 'person') renderPersonView();
+      else renderCalendar();
     });
     container.appendChild(chip);
   });
+}
+
+// ── CHIP BUILDER (shared by calendar + person view) ──
+const SHORT_CAT = { 'Pre-Production':'PRE','Producing':'PROD','Post-Producing':'POST','Editing':'EDIT','Animation':'ANIM','Production':'SHOOT' };
+
+function buildOpsChip(entry) {
+  const chip = document.createElement('div');
+  chip.className = 'ops-chip' + (hiddenPeople.has(entry.person) ? ' dimmed' : '');
+  chip.style.background = entry.color;
+  chip.title = `${entry.person} · ${entry.cat} · ${entry.taskName} (${entry.projectName})`;
+
+  if (chipDisplay === 'categories') {
+    const catSpan = document.createElement('span');
+    catSpan.className = 'ops-chip-cat';
+    catSpan.textContent = SHORT_CAT[entry.cat] || entry.cat;
+    chip.appendChild(catSpan);
+  }
+
+  const personSpan = document.createElement('span');
+  personSpan.className = 'ops-chip-person';
+  personSpan.textContent = entry.person;
+  chip.appendChild(personSpan);
+
+  const taskSpan = document.createElement('span');
+  taskSpan.className = 'ops-chip-task';
+  taskSpan.textContent = chipDisplay === 'tasks' ? '· ' + entry.taskName : '';
+  if (chipDisplay !== 'tasks') taskSpan.style.display = 'none';
+  chip.appendChild(taskSpan);
+
+  const loeSpan = document.createElement('span');
+  loeSpan.style.cssText = 'margin-left:auto;flex-shrink:0;font-size:9px';
+  loeSpan.textContent = entry.loe === 'low' ? '🟢' : entry.loe === 'high' ? '🔴' : '🟡';
+  chip.appendChild(loeSpan);
+
+  return chip;
+}
+
+// ── PERSON VIEW ──
+function renderPersonView() {
+  const container = document.getElementById('personView');
+  container.innerHTML = '';
+  const people = getAllPeople();
+  if (!people.length) {
+    container.innerHTML = '<div class="ops-empty">No internal team tasks found.</div>';
+    return;
+  }
+
+  const allEntries = getOpsEntries();
+  const personColors = {};
+  allEntries.forEach(e => { if (e.person && !personColors[e.person]) personColors[e.person] = e.color; });
+
+  people.forEach(person => {
+    const entries = allEntries.filter(e => e.person === person).sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+    if (!entries.length) return;
+
+    const row = document.createElement('div');
+    row.className = 'person-row' + (hiddenPeople.has(person) ? ' dimmed' : '');
+
+    const header = document.createElement('div');
+    header.className = 'person-row-header';
+    const dot = document.createElement('span');
+    dot.className = 'person-row-dot';
+    dot.style.background = personColors[person] || '#6c63ff';
+    const name = document.createElement('span');
+    name.className = 'person-row-name';
+    name.textContent = person;
+    header.appendChild(dot);
+    header.appendChild(name);
+    row.appendChild(header);
+
+    const tasksRow = document.createElement('div');
+    tasksRow.className = 'person-row-tasks';
+
+    entries.forEach(entry => {
+      const chip = document.createElement('div');
+      chip.className = 'person-task-chip';
+      chip.style.background = entry.color;
+      chip.title = `${entry.date} · ${entry.cat} · ${entry.taskName} (${entry.projectName})`;
+
+      const d = new Date(entry.date + 'T00:00:00');
+      const dateStr = (d.getMonth() + 1) + '/' + d.getDate();
+
+      const dateSpan = document.createElement('span');
+      dateSpan.className = 'person-task-chip-date';
+      dateSpan.textContent = dateStr;
+
+      if (chipDisplay === 'categories') {
+        const catSpan = document.createElement('span');
+        catSpan.className = 'person-task-chip-cat';
+        catSpan.textContent = SHORT_CAT[entry.cat] || entry.cat;
+        chip.appendChild(dateSpan);
+        chip.appendChild(catSpan);
+      } else {
+        const taskSpan = document.createElement('span');
+        taskSpan.className = 'person-task-chip-task';
+        taskSpan.textContent = entry.taskName;
+        chip.appendChild(dateSpan);
+        chip.appendChild(taskSpan);
+      }
+
+      const loeSpan = document.createElement('span');
+      loeSpan.className = 'person-task-chip-loe';
+      loeSpan.textContent = entry.loe === 'low' ? '🟢' : entry.loe === 'high' ? '🔴' : '🟡';
+      chip.appendChild(loeSpan);
+
+      tasksRow.appendChild(chip);
+    });
+
+    row.appendChild(tasksRow);
+    container.appendChild(row);
+  });
+}
+
+// ── VIEW SWITCHER ──
+function applyViewMode() {
+  const calScroll  = document.getElementById('calScroll');
+  const personView = document.getElementById('personView');
+  const calNav     = document.querySelector('.cal-nav');
+  const calDow     = document.getElementById('calDowRow');
+
+  if (viewMode === 'person') {
+    calScroll.style.display  = 'none';
+    calNav.style.display     = 'none';
+    calDow.style.display     = 'none';
+    personView.classList.add('visible');
+    renderPersonView();
+  } else {
+    calScroll.style.display  = '';
+    calNav.style.display     = '';
+    calDow.style.display     = '';
+    personView.classList.remove('visible');
+    renderCalendar();
+    scrollToToday();
+  }
 }
 
 // ── CALENDAR ──
@@ -416,83 +593,7 @@ function getOpsEntriesForDate(dateStr) {
   return getOpsEntries().filter(e => dateStr >= e.date && dateStr <= e.endDate);
 }
 
-function renderCalendar() {
-  const cols = showWeekends ? 7 : 5;
-  renderDowHeader();
-
-  const grid = document.getElementById('calGrid');
-  grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-  grid.innerHTML = '';
-
-  const today = todayStr();
-  const dows = showWeekends ? [0,1,2,3,4,5,6] : [1,2,3,4,5]; // 0=Sun
-
-  const weekStarts = getWeeksInRange();
-  weekStarts.forEach(weekStart => {
-    const weekStartD = new Date(weekStart + 'T00:00:00');
-    dows.forEach(dow => {
-      const d = new Date(weekStartD);
-      d.setDate(weekStartD.getDate() + (dow === 0 ? (showWeekends ? 6 : 0) : dow - (showWeekends ? 0 : 1)));
-      // For show-weekdays: Mon=1..Fri=5 → offset 0..4 from Monday
-      // Simpler: build date array per week
-      const cell = document.createElement('div');
-      const dateStr = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
-      cell.className = 'cal-day' + (dateStr === today ? ' today' : '');
-      cell.dataset.date = dateStr;
-
-      // Day number
-      const num = document.createElement('div');
-      num.className = 'cal-day-num';
-      const numSpan = document.createElement('span');
-      numSpan.textContent = d.getDate();
-      num.appendChild(numSpan);
-      if (d.getDate() === 1) {
-        const ml = document.createElement('span');
-        ml.className = 'cal-day-month-label';
-        ml.textContent = MONTHS[d.getMonth()].slice(0,3).toUpperCase();
-        num.appendChild(ml);
-      }
-      cell.appendChild(num);
-
-      // Task chips
-      getOpsEntriesForDate(dateStr).forEach(entry => {
-        const chip = document.createElement('div');
-        chip.className = 'ops-chip' + (hiddenPeople.has(entry.person) ? ' dimmed' : '');
-        chip.style.background = entry.color;
-        chip.title = `${entry.person} · ${entry.cat} · ${entry.taskName} (${entry.projectName})`;
-
-        const catSpan = document.createElement('span');
-        catSpan.className = 'ops-chip-cat';
-        catSpan.textContent = entry.cat.replace('Pre-Production','Pre').replace('Post-Producing','Post').replace('Producing','Prod').replace('Production','Shoot');
-
-        const personSpan = document.createElement('span');
-        personSpan.className = 'ops-chip-person';
-        personSpan.textContent = entry.person;
-
-        const taskSpan = document.createElement('span');
-        taskSpan.className = 'ops-chip-task';
-        taskSpan.textContent = '· ' + entry.taskName;
-
-        const loeSpan = document.createElement('span');
-        loeSpan.style.marginLeft = 'auto';
-        loeSpan.style.flexShrink = '0';
-        loeSpan.textContent = entry.loe === 'low' ? '🟢' : entry.loe === 'high' ? '🔴' : '🟡';
-
-        chip.appendChild(catSpan);
-        chip.appendChild(personSpan);
-        chip.appendChild(taskSpan);
-        chip.appendChild(loeSpan);
-        cell.appendChild(chip);
-      });
-
-      grid.appendChild(cell);
-    });
-  });
-
-  updateCalTitle();
-}
-
-// Simpler: rebuild week days properly
+// Rebuild week days properly
 function buildWeekDays(weekMondayStr) {
   const mon = new Date(weekMondayStr + 'T00:00:00');
   const days = [];
@@ -539,31 +640,7 @@ function renderCalendar() {
       cell.appendChild(num);
 
       getOpsEntriesForDate(dateStr).forEach(entry => {
-        const chip = document.createElement('div');
-        chip.className = 'ops-chip' + (hiddenPeople.has(entry.person) ? ' dimmed' : '');
-        chip.style.background = entry.color;
-        chip.title = `${entry.person} · ${entry.cat} · ${entry.taskName} (${entry.projectName})`;
-
-        const catSpan = document.createElement('span');
-        catSpan.className = 'ops-chip-cat';
-        const shortCat = { 'Pre-Production':'PRE','Producing':'PROD','Post-Producing':'POST','Editing':'EDIT','Animation':'ANIM','Production':'SHOOT' };
-        catSpan.textContent = shortCat[entry.cat] || entry.cat;
-
-        const personSpan = document.createElement('span');
-        personSpan.className = 'ops-chip-person';
-        personSpan.textContent = entry.person;
-
-        const taskSpan = document.createElement('span');
-        taskSpan.className = 'ops-chip-task';
-        taskSpan.textContent = '· ' + entry.taskName;
-
-        const loeSpan = document.createElement('span');
-        loeSpan.style.cssText = 'margin-left:auto;flex-shrink:0;font-size:9px';
-        loeSpan.textContent = entry.loe === 'low' ? '🟢' : entry.loe === 'high' ? '🔴' : '🟡';
-
-        chip.appendChild(catSpan); chip.appendChild(personSpan);
-        chip.appendChild(taskSpan); chip.appendChild(loeSpan);
-        cell.appendChild(chip);
+        cell.appendChild(buildOpsChip(entry));
       });
 
       grid.appendChild(cell);
@@ -650,7 +727,43 @@ function init() {
   document.getElementById('wkndBtn').addEventListener('click', () => {
     showWeekends = !showWeekends;
     document.getElementById('wkndBtn').classList.toggle('on', showWeekends);
-    renderCalendar();
+    if (viewMode === 'calendar') renderCalendar();
+  });
+
+  // View toggle (Calendar / By Person)
+  document.getElementById('viewToggle').addEventListener('click', e => {
+    const btn = e.target.closest('.toggle-btn');
+    if (!btn) return;
+    viewMode = btn.dataset.view;
+    document.querySelectorAll('#viewToggle .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.view === viewMode));
+    applyViewMode();
+  });
+
+  // Chip display toggle (Categories / Tasks)
+  document.getElementById('chipDisplayToggle').addEventListener('click', e => {
+    const btn = e.target.closest('.toggle-btn');
+    if (!btn) return;
+    chipDisplay = btn.dataset.disp;
+    document.querySelectorAll('#chipDisplayToggle .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.disp === chipDisplay));
+    if (viewMode === 'person') renderPersonView();
+    else renderCalendar();
+  });
+
+  // All / None filter buttons
+  document.getElementById('filterAllBtn').addEventListener('click', () => {
+    hiddenPeople.clear();
+    renderFilterChips();
+    renderWorkload();
+    if (viewMode === 'person') renderPersonView();
+    else renderCalendar();
+  });
+
+  document.getElementById('filterNoneBtn').addEventListener('click', () => {
+    getAllPeople().forEach(p => hiddenPeople.add(p));
+    renderFilterChips();
+    renderWorkload();
+    if (viewMode === 'person') renderPersonView();
+    else renderCalendar();
   });
 }
 

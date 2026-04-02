@@ -87,6 +87,8 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .role-chip:hover { opacity: .9; transform: translateY(-1px); }
 .role-chip:active { cursor: grabbing; transform: scale(.97); }
 .chip-duedate { background: #3a3a52 !important; color: var(--text) !important; border: 1.5px solid #606080; }
+.chip-person  { border: 1.5px dashed rgba(255,255,255,.45); opacity: .92; position: relative; }
+.chip-person::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.7); margin-right: 5px; vertical-align: middle; }
 .duedate-marker { background: #3a3a52; color: var(--text); border-radius: 4px; padding: 4px 8px; font-size: 11px; font-weight: 700; cursor: grab; user-select: none; flex-shrink: 0; border-left: 3px solid #8080a0; transition: opacity .12s; display: flex; flex-direction: column; gap: 2px; }
 .duedate-marker:hover { opacity: .85; }
 .duedate-hd { font-weight: 700; white-space: nowrap; }
@@ -823,6 +825,61 @@ function renderPalette() {
   keyGrp.appendChild(mkDueChip('Project Due Date', '🏁', 'Project Due Date'));
   keyGrp.appendChild(mkDueChip('Milestone', '🎯', 'Milestone'));
   pal.appendChild(keyGrp);
+
+  // ── PERSON QUICK-CHIPS (from active project roster) ──
+  if (!activeProjectId) return;
+  const proj = getProject(activeProjectId);
+  if (!proj) return;
+
+  // Collect unique person+role+category+color from internal team tasks
+  const seen = new Map(); // key: "person|role"
+  (proj.tasks || []).forEach(t => {
+    if (!t.person || t.isDueDate || t.isReview) return;
+    if (t.roleCategory !== 'Internal Team') return;
+    const key = t.person + '|' + t.role;
+    if (!seen.has(key)) seen.set(key, { person: t.person, role: t.role, category: t.roleCategory, color: t.color });
+  });
+  // Also include attendees from review tasks
+  (proj.tasks || []).forEach(t => {
+    if (!t.isReview) return;
+    (t.attendees || []).filter(a => a.category === 'Internal Team').forEach(a => {
+      if (!a.person) return;
+      const key = a.person + '|' + a.role;
+      if (!seen.has(key)) seen.set(key, { person: a.person, role: a.role, category: a.category, color: a.color });
+    });
+  });
+
+  if (!seen.size) return;
+
+  const sep3 = document.createElement('div');
+  sep3.style.cssText = 'width:1px;height:20px;background:var(--border);margin:0 4px;align-self:center';
+  pal.appendChild(sep3);
+
+  const pplGrp = document.createElement('div');
+  pplGrp.className = 'pal-cat';
+  const pplLbl = document.createElement('span');
+  pplLbl.className = 'pal-label';
+  pplLbl.textContent = 'People';
+  pplGrp.appendChild(pplLbl);
+
+  // Sort by role then person
+  const entries = [...seen.values()].sort((a, b) => a.role.localeCompare(b.role) || a.person.localeCompare(b.person));
+  entries.forEach(({ person, role, category, color }) => {
+    const chip = document.createElement('div');
+    chip.className = 'role-chip chip-person';
+    chip.draggable = true;
+    chip.textContent = person;
+    chip.style.background = color;
+    chip.title = `${person} (${role})`;
+    chip.addEventListener('dragstart', e => {
+      dragPayload = { role, category, color, person };
+      e.dataTransfer.setData('text', JSON.stringify(dragPayload));
+      e.dataTransfer.effectAllowed = 'copy';
+    });
+    chip.addEventListener('dragend', () => { dragPayload = null; });
+    pplGrp.appendChild(chip);
+  });
+  pal.appendChild(pplGrp);
 }
 
 // ── CALENDAR ──
@@ -1046,7 +1103,7 @@ function makeCell(dayNum, dateStr, todayStr, laneArr) {
     } else if (pl.type === 'review') {
       openPanel('create-review', dateStr, null, pl.label || 'Review', null, REVIEW_COLOR);
     } else {
-      openPanel('create', dateStr, null, pl.role, pl.category, pl.color);
+      openPanel('create', dateStr, null, pl.role, pl.category, pl.color, pl.person || null);
     }
   });
 
@@ -1548,7 +1605,7 @@ function fmtDateLabel(dateStr) {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function openPanel(mode, dateStr, taskId, role, category, color) {
+function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) {
   if (!activeProjectId) return;
 
   const fieldPerson = document.getElementById('panelFieldPerson');
@@ -1575,6 +1632,16 @@ function openPanel(mode, dateStr, taskId, role, category, color) {
     populatePersonDropdown(role);
     taskInput.value = '';
     document.getElementById('panelDelete').classList.add('hidden');
+    if (prefillPerson) {
+      const sel = document.getElementById('panelPerson');
+      const otherInp = document.getElementById('panelPersonOther');
+      if ([...sel.options].some(o => o.value === prefillPerson)) {
+        sel.value = prefillPerson;
+      } else {
+        sel.value = '__other__';
+        otherInp.style.display = ''; otherInp.value = prefillPerson;
+      }
+    }
 
   } else if (mode === 'edit') {
     const proj = getProject(activeProjectId);
