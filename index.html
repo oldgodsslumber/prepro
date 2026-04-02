@@ -1788,21 +1788,23 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     if (!proj) return;
     const task = proj.tasks.find(t => t.id === taskId);
     if (!task) return;
+
+    // If the person is already known, save directly without opening the panel
+    if (prefillPerson) {
+      if (!task.attendees) task.attendees = [];
+      task.attendees.push({ id: genId(), role, category, person: prefillPerson, color });
+      recordNameHistory(role, prefillPerson);
+      saveState();
+      renderCalendar();
+      if (exportOpen) renderExportPanel();
+      return;
+    }
+
     panelContext = { mode: 'add-attendee', taskId, role, category, color };
     document.getElementById('panelRoleBadge').textContent      = role;
     document.getElementById('panelRoleBadge').style.background = color;
     document.getElementById('panelDateLabel').textContent      = fmtDateLabel(task.date) + ' · ' + (task.taskName || 'Review');
     populatePersonDropdown(role);
-    if (prefillPerson) {
-      const sel = document.getElementById('panelPerson');
-      const otherInp = document.getElementById('panelPersonOther');
-      if ([...sel.options].some(o => o.value === prefillPerson)) {
-        sel.value = prefillPerson;
-      } else {
-        sel.value = '__other__';
-        otherInp.style.display = ''; otherInp.value = prefillPerson;
-      }
-    }
     fieldTask.style.display = 'none';
     fieldLOE.style.display  = 'none';
     document.getElementById('panelDelete').classList.add('hidden');
