@@ -89,12 +89,21 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .chip-duedate { background: #3a3a52 !important; color: var(--text) !important; border: 1.5px solid #606080; }
 .chip-person  { border: 1.5px dashed rgba(255,255,255,.45); opacity: .92; position: relative; }
 .chip-person::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.7); margin-right: 5px; vertical-align: middle; }
-.duedate-marker { background: #3a3a52; color: var(--text); border-radius: 4px; padding: 4px 8px; font-size: 11px; font-weight: 700; cursor: grab; user-select: none; flex-shrink: 0; border-left: 3px solid #8080a0; transition: opacity .12s; display: flex; flex-direction: column; gap: 2px; }
+.duedate-marker { background: #3a3a52; color: var(--text); border-radius: 4px; padding: 4px 8px; font-size: 11px; font-weight: 700; cursor: grab; user-select: none; flex-shrink: 0; border-left: 3px solid #8080a0; transition: opacity .12s; display: flex; flex-direction: column; gap: 2px; position: relative; }
 .duedate-marker:hover { opacity: .85; }
+.duedate-marker.duedate-multi-start { border-radius: 4px 0 0 4px; border-right: none; margin-right: -7px; z-index: 1; }
+.duedate-marker .chip-handle-l,
+.duedate-marker .chip-handle-r { top: 10px; transform: none; }
+.duedate-marker:hover .chip-handle-l,
+.duedate-marker:hover .chip-handle-r { color: rgba(255,255,255,.9); }
 .duedate-hd { font-weight: 700; white-space: nowrap; }
 .duedate-marker.drag-accepting { outline: 2px solid rgba(128,128,160,.5); outline-offset: -1px; }
 .duedate-marker.drag-accepting .review-drop-hint { display: block; }
 .duedate-marker .review-drop-hint { color: rgba(200,200,220,.6); }
+/* slim continuation bars for multi-day key dates */
+.duedate-bar { height: 20px; flex-shrink: 0; position: relative; cursor: pointer; background: rgba(128,128,160,.45); font-size: 0; }
+.duedate-bar-mid { border-radius: 0; margin-left: -5px; margin-right: -6px; }
+.duedate-bar-end { border-radius: 0 4px 4px 0; margin-left: -5px; padding-right: 17px; }
 
 /* ── CALENDAR WRAPPER ── */
 .cal-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 12px 14px 0; min-height: 0; }
@@ -825,6 +834,7 @@ function renderPalette() {
   keyGrp.appendChild(mkDueChip('Project Due Date', '🏁', 'Project Due Date'));
   keyGrp.appendChild(mkDueChip('Milestone', '🎯', 'Milestone'));
   keyGrp.appendChild(mkDueChip('Delivery', '📦', 'Delivery'));
+  keyGrp.appendChild(mkDueChip('PTO', '🏖', 'PTO'));
   pal.appendChild(keyGrp);
 
   // ── PERSON QUICK-CHIPS (from active project roster) ──
@@ -1113,7 +1123,7 @@ function makeCell(dayNum, dateStr, todayStr, laneArr) {
     } else if (pl.type === 'duedate') {
       const proj = getProject(activeProjectId);
       if (!proj) return;
-      proj.tasks.push({ id: genId(), date: dateStr, isDueDate: true, milestoneType: pl.defaultLabel === 'Milestone' ? 'milestone' : pl.defaultLabel === 'Delivery' ? 'delivery' : 'due-date', color: '#3a3a52', role: '', roleCategory: '', attendees: [], taskName: pl.defaultLabel || null });
+      proj.tasks.push({ id: genId(), date: dateStr, isDueDate: true, milestoneType: pl.defaultLabel === 'Milestone' ? 'milestone' : pl.defaultLabel === 'Delivery' ? 'delivery' : pl.defaultLabel === 'PTO' ? 'pto' : 'due-date', color: '#3a3a52', role: '', roleCategory: '', attendees: [], taskName: pl.defaultLabel || null });
       saveState(); renderCalendar(); if (exportOpen) renderExportPanel();
     } else if (pl.type === 'review') {
       openPanel('create-review', dateStr, null, pl.label || 'Review', null, REVIEW_COLOR);
@@ -1180,8 +1190,18 @@ function buildChip(task, dateStr) {
 }
 
 function buildDueDateMarker(task, dateStr) {
+  const endDate = task.endDate || task.date;
+  const isStart = task.date === dateStr;
+  const isEnd   = endDate   === dateStr;
+  const isMulti = !isStart || endDate !== task.date;
+
+  // Non-start cells get a slim continuation bar
+  if (isMulti && !isStart) {
+    return buildDueDateBar(task, dateStr, isEnd);
+  }
+
   const el = document.createElement('div');
-  el.className = 'duedate-marker';
+  el.className = 'duedate-marker' + (isMulti ? ' duedate-multi-start' : '');
   el.dataset.taskId = task.id;
   el.title = 'Click to edit · Drag to move · Drop a role to add attendee';
 
@@ -1189,8 +1209,8 @@ function buildDueDateMarker(task, dateStr) {
   const hd = document.createElement('div');
   hd.className = 'duedate-hd';
   const mType = task.milestoneType || 'due-date';
-  const mEmoji = mType === 'milestone' ? '🎯' : mType === 'delivery' ? '📦' : '🏁';
-  const mLabel = mType === 'milestone' ? 'Milestone' : mType === 'delivery' ? 'Delivery' : 'Project Due Date';
+  const mEmoji = mType === 'milestone' ? '🎯' : mType === 'delivery' ? '📦' : mType === 'pto' ? '🏖' : '🏁';
+  const mLabel = mType === 'milestone' ? 'Milestone' : mType === 'delivery' ? 'Delivery' : mType === 'pto' ? 'PTO' : 'Project Due Date';
   const badge = document.createElement('span');
   badge.className = 'review-badge';
   badge.style.cssText = 'background:#444;cursor:pointer;';
@@ -1233,13 +1253,14 @@ function buildDueDateMarker(task, dateStr) {
   hint.textContent = '+ drop a role to add attendee';
   el.appendChild(hint);
 
-  // Drag to move
+  // Drag to move (alt+drag = copy)
   el.draggable = true;
   el.addEventListener('dragstart', e => {
     if (isResizing) { e.preventDefault(); return; }
-    dragPayload = { type: 'move', taskId: task.id };
+    const isCopy = e.altKey;
+    dragPayload = { type: isCopy ? 'copy' : 'move', taskId: task.id };
     e.dataTransfer.setData('text', JSON.stringify(dragPayload));
-    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.effectAllowed = isCopy ? 'copy' : 'move';
   });
   el.addEventListener('dragend', () => { dragPayload = null; });
 
@@ -1268,7 +1289,52 @@ function buildDueDateMarker(task, dateStr) {
     openPanel('add-attendee', task.date, task.id, pl.role, pl.category, pl.color, pl.person || null);
   });
 
+  // Resize handles: left on start, right on end/solo
+  if (isStart) {
+    const lh = document.createElement('span');
+    lh.className = 'chip-handle-l';
+    lh.textContent = '\u22ee\u22ee';
+    lh.addEventListener('mousedown', e => startResize(e, task.id, 'left'));
+    el.appendChild(lh);
+  }
+  if (isEnd) {
+    const rh = document.createElement('span');
+    rh.className = 'chip-handle-r';
+    rh.textContent = '\u22ee\u22ee';
+    rh.addEventListener('mousedown', e => startResize(e, task.id, 'right'));
+    el.appendChild(rh);
+  }
+
   return el;
+}
+
+// Slim bar rendered in mid/end cells of a multi-day key date
+function buildDueDateBar(task, dateStr, isEnd) {
+  const bar = document.createElement('div');
+  bar.className = 'duedate-bar ' + (isEnd ? 'duedate-bar-end' : 'duedate-bar-mid');
+  bar.dataset.taskId = task.id;
+
+  bar.addEventListener('click', e => { e.stopPropagation(); openPanel('edit-duedate', null, task.id); });
+
+  bar.draggable = true;
+  bar.addEventListener('dragstart', e => {
+    if (isResizing) { e.preventDefault(); return; }
+    const isCopy = e.altKey;
+    dragPayload = { type: isCopy ? 'copy' : 'move', taskId: task.id };
+    e.dataTransfer.setData('text', JSON.stringify(dragPayload));
+    e.dataTransfer.effectAllowed = isCopy ? 'copy' : 'move';
+  });
+  bar.addEventListener('dragend', () => { dragPayload = null; });
+
+  if (isEnd) {
+    const rh = document.createElement('span');
+    rh.className = 'chip-handle-r';
+    rh.textContent = '\u22ee\u22ee';
+    rh.addEventListener('mousedown', e => startResize(e, task.id, 'right'));
+    bar.appendChild(rh);
+  }
+
+  return bar;
 }
 
 function buildReviewBlock(task, dateStr) {
@@ -1747,8 +1813,8 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     const task = proj.tasks.find(t => t.id === taskId);
     if (!task) return;
     const mType2 = task.milestoneType || 'due-date';
-    const mEmoji2 = mType2 === 'milestone' ? '🎯' : mType2 === 'delivery' ? '📦' : '🏁';
-    const mLabel2 = mType2 === 'milestone' ? 'Milestone' : mType2 === 'delivery' ? 'Delivery' : 'Project Due Date';
+    const mEmoji2 = mType2 === 'milestone' ? '🎯' : mType2 === 'delivery' ? '📦' : mType2 === 'pto' ? '🏖' : '🏁';
+    const mLabel2 = mType2 === 'milestone' ? 'Milestone' : mType2 === 'delivery' ? 'Delivery' : mType2 === 'pto' ? 'PTO' : 'Project Due Date';
     panelContext = { mode: 'edit-duedate', taskId };
     const badge2 = document.getElementById('panelRoleBadge');
     badge2.textContent      = mEmoji2;
@@ -1909,6 +1975,7 @@ const TYPE_SWITCHER_DEFS = [
   { label: 'Project Due Date',  dot: '#555' },
   { label: 'Milestone',         dot: '#555' },
   { label: 'Delivery',          dot: '#555' },
+  { label: 'PTO',               dot: '#555' },
 ];
 
 function openTypeSwitcher(e, taskId, currentType) {
@@ -1955,12 +2022,11 @@ function convertTask(taskId, newType) {
   } else {
     task.isDueDate    = true;
     task.isReview     = false;
-    task.milestoneType = newType === 'Milestone' ? 'milestone' : newType === 'Delivery' ? 'delivery' : 'due-date';
+    task.milestoneType = newType === 'Milestone' ? 'milestone' : newType === 'Delivery' ? 'delivery' : newType === 'PTO' ? 'pto' : 'due-date';
     task.reviewLabel  = undefined;
     task.color        = '#3a3a52';
     task.role         = '';
     task.roleCategory = '';
-    delete task.endDate; // milestones are point-in-time
     if (!task.attendees) task.attendees = [];
   }
   saveState();
@@ -2082,8 +2148,8 @@ function buildHTMLExport() {
     const label = t.reviewLabel || 'Review';
 
     if (t.isDueDate) {
-      const mE = t.milestoneType === 'milestone' ? '🎯' : t.milestoneType === 'delivery' ? '📦' : '🏁';
-      const mDflt = t.milestoneType === 'milestone' ? 'Milestone' : t.milestoneType === 'delivery' ? 'Delivery' : 'Project Due Date';
+      const mE = t.milestoneType === 'milestone' ? '🎯' : t.milestoneType === 'delivery' ? '📦' : t.milestoneType === 'pto' ? '🏖' : '🏁';
+      const mDflt = t.milestoneType === 'milestone' ? 'Milestone' : t.milestoneType === 'delivery' ? 'Delivery' : t.milestoneType === 'pto' ? 'PTO' : 'Project Due Date';
       const dueLbl = mE + ' ' + (t.taskName || mDflt);
       hLines.push(`${fmtHtml(raw)}${escHtml(sep)}${escHtml(dueLbl)}`);
       pLines.push(`${fmtPlain(raw)}${sep}${dueLbl}`);
@@ -2128,8 +2194,8 @@ function buildTSV() {
     const sl = toDate(t.date);
     const el = t.endDate ? toDate(t.endDate) : sl;
     if (t.isDueDate) {
-      const tE = t.milestoneType === 'milestone' ? '🎯' : t.milestoneType === 'delivery' ? '📦' : '🏁';
-      const tD = t.milestoneType === 'milestone' ? 'Milestone' : t.milestoneType === 'delivery' ? 'Delivery' : 'Project Due Date';
+      const tE = t.milestoneType === 'milestone' ? '🎯' : t.milestoneType === 'delivery' ? '📦' : t.milestoneType === 'pto' ? '🏖' : '🏁';
+      const tD = t.milestoneType === 'milestone' ? 'Milestone' : t.milestoneType === 'delivery' ? 'Delivery' : t.milestoneType === 'pto' ? 'PTO' : 'Project Due Date';
       rows.push([sl, sl, tE + ' ' + (t.taskName || tD), '', '', '', 'Due Date'].join('\t'));
     } else if (t.isReview) {
       rows.push([sl, el, esc(t.taskName), '', 'Review', 'Review', 'Review'].join('\t'));
