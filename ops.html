@@ -990,8 +990,16 @@ function init() {
   document.getElementById('wkndBtn').addEventListener('click', () => {
     showWeekends = !showWeekends;
     document.getElementById('wkndBtn').classList.toggle('on', showWeekends);
-    if (viewMode === 'calendar') renderCalendar();
-    else renderTimeline();
+    if (viewMode === 'calendar') { renderCalendar(); return; }
+    // Capture the date at the centre of the viewport before columns change
+    const sc = document.getElementById('tlScroll');
+    const centrePixel = sc.scrollLeft - TL_NAME_W + (sc.clientWidth - TL_NAME_W) / 2;
+    const centreIdx   = Math.max(0, Math.min(tlDates.length - 1, Math.round(centrePixel / tlColW)));
+    const centreDate  = tlDates[centreIdx] || todayStr();
+    renderTimeline(); // rebuilds tlDates + tlDateMap with new weekend setting
+    // Restore scroll so the same date stays centred
+    const newCol = tlDateMap.get(centreDate) ?? tlDateMap.get(todayStr()) ?? 0;
+    sc.scrollLeft = Math.max(0, TL_NAME_W + newCol * tlColW - Math.round((sc.clientWidth - TL_NAME_W) / 2));
   });
 
   // Zoom in / out
