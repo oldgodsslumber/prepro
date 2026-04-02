@@ -206,7 +206,8 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 /* ── EXPORT PANEL ── */
 .export-row   { display: flex; align-items: stretch; border-top: 1px solid var(--border); flex-shrink: 0; }
 .export-panel { background: var(--panel); flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.export-toggle { display: flex; align-items: center; gap: 8px; padding: 8px 14px; font-size: 11px; font-weight: 700; color: var(--dim); letter-spacing: .07em; text-transform: uppercase; user-select: none; }
+.export-toggle { display: flex; align-items: center; gap: 8px; padding: 8px 14px; font-size: 11px; font-weight: 700; color: var(--dim); letter-spacing: .07em; text-transform: uppercase; user-select: none; cursor: pointer; transition: color .15s; }
+.export-toggle:hover { color: var(--text); }
 .export-chevron { font-size: 9px; transition: transform .2s; }
 .export-body   { display: none; height: 258px; flex-direction: column; }
 .export-body.visible { display: flex; }
@@ -231,15 +232,9 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .export-table tr:last-child td { border-bottom: none; }
 .export-table tr:hover td { background: rgba(255,255,255,.03); }
 
-/* ── ROSTER PANEL ── */
-.roster-panel   { width: 320px; flex-shrink: 0; background: var(--panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; }
-.roster-toggle  { display: flex; align-items: center; gap: 8px; padding: 8px 14px; cursor: pointer; font-size: 11px; font-weight: 700; color: var(--dim); letter-spacing: .07em; text-transform: uppercase; user-select: none; transition: color .15s; }
-.roster-toggle:hover { color: var(--text); }
-.roster-toggle.open .export-chevron { transform: rotate(180deg); }
-.roster-body    { display: none; flex: 1; flex-direction: column; overflow-y: auto; }
-.roster-body.visible { display: flex; }
-.roster-content { display: flex; flex-direction: column; gap: 0; padding: 6px 0 10px; flex: 1; }
-.roster-role    { border-bottom: 1px solid var(--border); padding: 6px 12px 8px; }
+/* ── ROSTER PANEL (rendered inside export-content) ── */
+.roster-content { display: flex; flex-direction: row; flex-wrap: wrap; gap: 0; padding: 4px 0 8px; width: 100%; overflow-y: auto; }
+.roster-role    { border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px 8px; margin: 4px; min-width: 160px; flex: 1; }
 .roster-role-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
 .roster-role-label  { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .07em; }
 .roster-names   { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 5px; min-height: 4px; }
@@ -253,8 +248,10 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .roster-add-btn  { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer; transition: opacity .15s; }
 .roster-add-btn:hover { opacity: .85; }
 .roster-suggestions { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 5px; }
-.roster-suggest-chip { background: transparent; border: 1px dashed var(--border); border-radius: 20px; padding: 2px 9px; font-size: 11px; color: var(--dim); cursor: pointer; transition: color .12s, border-color .12s; white-space: nowrap; }
+.roster-suggest-chip { display: inline-flex; align-items: center; gap: 3px; background: transparent; border: 1px dashed var(--border); border-radius: 20px; padding: 2px 6px 2px 9px; font-size: 11px; color: var(--dim); cursor: pointer; transition: color .12s, border-color .12s; white-space: nowrap; }
 .roster-suggest-chip:hover { color: var(--accent); border-color: var(--accent); }
+.roster-suggest-rm { font-size: 10px; color: var(--border); line-height: 1; padding: 0 1px; cursor: pointer; }
+.roster-suggest-rm:hover { color: var(--danger); }
 
 /* ── HELP BUTTON ── */
 .help-btn { position: fixed; bottom: 18px; left: 18px; width: 32px; height: 32px; border-radius: 50%; background: var(--card); border: 1px solid var(--border); color: var(--dim); font-size: 15px; font-weight: 700; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 400; text-decoration: none; transition: background .15s, color .15s, border-color .15s; }
@@ -380,11 +377,11 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
     <!-- EXPORT ROW -->
     <div class="export-row">
 
-      <!-- EXPORT PANEL -->
+      <!-- EXPORT / ROSTER PANEL (unified) -->
       <div class="export-panel">
-        <div class="export-toggle" id="exportToggle">
-          <span>Export Schedule</span>
-          <span class="htip" style="margin-left:6px;">?<span class="htip-popup">Four export formats: Text (paste into email/Word/Slack), Table/Excel (TSV), PNG (high-res calendar image), Trello Export (checklist for Trello/Planyway — only the category column is copied).</span></span>
+        <div class="export-toggle" id="exportToggle" style="cursor:pointer;">
+          <span class="export-chevron" id="exportChevron">▲</span>
+          <span>Schedule Tools</span>
         </div>
         <div class="export-body" id="exportBody">
           <div class="export-tabs">
@@ -392,20 +389,9 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
             <div class="export-tab" data-tab="table">Table / Excel</div>
             <div class="export-tab" data-tab="png">PNG</div>
             <div class="export-tab" data-tab="planyway">Trello Export</div>
+            <div class="export-tab" data-tab="roster">Role Assignees</div>
           </div>
           <div class="export-content" id="exportContent"></div>
-        </div>
-      </div>
-
-      <!-- ROLE ASSIGNEES PANEL -->
-      <div class="roster-panel">
-        <div class="roster-toggle" id="rosterToggle">
-          <span class="export-chevron">▲</span>
-          <span>Role Assignees</span>
-          <span class="htip" style="margin-left:6px;">?<span class="htip-popup">Add your project team here — one list per role. Resets for each new project. Dashed chips are people from previous projects; click to add them instantly. Names added here populate the Person dropdown when creating tasks.</span></span>
-        </div>
-        <div class="roster-body" id="rosterBody">
-          <div class="roster-content" id="rosterContent"></div>
         </div>
       </div>
 
@@ -517,6 +503,11 @@ function getHistorySuggestions(role) {
   const current = getRosterNames(role);
   return (nameHistory[role] || []).filter(n => !current.includes(n));
 }
+function removeFromHistory(role, name) {
+  if (!nameHistory[role]) return;
+  nameHistory[role] = nameHistory[role].filter(n => n !== name);
+  saveNameHistory();
+}
 
 // ── PERSISTENCE ──
 function loadState() {
@@ -622,10 +613,6 @@ function renderTreeLevel(parentId, depth, container) {
       renderSidebar();
       renderCalendar();
       if (exportOpen) renderExportPanel();
-      // Collapse roster when switching to an existing project
-      rosterOpen = false;
-      document.getElementById('rosterToggle').classList.remove('open');
-      document.getElementById('rosterBody').classList.remove('visible');
     });
     node.addEventListener('contextmenu', e => { e.preventDefault(); openContextMenu(e, proj.id); });
 
@@ -1967,9 +1954,12 @@ function populatePersonDropdown(role) {
 }
 
 function renderRosterPanel() {
-  const content = document.getElementById('rosterContent');
+  const content = document.getElementById('exportContent');
   if (!content) return;
   content.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.className = 'roster-content';
+  content.appendChild(wrap);
 
   const roles = ROLE_CATS.flatMap(cat => cat.roles).filter(r => r !== 'Other');
 
@@ -2018,13 +2008,26 @@ function renderRosterPanel() {
       suggestions.forEach(name => {
         const chip = document.createElement('div');
         chip.className = 'roster-suggest-chip';
-        chip.textContent = '+ ' + name;
-        chip.title = 'Add to this project';
-        chip.addEventListener('click', () => {
+        chip.title = 'Click to add to this project';
+        const addSpan = document.createElement('span');
+        addSpan.textContent = '+ ' + name;
+        addSpan.addEventListener('click', e => {
+          e.stopPropagation();
           addToRoster(role, name);
           renderRosterPanel();
           if (panelContext && panelContext.role === role) populatePersonDropdown(role);
         });
+        const rmSpan = document.createElement('span');
+        rmSpan.className = 'roster-suggest-rm';
+        rmSpan.textContent = '×';
+        rmSpan.title = 'Remove from suggestions';
+        rmSpan.addEventListener('click', e => {
+          e.stopPropagation();
+          removeFromHistory(role, name);
+          renderRosterPanel();
+        });
+        chip.appendChild(addSpan);
+        chip.appendChild(rmSpan);
         suggestRow.appendChild(chip);
       });
       section.appendChild(suggestRow);
@@ -2056,7 +2059,7 @@ function renderRosterPanel() {
     addRow.appendChild(input);
     addRow.appendChild(addBtn);
     section.appendChild(addRow);
-    content.appendChild(section);
+    wrap.appendChild(section);
   });
 }
 
@@ -2165,6 +2168,10 @@ function renderExportPanel() {
     wrap.appendChild(table);
     content.appendChild(actions);
     content.appendChild(wrap);
+
+  } else if (exportTabActive === 'roster') {
+    renderRosterPanel();
+    return;
 
   } else {
     const proj = getProject(activeProjectId);
@@ -2670,8 +2677,9 @@ function init() {
   renderSidebar();
   renderCalendar();
 
-  // Open export panel on load
-  document.getElementById('exportToggle').classList.add('open');
+  // Open panel on load
+  exportOpen = true;
+  document.getElementById('exportChevron').style.transform = '';
   document.getElementById('exportBody').classList.add('visible');
   renderExportPanel();
 
@@ -2684,11 +2692,11 @@ function init() {
       calEarliestDate = null;
       renderSidebar();
       renderCalendar();
-      // Open roster for new projects so team can be set up immediately
-      rosterOpen = true;
-      document.getElementById('rosterToggle').classList.add('open');
-      document.getElementById('rosterBody').classList.add('visible');
-      renderRosterPanel();
+      // Switch to Role Assignees tab for new projects so team can be set up immediately
+      exportTabActive = 'roster';
+      localStorage.setItem('prepro_export_tab', exportTabActive);
+      document.querySelectorAll('.export-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'roster'));
+      renderExportPanel();
     }
   });
 
@@ -2742,9 +2750,13 @@ function init() {
     if (!document.getElementById('typeSwitcher').contains(e.target)) closeTypeSwitcher();
   });
 
-  // Export panel
-  // Export toggle — header label only, no collapse
-  document.getElementById('exportToggle').style.cursor = 'default';
+  // Export/Roster panel — chevron toggles open/close
+  document.getElementById('exportToggle').addEventListener('click', () => {
+    exportOpen = !exportOpen;
+    document.getElementById('exportChevron').style.transform = exportOpen ? '' : 'rotate(180deg)';
+    document.getElementById('exportBody').classList.toggle('visible', exportOpen);
+    if (exportOpen) renderExportPanel();
+  });
 
   document.querySelectorAll('.export-tab').forEach(tab => {
     if (tab.dataset.tab === exportTabActive) tab.classList.add('active');
@@ -2757,17 +2769,6 @@ function init() {
       if (exportOpen) renderExportPanel();
     });
   });
-
-  // Roster panel
-  document.getElementById('rosterToggle').addEventListener('click', () => {
-    rosterOpen = !rosterOpen;
-    document.getElementById('rosterToggle').classList.toggle('open', rosterOpen);
-    document.getElementById('rosterBody').classList.toggle('visible', rosterOpen);
-    if (rosterOpen) renderRosterPanel();
-  });
-
-  // Roster starts closed on load (existing projects); opens automatically for new projects
-  rosterOpen = false;
 }
 
 init();
