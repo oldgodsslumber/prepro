@@ -2137,12 +2137,25 @@ function populatePersonDropdown(role) {
   const sel   = document.getElementById('panelPerson');
   const other = document.getElementById('panelPersonOther');
   if (!sel) return;
-  const names = getRosterNames(role);
+
+  // Combine explicit roster names with names already used in tasks for this role
+  const rosterNames = getRosterNames(role);
+  const taskNames   = new Set();
+  const proj = getProject(activeProjectId);
+  if (proj) {
+    (proj.tasks || []).forEach(t => {
+      if (t.role === role && t.person) taskNames.add(t.person);
+      // Also pick up attendees with this role
+      (t.attendees || []).forEach(a => { if (a.role === role && a.person) taskNames.add(a.person); });
+    });
+  }
+  const allNames = [...new Set([...rosterNames, ...taskNames])].sort();
+
   sel.innerHTML = '';
   const blank = document.createElement('option');
   blank.value = ''; blank.textContent = '—';
   sel.appendChild(blank);
-  names.forEach(n => {
+  allNames.forEach(n => {
     const opt = document.createElement('option');
     opt.value = n; opt.textContent = n;
     sel.appendChild(opt);
