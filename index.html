@@ -824,6 +824,7 @@ function renderPalette() {
   };
   keyGrp.appendChild(mkDueChip('Project Due Date', '🏁', 'Project Due Date'));
   keyGrp.appendChild(mkDueChip('Milestone', '🎯', 'Milestone'));
+  keyGrp.appendChild(mkDueChip('Delivery', '📦', 'Delivery'));
   pal.appendChild(keyGrp);
 
   // ── PERSON QUICK-CHIPS (from active project roster) ──
@@ -1098,7 +1099,7 @@ function makeCell(dayNum, dateStr, todayStr, laneArr) {
     } else if (pl.type === 'duedate') {
       const proj = getProject(activeProjectId);
       if (!proj) return;
-      proj.tasks.push({ id: genId(), date: dateStr, isDueDate: true, milestoneType: pl.defaultLabel === 'Milestone' ? 'milestone' : 'due-date', color: '#3a3a52', role: '', roleCategory: '', attendees: [], taskName: pl.defaultLabel || null });
+      proj.tasks.push({ id: genId(), date: dateStr, isDueDate: true, milestoneType: pl.defaultLabel === 'Milestone' ? 'milestone' : pl.defaultLabel === 'Delivery' ? 'delivery' : 'due-date', color: '#3a3a52', role: '', roleCategory: '', attendees: [], taskName: pl.defaultLabel || null });
       saveState(); renderCalendar(); if (exportOpen) renderExportPanel();
     } else if (pl.type === 'review') {
       openPanel('create-review', dateStr, null, pl.label || 'Review', null, REVIEW_COLOR);
@@ -1173,16 +1174,18 @@ function buildDueDateMarker(task, dateStr) {
   // Header
   const hd = document.createElement('div');
   hd.className = 'duedate-hd';
-  const isMilestone = task.milestoneType === 'milestone';
+  const mType = task.milestoneType || 'due-date';
+  const mEmoji = mType === 'milestone' ? '🎯' : mType === 'delivery' ? '📦' : '🏁';
+  const mLabel = mType === 'milestone' ? 'Milestone' : mType === 'delivery' ? 'Delivery' : 'Project Due Date';
   const badge = document.createElement('span');
   badge.className = 'review-badge';
   badge.style.cssText = 'background:#444;cursor:pointer;';
-  badge.textContent = isMilestone ? '🎯 Milestone' : '🏁 Key Date';
+  badge.textContent = mEmoji + ' ' + (mType === 'due-date' ? 'Key Date' : mLabel);
   badge.title = 'Click to change type';
-  badge.addEventListener('click', e => { e.stopPropagation(); openTypeSwitcher(e, task.id, isMilestone ? 'Milestone' : 'Project Due Date'); });
+  badge.addEventListener('click', e => { e.stopPropagation(); openTypeSwitcher(e, task.id, mLabel); });
   const titleSpan = document.createElement('span');
   titleSpan.className = 'review-title';
-  titleSpan.textContent = task.taskName || (isMilestone ? 'Milestone' : 'Project Due Date');
+  titleSpan.textContent = task.taskName || mLabel;
   hd.appendChild(badge);
   hd.appendChild(titleSpan);
   el.appendChild(hd);
@@ -1719,14 +1722,16 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     if (!proj) return;
     const task = proj.tasks.find(t => t.id === taskId);
     if (!task) return;
-    const isMilestone = task.milestoneType === 'milestone';
+    const mType2 = task.milestoneType || 'due-date';
+    const mEmoji2 = mType2 === 'milestone' ? '🎯' : mType2 === 'delivery' ? '📦' : '🏁';
+    const mLabel2 = mType2 === 'milestone' ? 'Milestone' : mType2 === 'delivery' ? 'Delivery' : 'Project Due Date';
     panelContext = { mode: 'edit-duedate', taskId };
     const badge2 = document.getElementById('panelRoleBadge');
-    badge2.textContent      = isMilestone ? '🎯' : '🏁';
+    badge2.textContent      = mEmoji2;
     badge2.style.background = '#444';
     badge2.style.cursor     = 'pointer';
     badge2.title            = 'Click to change type';
-    badge2.onclick          = e => { closePanel(); openTypeSwitcher(e, taskId, isMilestone ? 'Milestone' : 'Project Due Date'); };
+    badge2.onclick          = e => { closePanel(); openTypeSwitcher(e, taskId, mLabel2); };
     document.getElementById('panelDateLabel').textContent      = fmtDateLabel(task.date);
     fieldPerson.style.display = 'none';
     fieldLOE.style.display    = 'none';
@@ -1879,6 +1884,7 @@ const TYPE_SWITCHER_DEFS = [
   { sep: true },
   { label: 'Project Due Date',  dot: '#555' },
   { label: 'Milestone',         dot: '#555' },
+  { label: 'Delivery',          dot: '#555' },
 ];
 
 function openTypeSwitcher(e, taskId, currentType) {
@@ -1925,7 +1931,7 @@ function convertTask(taskId, newType) {
   } else {
     task.isDueDate    = true;
     task.isReview     = false;
-    task.milestoneType = newType === 'Milestone' ? 'milestone' : 'due-date';
+    task.milestoneType = newType === 'Milestone' ? 'milestone' : newType === 'Delivery' ? 'delivery' : 'due-date';
     task.reviewLabel  = undefined;
     task.color        = '#3a3a52';
     task.role         = '';
@@ -2052,7 +2058,9 @@ function buildHTMLExport() {
     const label = t.reviewLabel || 'Review';
 
     if (t.isDueDate) {
-      const dueLbl = '🏁 ' + (t.taskName || 'Project Due Date');
+      const mE = t.milestoneType === 'milestone' ? '🎯' : t.milestoneType === 'delivery' ? '📦' : '🏁';
+      const mDflt = t.milestoneType === 'milestone' ? 'Milestone' : t.milestoneType === 'delivery' ? 'Delivery' : 'Project Due Date';
+      const dueLbl = mE + ' ' + (t.taskName || mDflt);
       hLines.push(`${fmtHtml(raw)}${escHtml(sep)}${escHtml(dueLbl)}`);
       pLines.push(`${fmtPlain(raw)}${sep}${dueLbl}`);
     } else if (t.isReview) {
@@ -2096,7 +2104,9 @@ function buildTSV() {
     const sl = toDate(t.date);
     const el = t.endDate ? toDate(t.endDate) : sl;
     if (t.isDueDate) {
-      rows.push([sl, sl, '🏁 ' + (t.taskName || 'Project Due Date'), '', '', '', 'Due Date'].join('\t'));
+      const tE = t.milestoneType === 'milestone' ? '🎯' : t.milestoneType === 'delivery' ? '📦' : '🏁';
+      const tD = t.milestoneType === 'milestone' ? 'Milestone' : t.milestoneType === 'delivery' ? 'Delivery' : 'Project Due Date';
+      rows.push([sl, sl, tE + ' ' + (t.taskName || tD), '', '', '', 'Due Date'].join('\t'));
     } else if (t.isReview) {
       rows.push([sl, el, esc(t.taskName), '', 'Review', 'Review', 'Review'].join('\t'));
       if (t.attendees) {
@@ -2395,7 +2405,9 @@ function renderExportPanel() {
       const el = t.endDate ? toDate(t.endDate) : sl;
       if (t.isDueDate) {
         const row = tbody.insertRow();
-        ['🏁 ' + (t.taskName || 'Project Due Date'), sl, sl, '', '', '', 'Due Date'].forEach((val, i) => {
+        const tblE = t.milestoneType === 'milestone' ? '🎯' : t.milestoneType === 'delivery' ? '📦' : '🏁';
+        const tblD = t.milestoneType === 'milestone' ? 'Milestone' : t.milestoneType === 'delivery' ? 'Delivery' : 'Project Due Date';
+        [tblE + ' ' + (t.taskName || tblD), sl, sl, '', '', '', 'Due Date'].forEach((val, i) => {
           const td = row.insertCell(); td.textContent = val;
           if (i === 0) td.style.fontWeight = '700';
         });
@@ -2811,8 +2823,9 @@ function exportPNG() {
         ctx.fillStyle = '#fff';
         ctx.font = `${7*SC}px system-ui,sans-serif`;
         ctx.textAlign = 'left';
-        const mIcon = m.milestoneType === 'milestone' ? '🎯' : '🏁';
-        ctx.fillText(mIcon + ' ' + (m.taskName || (m.milestoneType === 'milestone' ? 'Milestone' : 'Project Due Date')), cx + 7*SC, ty + 9*SC);
+        const mIcon = m.milestoneType === 'milestone' ? '🎯' : m.milestoneType === 'delivery' ? '📦' : '🏁';
+        const mDflt = m.milestoneType === 'milestone' ? 'Milestone' : m.milestoneType === 'delivery' ? 'Delivery' : 'Project Due Date';
+        ctx.fillText(mIcon + ' ' + (m.taskName || mDflt), cx + 7*SC, ty + 9*SC);
         // Attendee bullet rows
         if (exportPNGAttendees && m.attendees) {
           m.attendees.forEach((att, i) => {
