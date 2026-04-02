@@ -1005,6 +1005,7 @@ function renderCalendar() {
     empty.classList.remove('hidden');
     calArea.classList.add('hidden');
     teardownCalObserver();
+    renderPalette();
     return;
   }
   empty.classList.add('hidden');
@@ -1033,6 +1034,7 @@ function renderCalendar() {
       calScrollRaf = requestAnimationFrame(() => { calScrollRaf = null; updateCalTitle(); });
     }, { passive: true });
   }
+  renderPalette();
 }
 
 function isWeekend(dow) { return dow === 0 || dow === 6; }
