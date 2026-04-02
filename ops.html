@@ -281,7 +281,23 @@ function loadState() {
   } catch(e) {}
   return { projects: [] };
 }
-const state = loadState();
+let state = loadState();
+
+function reloadState() {
+  state = loadState();
+  renderFilterChips();
+  renderWorkload();
+  if (viewMode === 'person') renderTimeline();
+  else renderCalendar();
+}
+
+// Re-read when index.html saves — fires in this tab when another tab writes localStorage
+window.addEventListener('storage', e => {
+  if (e.key === 'prepro_data') reloadState();
+});
+
+// Also re-read on tab focus (covers same-window navigation or manual edits)
+window.addEventListener('focus', reloadState);
 
 // ── TRELLO CATEGORY LOGIC (mirrors index.html) ──
 const PW_PRE = [
