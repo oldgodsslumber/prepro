@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PRE-PRO — Ops Mode</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #0d0d12;
+  --panel:   #16161e;
+  --card:    #1e1e28;
+  --border:  #2c2c3e;
+  --text:    #e0e0ec;
+  --dim:     #8080a0;
+  --accent:  #6c63ff;
+  --danger:  #e05555;
+  --cat-pre:   #4a90d9;
+  --cat-prod:  #6c63ff;
+  --cat-post:  #e07b39;
+  --cat-edit:  #4cba6a;
+  --cat-anim:  #7c5cbf;
+  --cat-shoot: #c0394f;
+}
+
+body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-system,sans-serif; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+
+/* ── HEADER ── */
+.ops-header { display: flex; align-items: center; gap: 14px; padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.ops-header-title { font-size: 13px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+.ops-header-sub { font-size: 11px; color: var(--dim); }
+.ops-header-spacer { flex: 1; }
+.ops-back { font-size: 11px; font-weight: 600; color: var(--dim); text-decoration: none; background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 4px 12px; transition: color .15s, border-color .15s; }
+.ops-back:hover { color: var(--text); border-color: var(--dim); }
+.ops-wknd-btn { font-size: 11px; font-weight: 600; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 4px 12px; cursor: pointer; transition: all .15s; }
+.ops-wknd-btn.on { background: rgba(108,99,255,.18); color: var(--accent); border-color: var(--accent); }
+
+/* ── CALENDAR NAV ── */
+.cal-nav { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--panel); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.cal-nav-title { font-size: 12px; font-weight: 600; color: var(--text); flex: 1; }
+.btn-today { font-size: 11px; font-weight: 600; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+.btn-today:hover { color: var(--text); }
+
+/* ── CALENDAR ── */
+.cal-dow-row { display: grid; flex-shrink: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 8px 8px 0 0; border-bottom: none; }
+.cal-dow  { background: var(--card); text-align: center; font-size: 10px; font-weight: 700; color: var(--dim); padding: 6px 2px; text-transform: uppercase; letter-spacing: .07em; }
+.cal-scroll { flex: 1; overflow-y: auto; overflow-anchor: none; min-height: 0; padding-bottom: 4px; }
+.cal-sentinel { height: 1px; }
+.cal-grid { display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px; overflow: hidden; }
+.cal-day  { background: var(--card); min-height: 88px; padding: 5px; display: flex; flex-direction: column; gap: 3px; }
+.cal-day.neighbor { background: var(--panel); }
+.cal-day.neighbor .cal-day-num { color: #3a3a55; }
+.cal-day-num { font-size: 11px; font-weight: 600; color: var(--dim); line-height: 1; margin-bottom: 2px; flex-shrink: 0; display: flex; align-items: center; gap: 4px; }
+.cal-day-num span { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; }
+.cal-day.today .cal-day-num span { background: var(--accent); color: #fff; }
+.cal-day-month-label { font-size: 9px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .07em; }
+
+/* ── OPS TASK CHIPS ── */
+.ops-chip { font-size: 10px; font-weight: 500; border-radius: 4px; padding: 2px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff; flex-shrink: 0; display: flex; align-items: center; gap: 4px; }
+.ops-chip-cat { font-size: 8px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; opacity: .85; flex-shrink: 0; }
+.ops-chip-person { font-weight: 600; flex-shrink: 0; }
+.ops-chip-task { opacity: .8; overflow: hidden; text-overflow: ellipsis; }
+.ops-chip.dimmed { opacity: .18; }
+
+/* ── BOTTOM PANEL ── */
+.ops-bottom { display: flex; border-top: 1px solid var(--border); flex-shrink: 0; background: var(--panel); height: 200px; }
+
+/* Workload table (left) */
+.ops-workload { flex: 1; min-width: 0; overflow-y: auto; padding: 8px 14px; border-right: 1px solid var(--border); }
+.ops-workload-title { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; }
+.ops-wl-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.ops-wl-table th { text-align: left; font-size: 9px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .07em; padding: 2px 8px 4px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.ops-wl-table th:first-child { padding-left: 0; }
+.ops-wl-table td { padding: 3px 8px; border-bottom: 1px solid rgba(44,44,62,.5); white-space: nowrap; }
+.ops-wl-table td:first-child { padding-left: 0; color: var(--text); font-weight: 600; }
+.ops-wl-table tr:last-child td { border-bottom: none; }
+.wl-score { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; }
+.wl-badge { font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; color: #fff; }
+
+/* Filters (right) */
+.ops-filters { width: 280px; flex-shrink: 0; padding: 8px 14px; overflow-y: auto; }
+.ops-filters-title { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
+.ops-filter-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.ops-person-chip { display: inline-flex; align-items: center; gap: 5px; background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px; font-size: 11px; font-weight: 600; color: var(--text); cursor: pointer; transition: all .15s; user-select: none; }
+.ops-person-chip .chip-dot { width: 7px; height: 7px; border-radius: 50%; }
+.ops-person-chip.off { opacity: .35; }
+.ops-person-chip:hover { border-color: var(--accent); }
+
+/* ── EMPTY STATE ── */
+.ops-empty { display: flex; align-items: center; justify-content: center; flex: 1; color: var(--dim); font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div class="ops-header">
+  <span class="ops-header-title">Ops</span>
+  <span class="ops-header-sub">Internal team workload view</span>
+  <div class="ops-header-spacer"></div>
+  <button class="ops-wknd-btn" id="wkndBtn">Show Weekends</button>
+  <a href="index.html" class="ops-back">← PRE-PRO</a>
+</div>
+
+<div class="cal-nav">
+  <div class="cal-nav-title" id="calTitle"></div>
+  <button class="btn-today" id="btnToday">Today</button>
+</div>
+
+<div class="cal-dow-row" id="calDowRow"></div>
+
+<div class="cal-scroll" id="calScroll">
+  <div id="calTopSentinel" class="cal-sentinel"></div>
+  <div class="cal-grid" id="calGrid"></div>
+  <div id="calBottomSentinel" class="cal-sentinel"></div>
+</div>
+
+<div class="ops-bottom">
+  <div class="ops-workload">
+    <div class="ops-workload-title">Team Workload</div>
+    <table class="ops-wl-table" id="wlTable">
+      <thead>
+        <tr>
+          <th>Person</th>
+          <th>Today</th>
+          <th>This Week</th>
+          <th>Next Week</th>
+        </tr>
+      </thead>
+      <tbody id="wlBody"></tbody>
+    </table>
+  </div>
+  <div class="ops-filters">
+    <div class="ops-filters-title">Filter Team</div>
+    <div class="ops-filter-chips" id="filterChips"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ── CONSTANTS ──
+const LOE_PTS = { low: 1, medium: 2, high: 3 };
+const CAT_COLORS = {
+  'Pre-Production': '#4a90d9',
+  'Producing':      '#6c63ff',
+  'Post-Producing': '#e07b39',
+  'Editing':        '#4cba6a',
+  'Animation':      '#7c5cbf',
+  'Production':     '#c0394f',
+};
+const DOW_ALL = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const DOW_WD  = ['Mon','Tue','Wed','Thu','Fri'];
+const MONTHS  = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const SHOOT_LABELS = ['Studio Shoot','On-Location Shoot'];
+
+// ── STATE ──
+let showWeekends = false;
+let hiddenPeople = new Set(); // person names toggled off
+let calEarliestDate = null;
+let calLatestDate   = null;
+let calObserver     = null;
+
+// ── LOAD DATA ──
+function loadState() {
+  try {
+    const r = localStorage.getItem('prepro_data');
+    if (r) return JSON.parse(r);
+  } catch(e) {}
+  return { projects: [] };
+}
+const state = loadState();
+
+// ── TRELLO CATEGORY LOGIC (mirrors index.html) ──
+const PW_PRE = [
+  'script','scripting','scripts','storyboard','storyboarding','storyboards',
+  'schedules','schedule','copywriting','copywrite','copyediting','copyedit',
+  'meeting','brief','concept','concepting','conceptual','planning','prep',
+  'pre-production','writing','write','design','designing','discovery',
+  'brainstorm','brainstorming','location scouting','location scout','scouting',
+  'scout','shotlist','shot list','shot-list','treatment','outline','research',
+  'interview','kickoff','kick-off','kick off','casting','cast',
+  'voice over','voice-over','voiceover','voice talent','voice artist','voice actor',
+  'vo session','vo direction','vendor billing','vendor prep','vendor payment',
+  'procurement','vendor onboard','vendor brief',
+  'illustration','illustrate','illustrating','illustrations'
+];
+const PW_POST = [
+  'animation','edit','editing','motion','vfx','visual effects',
+  'drafting','v1','v2','vf','revision','revisions','revise',
+  'post','post-production','color','colour','grade','color correct','colour correct',
+  'mix','audio mix','sound mix','sound design',
+  'delivery','deliverable','feedback','approval','sign-off','sign off'
+];
+
+function getProducerCat(name) {
+  const n = (name || '').toLowerCase();
+  if (PW_PRE.some(k => n.includes(k))) return 'Pre-Production';
+  if (PW_POST.some(k => n.includes(k))) return 'Post-Producing';
+  return 'Producing';
+}
+
+function getTaskCat(task) {
+  if (task.isReview) {
+    if (SHOOT_LABELS.includes(task.reviewLabel)) return 'Production';
+    return getProducerCat(task.taskName);
+  }
+  const role = (task.role || '').toLowerCase();
+  if (role === 'editor')   return 'Editing';
+  if (role === 'animator') return 'Animation';
+  if (role === 'producer') return getProducerCat(task.taskName);
+  return null;
+}
+
+// ── COLLECT ALL OPS TASKS ──
+// Returns flat list of { date, endDate, person, cat, taskName, loe, color, projectName }
+function getOpsEntries() {
+  const entries = [];
+  (state.projects || []).forEach(proj => {
+    (proj.tasks || []).forEach(task => {
+      if (task.isDueDate) return;
+      const loe = task.loe || 'medium';
+      if (task.isReview) {
+        const cat = getTaskCat(task);
+        const color = CAT_COLORS[cat] || '#6c63ff';
+        const internalAtts = (task.attendees || []).filter(a => a.category === 'Internal Team');
+        if (internalAtts.length) {
+          internalAtts.forEach(att => {
+            entries.push({ date: task.date, endDate: task.endDate || task.date, person: att.person || att.role, cat, taskName: task.taskName || task.reviewLabel || 'Review', loe, color, projectName: proj.name });
+          });
+        }
+        return;
+      }
+      if (task.roleCategory !== 'Internal Team') return;
+      const cat = getTaskCat(task);
+      if (!cat) return;
+      const color = CAT_COLORS[cat] || '#6c63ff';
+      entries.push({ date: task.date, endDate: task.endDate || task.date, person: task.person || task.role, cat, taskName: task.taskName || '(untitled)', loe, color, projectName: proj.name });
+    });
+  });
+  return entries;
+}
+
+// ── PEOPLE LIST ──
+function getAllPeople() {
+  const people = new Set();
+  getOpsEntries().forEach(e => { if (e.person) people.add(e.person); });
+  return [...people].sort();
+}
+
+// ── WORKLOAD ──
+function loePts(loe) { return LOE_PTS[loe] || 2; }
+
+function dateInRange(dateStr, startStr, endStr) {
+  return dateStr >= startStr && dateStr <= endStr;
+}
+
+function rangesOverlap(s1, e1, s2, e2) {
+  return s1 <= e2 && e1 >= s2;
+}
+
+function getWorkload(person, windowStart, windowEnd) {
+  let pts = 0;
+  getOpsEntries().forEach(e => {
+    if (e.person !== person) return;
+    if (rangesOverlap(e.date, e.endDate, windowStart, windowEnd)) {
+      pts += loePts(e.loe);
+    }
+  });
+  return pts;
+}
+
+function workloadInfo(pts) {
+  if (pts === 0) return { label: '—',            color: '#4a4a60', emoji: '' };
+  if (pts <= 2)  return { label: 'Light',         color: '#4cba6a', emoji: '🟢' };
+  if (pts <= 3)  return { label: 'Manageable',    color: '#9ab84c', emoji: '🟡' };
+  if (pts === 4) return { label: 'Busy',          color: '#e07b39', emoji: '🟠' };
+  if (pts === 5) return { label: 'Very Busy',     color: '#c0394f', emoji: '🔴' };
+  return            { label: 'Overloaded',     color: '#8b1a2a', emoji: '🚨' };
+}
+
+function fmtDate(y, m, d) {
+  return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+function getWeekStart(dateStr) {
+  const d = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
+  const day = d.getDay(); // 0=Sun
+  const mon = new Date(d);
+  mon.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+  return fmtDate(mon.getFullYear(), mon.getMonth() + 1, mon.getDate());
+}
+
+function addDays(dateStr, n) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+}
+
+function todayStr() {
+  const d = new Date();
+  return fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+}
+
+// ── WORKLOAD TABLE ──
+function renderWorkload() {
+  const tbody = document.getElementById('wlBody');
+  tbody.innerHTML = '';
+  const people = getAllPeople();
+  if (!people.length) { tbody.innerHTML = '<tr><td colspan="4" style="color:var(--dim);padding:8px 0">No internal team tasks found</td></tr>'; return; }
+
+  const today = todayStr();
+  const thisWeekStart = getWeekStart(today);
+  const thisWeekEnd   = addDays(thisWeekStart, 6);
+  const nextWeekStart = addDays(thisWeekStart, 7);
+  const nextWeekEnd   = addDays(thisWeekStart, 13);
+
+  people.forEach(person => {
+    const todayPts   = getWorkload(person, today, today);
+    const thisWkPts  = getWorkload(person, thisWeekStart, thisWeekEnd);
+    const nextWkPts  = getWorkload(person, nextWeekStart, nextWeekEnd);
+
+    const tr = document.createElement('tr');
+    if (hiddenPeople.has(person)) tr.style.opacity = '.3';
+
+    const mkCell = pts => {
+      const info = workloadInfo(pts);
+      const td = document.createElement('td');
+      td.innerHTML = `<span class="wl-score">${info.emoji ? info.emoji + ' ' : ''}<span style="color:${info.color};font-weight:600">${pts > 0 ? pts + ' · ' : ''}${info.label}</span></span>`;
+      return td;
+    };
+
+    const nameTd = document.createElement('td');
+    nameTd.textContent = person;
+    tr.appendChild(nameTd);
+    tr.appendChild(mkCell(todayPts));
+    tr.appendChild(mkCell(thisWkPts));
+    tr.appendChild(mkCell(nextWkPts));
+    tbody.appendChild(tr);
+  });
+}
+
+// ── FILTER CHIPS ──
+function renderFilterChips() {
+  const container = document.getElementById('filterChips');
+  container.innerHTML = '';
+  const people = getAllPeople();
+  if (!people.length) { container.textContent = 'No internal team members found.'; return; }
+
+  // Collect person → color from their most common category
+  const personColors = {};
+  getOpsEntries().forEach(e => { if (e.person && !personColors[e.person]) personColors[e.person] = e.color; });
+
+  people.forEach(person => {
+    const chip = document.createElement('div');
+    chip.className = 'ops-person-chip' + (hiddenPeople.has(person) ? ' off' : '');
+    const dot = document.createElement('span');
+    dot.className = 'chip-dot';
+    dot.style.background = personColors[person] || '#6c63ff';
+    const lbl = document.createElement('span');
+    lbl.textContent = person;
+    chip.appendChild(dot);
+    chip.appendChild(lbl);
+    chip.addEventListener('click', () => {
+      if (hiddenPeople.has(person)) hiddenPeople.delete(person);
+      else hiddenPeople.add(person);
+      renderFilterChips();
+      renderWorkload();
+      renderCalendar();
+    });
+    container.appendChild(chip);
+  });
+}
+
+// ── CALENDAR ──
+const WEEKS_INIT_BEFORE = 12;
+const WEEKS_INIT_AFTER  = 24;
+const WEEKS_EXTEND      = 8;
+
+function resetCalRange() {
+  const today = todayStr();
+  const mon = getWeekStart(today);
+  const before = new Date(mon + 'T00:00:00');
+  before.setDate(before.getDate() - WEEKS_INIT_BEFORE * 7);
+  calEarliestDate = fmtDate(before.getFullYear(), before.getMonth() + 1, before.getDate());
+  const after = new Date(mon + 'T00:00:00');
+  after.setDate(after.getDate() + WEEKS_INIT_AFTER * 7);
+  calLatestDate = fmtDate(after.getFullYear(), after.getMonth() + 1, after.getDate());
+}
+
+function renderDowHeader() {
+  const row = document.getElementById('calDowRow');
+  const cols = showWeekends ? 7 : 5;
+  const dows = showWeekends ? DOW_ALL : DOW_WD;
+  row.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  row.innerHTML = '';
+  dows.forEach(d => {
+    const cell = document.createElement('div');
+    cell.className = 'cal-dow';
+    cell.textContent = d;
+    row.appendChild(cell);
+  });
+}
+
+function getWeeksInRange() {
+  const weeks = [];
+  let cur = new Date(calEarliestDate + 'T00:00:00');
+  const end = new Date(calLatestDate + 'T00:00:00');
+  while (cur <= end) {
+    weeks.push(fmtDate(cur.getFullYear(), cur.getMonth() + 1, cur.getDate()));
+    cur.setDate(cur.getDate() + 7);
+  }
+  return weeks;
+}
+
+function getOpsEntriesForDate(dateStr) {
+  return getOpsEntries().filter(e => dateStr >= e.date && dateStr <= e.endDate);
+}
+
+function renderCalendar() {
+  const cols = showWeekends ? 7 : 5;
+  renderDowHeader();
+
+  const grid = document.getElementById('calGrid');
+  grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  grid.innerHTML = '';
+
+  const today = todayStr();
+  const dows = showWeekends ? [0,1,2,3,4,5,6] : [1,2,3,4,5]; // 0=Sun
+
+  const weekStarts = getWeeksInRange();
+  weekStarts.forEach(weekStart => {
+    const weekStartD = new Date(weekStart + 'T00:00:00');
+    dows.forEach(dow => {
+      const d = new Date(weekStartD);
+      d.setDate(weekStartD.getDate() + (dow === 0 ? (showWeekends ? 6 : 0) : dow - (showWeekends ? 0 : 1)));
+      // For show-weekdays: Mon=1..Fri=5 → offset 0..4 from Monday
+      // Simpler: build date array per week
+      const cell = document.createElement('div');
+      const dateStr = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+      cell.className = 'cal-day' + (dateStr === today ? ' today' : '');
+      cell.dataset.date = dateStr;
+
+      // Day number
+      const num = document.createElement('div');
+      num.className = 'cal-day-num';
+      const numSpan = document.createElement('span');
+      numSpan.textContent = d.getDate();
+      num.appendChild(numSpan);
+      if (d.getDate() === 1) {
+        const ml = document.createElement('span');
+        ml.className = 'cal-day-month-label';
+        ml.textContent = MONTHS[d.getMonth()].slice(0,3).toUpperCase();
+        num.appendChild(ml);
+      }
+      cell.appendChild(num);
+
+      // Task chips
+      getOpsEntriesForDate(dateStr).forEach(entry => {
+        const chip = document.createElement('div');
+        chip.className = 'ops-chip' + (hiddenPeople.has(entry.person) ? ' dimmed' : '');
+        chip.style.background = entry.color;
+        chip.title = `${entry.person} · ${entry.cat} · ${entry.taskName} (${entry.projectName})`;
+
+        const catSpan = document.createElement('span');
+        catSpan.className = 'ops-chip-cat';
+        catSpan.textContent = entry.cat.replace('Pre-Production','Pre').replace('Post-Producing','Post').replace('Producing','Prod').replace('Production','Shoot');
+
+        const personSpan = document.createElement('span');
+        personSpan.className = 'ops-chip-person';
+        personSpan.textContent = entry.person;
+
+        const taskSpan = document.createElement('span');
+        taskSpan.className = 'ops-chip-task';
+        taskSpan.textContent = '· ' + entry.taskName;
+
+        const loeSpan = document.createElement('span');
+        loeSpan.style.marginLeft = 'auto';
+        loeSpan.style.flexShrink = '0';
+        loeSpan.textContent = entry.loe === 'low' ? '🟢' : entry.loe === 'high' ? '🔴' : '🟡';
+
+        chip.appendChild(catSpan);
+        chip.appendChild(personSpan);
+        chip.appendChild(taskSpan);
+        chip.appendChild(loeSpan);
+        cell.appendChild(chip);
+      });
+
+      grid.appendChild(cell);
+    });
+  });
+
+  updateCalTitle();
+}
+
+// Simpler: rebuild week days properly
+function buildWeekDays(weekMondayStr) {
+  const mon = new Date(weekMondayStr + 'T00:00:00');
+  const days = [];
+  const offsets = showWeekends ? [-1,0,1,2,3,4,5] : [0,1,2,3,4]; // -1=Sun for weekend mode... actually let's do Sun-Sat
+  // showWeekends: Sun Mon Tue Wed Thu Fri Sat → offsets from Monday: -1,0,1,2,3,4,5
+  // weekdays: Mon Tue Wed Thu Fri → offsets 0,1,2,3,4
+  const offs = showWeekends ? [-1,0,1,2,3,4,5] : [0,1,2,3,4];
+  offs.forEach(o => {
+    const d = new Date(mon);
+    d.setDate(mon.getDate() + o);
+    days.push(fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate()));
+  });
+  return days;
+}
+
+function renderCalendar() {
+  const cols = showWeekends ? 7 : 5;
+  renderDowHeader();
+  document.getElementById('calGrid').style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  document.getElementById('calGrid').innerHTML = '';
+
+  const today = todayStr();
+  const grid = document.getElementById('calGrid');
+  const weekStarts = getWeeksInRange();
+
+  weekStarts.forEach(weekStart => {
+    buildWeekDays(weekStart).forEach(dateStr => {
+      const d = new Date(dateStr + 'T00:00:00');
+      const cell = document.createElement('div');
+      cell.className = 'cal-day' + (dateStr === today ? ' today' : '');
+      cell.dataset.date = dateStr;
+
+      const num = document.createElement('div');
+      num.className = 'cal-day-num';
+      const ns = document.createElement('span');
+      ns.textContent = d.getDate();
+      num.appendChild(ns);
+      if (d.getDate() === 1) {
+        const ml = document.createElement('span');
+        ml.className = 'cal-day-month-label';
+        ml.textContent = MONTHS[d.getMonth()].slice(0,3).toUpperCase();
+        num.appendChild(ml);
+      }
+      cell.appendChild(num);
+
+      getOpsEntriesForDate(dateStr).forEach(entry => {
+        const chip = document.createElement('div');
+        chip.className = 'ops-chip' + (hiddenPeople.has(entry.person) ? ' dimmed' : '');
+        chip.style.background = entry.color;
+        chip.title = `${entry.person} · ${entry.cat} · ${entry.taskName} (${entry.projectName})`;
+
+        const catSpan = document.createElement('span');
+        catSpan.className = 'ops-chip-cat';
+        const shortCat = { 'Pre-Production':'PRE','Producing':'PROD','Post-Producing':'POST','Editing':'EDIT','Animation':'ANIM','Production':'SHOOT' };
+        catSpan.textContent = shortCat[entry.cat] || entry.cat;
+
+        const personSpan = document.createElement('span');
+        personSpan.className = 'ops-chip-person';
+        personSpan.textContent = entry.person;
+
+        const taskSpan = document.createElement('span');
+        taskSpan.className = 'ops-chip-task';
+        taskSpan.textContent = '· ' + entry.taskName;
+
+        const loeSpan = document.createElement('span');
+        loeSpan.style.cssText = 'margin-left:auto;flex-shrink:0;font-size:9px';
+        loeSpan.textContent = entry.loe === 'low' ? '🟢' : entry.loe === 'high' ? '🔴' : '🟡';
+
+        chip.appendChild(catSpan); chip.appendChild(personSpan);
+        chip.appendChild(taskSpan); chip.appendChild(loeSpan);
+        cell.appendChild(chip);
+      });
+
+      grid.appendChild(cell);
+    });
+  });
+
+  updateCalTitle();
+}
+
+function updateCalTitle() {
+  const calScroll = document.getElementById('calScroll');
+  const calGrid   = document.getElementById('calGrid');
+  const scrollRect = calScroll.getBoundingClientRect();
+  const midY = scrollRect.top + scrollRect.height * 0.25;
+  const midX = scrollRect.left + scrollRect.width / 2;
+  const el = document.elementFromPoint(midX, midY);
+  const cell = el && el.closest ? el.closest('.cal-day') : null;
+  if (!cell || !cell.dataset.date) return;
+  const d = new Date(cell.dataset.date + 'T00:00:00');
+  document.getElementById('calTitle').textContent = MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+}
+
+function scrollToToday() {
+  const calScroll = document.getElementById('calScroll');
+  const todayCell = calScroll.querySelector('.cal-day.today');
+  if (!todayCell) return;
+  const scrollRect = calScroll.getBoundingClientRect();
+  const cellRect   = todayCell.getBoundingClientRect();
+  calScroll.scrollTop += cellRect.top - scrollRect.top - 20;
+}
+
+function extendCalendar(direction) {
+  const calScroll = document.getElementById('calScroll');
+  const prevScrollHeight = calScroll.scrollHeight;
+  const prevScrollTop    = calScroll.scrollTop;
+  if (direction === 'bottom') {
+    const d = new Date(calLatestDate + 'T00:00:00');
+    d.setDate(d.getDate() + WEEKS_EXTEND * 7);
+    calLatestDate = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+    renderCalendar();
+  } else {
+    const d = new Date(calEarliestDate + 'T00:00:00');
+    d.setDate(d.getDate() - WEEKS_EXTEND * 7);
+    calEarliestDate = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+    renderCalendar();
+    calScroll.scrollTop = prevScrollTop + (calScroll.scrollHeight - prevScrollHeight);
+  }
+  updateCalTitle();
+}
+
+function setupCalObserver() {
+  if (calObserver) return;
+  calObserver = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (!e.isIntersecting) return;
+      if (e.target.id === 'calTopSentinel')    extendCalendar('top');
+      if (e.target.id === 'calBottomSentinel') extendCalendar('bottom');
+    });
+  }, { root: document.getElementById('calScroll'), rootMargin: '400px 0px', threshold: 0 });
+  calObserver.observe(document.getElementById('calTopSentinel'));
+  calObserver.observe(document.getElementById('calBottomSentinel'));
+}
+
+// ── INIT ──
+function init() {
+  resetCalRange();
+  renderCalendar();
+  renderFilterChips();
+  renderWorkload();
+  scrollToToday();
+  setupCalObserver();
+
+  document.getElementById('calScroll').addEventListener('scroll', () => {
+    clearTimeout(window._titleRaf);
+    window._titleRaf = setTimeout(updateCalTitle, 80);
+  });
+
+  document.getElementById('btnToday').addEventListener('click', () => {
+    const todayCell = document.getElementById('calScroll').querySelector('.cal-day.today');
+    if (!todayCell) { resetCalRange(); renderCalendar(); setTimeout(scrollToToday, 50); }
+    else scrollToToday();
+  });
+
+  document.getElementById('wkndBtn').addEventListener('click', () => {
+    showWeekends = !showWeekends;
+    document.getElementById('wkndBtn').classList.toggle('on', showWeekends);
+    renderCalendar();
+  });
+}
+
+init();
+</script>
+</body>
+</html>

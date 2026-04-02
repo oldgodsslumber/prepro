@@ -253,9 +253,11 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .roster-suggest-rm { font-size: 10px; color: var(--border); line-height: 1; padding: 0 1px; cursor: pointer; }
 .roster-suggest-rm:hover { color: var(--danger); }
 
-/* ── HELP BUTTON ── */
+/* ── HELP / OPS BUTTONS ── */
 .help-btn { position: fixed; bottom: 18px; left: 18px; width: 32px; height: 32px; border-radius: 50%; background: var(--card); border: 1px solid var(--border); color: var(--dim); font-size: 15px; font-weight: 700; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 400; text-decoration: none; transition: background .15s, color .15s, border-color .15s; }
 .help-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+.ops-btn { position: fixed; bottom: 18px; left: 58px; height: 32px; border-radius: 16px; background: var(--card); border: 1px solid var(--border); color: var(--dim); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; display: flex; align-items: center; justify-content: center; padding: 0 12px; cursor: pointer; z-index: 400; text-decoration: none; transition: background .15s, color .15s, border-color .15s; }
+.ops-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
 
 /* ── HELP TOOLTIPS ── */
 .htip { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; background: var(--border); color: var(--dim); font-size: 9px; font-weight: 700; cursor: default; flex-shrink: 0; position: relative; }
@@ -406,6 +408,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 
 <!-- HELP BUTTON -->
 <a href="guide.html" target="_blank" class="help-btn" title="Open guide">?</a>
+<a href="ops.html" target="_blank" class="ops-btn" title="Ops mode — team workload view">Ops</a>
 
 <script>
 'use strict';
