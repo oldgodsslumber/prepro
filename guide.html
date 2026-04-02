@@ -45,7 +45,7 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    padding: 60px 80px;
+    padding: 50px 80px;
     opacity: 0;
     transform: translateX(40px);
     transition: opacity .35s ease, transform .35s ease;
@@ -103,7 +103,7 @@
   .steps {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 12px;
     max-width: 580px;
     width: 100%;
     text-align: left;
@@ -116,7 +116,7 @@
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 10px;
-    padding: 14px 18px;
+    padding: 12px 16px;
   }
   .step-num {
     width: 28px;
@@ -143,7 +143,7 @@
     gap: 8px;
     justify-content: center;
     margin-top: 18px;
-    max-width: 640px;
+    max-width: 660px;
   }
   .chip {
     border-radius: 20px;
@@ -158,6 +158,7 @@
   .chip.green  { background: #4cba6a; }
   .chip.red    { background: #c0394f; }
   .chip.gray   { background: #3a3a52; border: 1px solid #606080; }
+  .chip.person { background: #2a3042; border: 1px dashed #4a7cf7; color: #b0b8d0; }
 
   /* ── DIAGRAM BOXES ── */
   .diagram {
@@ -166,14 +167,14 @@
     margin-top: 20px;
     flex-wrap: wrap;
     justify-content: center;
-    max-width: 700px;
+    max-width: 760px;
   }
   .dia-box {
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 14px 20px;
-    min-width: 130px;
+    min-width: 120px;
     text-align: center;
   }
   .dia-box .dia-icon { font-size: 24px; margin-bottom: 6px; }
@@ -190,16 +191,17 @@
     background: var(--panel);
     border-radius: 8px 8px 0 0;
     overflow: hidden;
-    max-width: 500px;
+    max-width: 560px;
     width: 100%;
   }
   .mock-tab {
-    padding: 9px 18px;
+    padding: 9px 14px;
     font-size: 12px;
     font-weight: 600;
     color: var(--dim);
     border-bottom: 2px solid transparent;
     cursor: default;
+    white-space: nowrap;
   }
   .mock-tab.on { color: var(--accent); border-bottom-color: var(--accent); }
   .mock-tab-body {
@@ -208,12 +210,88 @@
     border-top: none;
     border-radius: 0 0 8px 8px;
     padding: 14px 18px;
-    max-width: 500px;
+    max-width: 560px;
     width: 100%;
     text-align: left;
     font-size: 12px;
     color: var(--dim);
     line-height: 1.8;
+  }
+
+  /* ── GANTT MOCK ── */
+  .gantt-mock {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-top: 18px;
+    overflow: hidden;
+    max-width: 620px;
+    width: 100%;
+    font-size: 11px;
+  }
+  .gantt-header {
+    display: flex;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+  }
+  .gantt-name-col {
+    width: 110px;
+    flex-shrink: 0;
+    padding: 6px 10px;
+    font-weight: 700;
+    color: var(--dim);
+    border-right: 1px solid var(--border);
+    font-size: 10px;
+  }
+  .gantt-day-cols {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+  .gantt-day {
+    flex: 1;
+    text-align: center;
+    padding: 6px 2px;
+    font-weight: 600;
+    color: var(--dim);
+    border-right: 1px solid var(--border);
+    font-size: 10px;
+  }
+  .gantt-day.wknd { color: #3a3a52; }
+  .gantt-row {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    min-height: 36px;
+    align-items: center;
+  }
+  .gantt-row:last-child { border-bottom: none; }
+  .gantt-person {
+    width: 110px;
+    flex-shrink: 0;
+    padding: 6px 10px;
+    font-weight: 600;
+    color: var(--text);
+    border-right: 1px solid var(--border);
+    font-size: 11px;
+  }
+  .gantt-bars {
+    flex: 1;
+    position: relative;
+    height: 36px;
+  }
+  .gantt-bar {
+    position: absolute;
+    height: 20px;
+    top: 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    padding: 0 6px;
+    overflow: hidden;
+    white-space: nowrap;
   }
 
   /* ── TITLE SLIDE ACCENT ── */
@@ -280,6 +358,16 @@
     transition: opacity .15s, transform .15s;
   }
   .go-btn:hover { opacity: .88; transform: translateY(-1px); }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    max-width: 640px;
+    width: 100%;
+    margin-top: 12px;
+    text-align: left;
+  }
 </style>
 </head>
 <body>
@@ -309,13 +397,19 @@
       <div class="dia-box">
         <div class="dia-icon">👥</div>
         <div class="dia-label">Add Your Team</div>
-        <div class="dia-sub">Role Assignees</div>
+        <div class="dia-sub">Role Assignees tab</div>
       </div>
       <div class="dia-arrow">→</div>
       <div class="dia-box">
         <div class="dia-icon">📅</div>
         <div class="dia-label">Schedule Tasks</div>
         <div class="dia-sub">Drag onto calendar</div>
+      </div>
+      <div class="dia-arrow">→</div>
+      <div class="dia-box">
+        <div class="dia-icon">📊</div>
+        <div class="dia-label">Review in Ops</div>
+        <div class="dia-sub">Gantt + workload</div>
       </div>
       <div class="dia-arrow">→</div>
       <div class="dia-box">
@@ -346,6 +440,13 @@
           <div class="step-desc">Right-click any project in the sidebar to add a child — useful for Pre-Production and Post-Production phases.</div>
         </div>
       </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Mark complete when done</div>
+          <div class="step-desc">Right-click a project and choose <strong>Complete</strong> to move it to the Completed section at the bottom of the sidebar. Keeps your active list clean.</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -353,7 +454,7 @@
   <div class="slide">
     <div class="slide-label">Step 2</div>
     <h2>Set Up Role Assignees</h2>
-    <p>The <strong>Role Assignees</strong> panel lives at the bottom-right. Each project gets its own team — add the people working on this video.</p>
+    <p>Open the <strong>Export Schedule</strong> panel at the bottom, then click the <strong>Role Assignees</strong> tab. Each project gets its own team.</p>
     <div class="steps">
       <div class="step">
         <div class="step-num">1</div>
@@ -372,18 +473,18 @@
       <div class="step">
         <div class="step-num">3</div>
         <div class="step-body">
-          <div class="step-title">Remove with ✕</div>
-          <div class="step-desc">Click ✕ on any name chip to remove them from this project. They'll still appear as a suggestion next time.</div>
+          <div class="step-title">Names become draggable chips</div>
+          <div class="step-desc">Anyone added to a role appears as a <strong>People chip</strong> in the palette — drag them straight onto a calendar day to skip typing their name.</div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- 5. ROLE TYPES -->
+  <!-- 5. ROLE PALETTE -->
   <div class="slide">
     <div class="slide-label">Step 3</div>
     <h2>The Role Palette</h2>
-    <p>The palette bar across the top shows all role types. <strong>Drag any chip onto a calendar day</strong> to create a task for that role.</p>
+    <p>The palette bar across the top shows all role types and your assigned people. <strong>Drag any chip onto a calendar day</strong> to create a task.</p>
     <div class="chips">
       <div class="chip blue">Producer</div>
       <div class="chip blue">Editor</div>
@@ -398,20 +499,51 @@
       <div class="chip red">On-Location Shoot</div>
       <div class="chip gray">🏁 Project Due Date</div>
       <div class="chip gray">🎯 Milestone</div>
+      <div class="chip gray">📦 Delivery</div>
     </div>
-    <p style="margin-top:18px;">Blue = Internal · Orange = External · Purple = Vendor · Red = Events · Gray = Key Dates</p>
+    <p style="margin-top:14px;">Blue = Internal · Orange = External · Purple = Vendor · Red = Events · Gray = Key Dates</p>
   </div>
 
-  <!-- 6. CREATING TASKS -->
+  <!-- 6. PEOPLE CHIPS -->
   <div class="slide">
     <div class="slide-label">Step 3 continued</div>
-    <h2>Creating & Editing Tasks</h2>
+    <h2>People Quick-Chips</h2>
+    <p>Once you've added people in <strong>Role Assignees</strong>, they appear as draggable chips at the end of the palette — one chip per person per role.</p>
+    <div class="chips" style="margin-top: 16px;">
+      <div class="chip person">Jason (Producer)</div>
+      <div class="chip person">Maria (Editor)</div>
+      <div class="chip person">Tom (Producer)</div>
+      <div class="chip person">Lena (Animator)</div>
+      <div class="chip person">Chris (Copywriter)</div>
+    </div>
+    <div class="steps" style="margin-top: 16px;">
+      <div class="step">
+        <div class="step-num">⚡</div>
+        <div class="step-body">
+          <div class="step-title">Drag to instantly assign</div>
+          <div class="step-desc">Drop a People chip on any calendar day or event block — the person's name is pre-filled in the panel so you only need to type the task.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">🔄</div>
+        <div class="step-body">
+          <div class="step-title">Per-project, always up to date</div>
+          <div class="step-desc">Chips refresh every time you switch projects. People from all roles appear — role shown in parentheses so you always know who does what.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. CREATING TASKS -->
+  <div class="slide">
+    <div class="slide-label">Step 3 continued</div>
+    <h2>Creating &amp; Editing Tasks</h2>
     <div class="steps">
       <div class="step">
         <div class="step-num">1</div>
         <div class="step-body">
           <div class="step-title">Drag a role chip onto a day</div>
-          <div class="step-desc">A panel slides up. Choose the <strong>Person</strong> from the dropdown (populated from your Role Assignees), add a task name, and set the Effort level.</div>
+          <div class="step-desc">A panel slides up. Choose the <strong>Person</strong> from the dropdown (populated from Role Assignees + anyone previously assigned), add a task name, and set the Effort level.</div>
         </div>
       </div>
       <div class="step">
@@ -431,7 +563,7 @@
     </div>
   </div>
 
-  <!-- 7. REVIEWS & EVENTS -->
+  <!-- 8. REVIEWS & EVENTS -->
   <div class="slide">
     <div class="slide-label">Step 3 continued</div>
     <h2>Reviews, Shoots &amp; Key Dates</h2>
@@ -440,28 +572,28 @@
       <div class="step">
         <div class="step-num">1</div>
         <div class="step-body">
-          <div class="step-title">Drag a Review, Shoot, or Key Date chip</div>
-          <div class="step-desc">Give it a name, then resize to span multiple days. Key Dates (🏁 Project Due Date, 🎯 Milestone) appear as gray markers.</div>
+          <div class="step-title">Three key date types</div>
+          <div class="step-desc"><strong>🏁 Project Due Date</strong> — final deadline. <strong>🎯 Milestone</strong> — internal checkpoint. <strong>📦 Delivery</strong> — asset or deliverable hand-off. All appear as gray date markers.</div>
         </div>
       </div>
       <div class="step">
         <div class="step-num">2</div>
         <div class="step-body">
           <div class="step-title">Add attendees by dropping role chips onto the event</div>
-          <div class="step-desc">Drop any role chip onto a red block or gray Key Date to add an attendee. Their name badge appears on the block.</div>
+          <div class="step-desc">Drop any role or People chip onto a red block or gray Key Date to add an attendee. Their name badge appears on the block.</div>
         </div>
       </div>
       <div class="step">
         <div class="step-num">3</div>
         <div class="step-body">
           <div class="step-title">Switch event type by clicking the badge</div>
-          <div class="step-desc">Click the colored label badge on any event (e.g. "Review") to convert it to a different type — Review, Studio Shoot, On-Location Shoot, Project Due Date, or Milestone.</div>
+          <div class="step-desc">Click the colored label badge on any event (e.g. "Review") to convert it — Review, Studio Shoot, On-Location Shoot, Project Due Date, Milestone, or Delivery.</div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- 8. EFFORT -->
+  <!-- 9. EFFORT -->
   <div class="slide">
     <div class="slide-label">Tips</div>
     <h2>Level of Effort</h2>
@@ -486,7 +618,7 @@
     <p style="margin-top: 18px;">Effort shows as a dot on the task chip and feeds into the Planyway export.</p>
   </div>
 
-  <!-- 9. NAVIGATION -->
+  <!-- 10. NAVIGATION -->
   <div class="slide">
     <div class="slide-label">Tips</div>
     <h2>Navigating the Calendar</h2>
@@ -515,16 +647,113 @@
     </div>
   </div>
 
-  <!-- 10. EXPORTING -->
+  <!-- 11. OPS MODE OVERVIEW -->
+  <div class="slide">
+    <div class="slide-label">Ops Mode</div>
+    <h2>The Ops Page</h2>
+    <p>Click <strong>Ops</strong> in the bottom-left of the scheduler to open the team operations view. Ops gives you a birds-eye view of workload across all projects.</p>
+    <div class="diagram">
+      <div class="dia-box">
+        <div class="dia-icon">📊</div>
+        <div class="dia-label">Workload Table</div>
+        <div class="dia-sub">Tasks per role, per project</div>
+      </div>
+      <div class="dia-arrow">→</div>
+      <div class="dia-box">
+        <div class="dia-icon">🗓</div>
+        <div class="dia-label">Gantt Timeline</div>
+        <div class="dia-sub">By Person, horizontally</div>
+      </div>
+    </div>
+    <div class="steps" style="margin-top: 16px;">
+      <div class="step">
+        <div class="step-num">🔍</div>
+        <div class="step-body">
+          <div class="step-title">Filter by project and team member</div>
+          <div class="step-desc">Use the filter chips at the top to focus on specific projects or people. <strong>All / None</strong> buttons let you toggle everything at once.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">🏷</div>
+        <div class="step-body">
+          <div class="step-title">Categories vs. Tasks toggle</div>
+          <div class="step-desc">Switch between a summary view (role <strong>Categories</strong>) and the full task list (<strong>Tasks</strong>) in the workload table.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 12. GANTT TIMELINE -->
+  <div class="slide">
+    <div class="slide-label">Ops Mode</div>
+    <h2>The Gantt Timeline</h2>
+    <p>The timeline shows <strong>each person as a swim lane</strong>, with task bars stretching across the days they're working. Scroll left and right to move through time.</p>
+    <!-- Mini Gantt mockup -->
+    <div class="gantt-mock">
+      <div class="gantt-header">
+        <div class="gantt-name-col">Person</div>
+        <div class="gantt-day-cols">
+          <div class="gantt-day">Mon</div>
+          <div class="gantt-day">Tue</div>
+          <div class="gantt-day">Wed</div>
+          <div class="gantt-day">Thu</div>
+          <div class="gantt-day">Fri</div>
+          <div class="gantt-day wknd">Sat</div>
+          <div class="gantt-day wknd">Sun</div>
+          <div class="gantt-day">Mon</div>
+          <div class="gantt-day">Tue</div>
+        </div>
+      </div>
+      <div class="gantt-row">
+        <div class="gantt-person">Jason</div>
+        <div class="gantt-bars">
+          <div class="gantt-bar" style="left:0%;width:34%;background:#4a90d9;">Script Review</div>
+          <div class="gantt-bar" style="left:56%;width:44%;background:#4a90d9;">Edit v1</div>
+        </div>
+      </div>
+      <div class="gantt-row">
+        <div class="gantt-person">Maria</div>
+        <div class="gantt-bars">
+          <div class="gantt-bar" style="left:22%;width:56%;background:#e07b39;">Copywriting</div>
+        </div>
+      </div>
+      <div class="gantt-row">
+        <div class="gantt-person">Tom</div>
+        <div class="gantt-bars">
+          <div class="gantt-bar" style="left:0%;width:22%;background:#4a90d9;">Pre-Pro</div>
+          <div class="gantt-bar" style="left:67%;width:33%;background:#c0394f;">Review</div>
+        </div>
+      </div>
+    </div>
+    <div class="steps" style="margin-top: 14px;">
+      <div class="step">
+        <div class="step-num">±</div>
+        <div class="step-body">
+          <div class="step-title">Zoom in / out</div>
+          <div class="step-desc">Use the <strong>− / +</strong> buttons to change how wide each day column is. Six zoom levels from very compressed to fully expanded.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">Sa</div>
+        <div class="step-body">
+          <div class="step-title">Weekend toggle</div>
+          <div class="step-desc">Show or hide weekend columns. The timeline recentres on the same date automatically — your position is preserved.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 13. EXPORTING -->
   <div class="slide">
     <div class="slide-label">Step 4</div>
     <h2>Exporting Your Schedule</h2>
-    <p>The <strong>Export Schedule</strong> panel at the bottom has four tabs. All persist your last-used tab between sessions.</p>
+    <p>The <strong>Export Schedule</strong> panel at the bottom has five tabs. Your last-used tab is remembered between sessions.</p>
     <div class="mock-tabs">
       <div class="mock-tab on">Text</div>
       <div class="mock-tab">Table / Excel</div>
       <div class="mock-tab">PNG</div>
       <div class="mock-tab">Trello Export</div>
+      <div class="mock-tab">Role Assignees</div>
     </div>
     <div class="mock-tab-body">
       <strong style="color:var(--text);">Text</strong> — Formatted schedule ready to paste into email, Slack, or Word.<br>
@@ -532,7 +761,7 @@
     </div>
   </div>
 
-  <!-- 11. EXPORT TABS -->
+  <!-- 14. EXPORT TABS -->
   <div class="slide">
     <div class="slide-label">Step 4 continued</div>
     <h2>Export Tab Details</h2>
@@ -541,7 +770,7 @@
         <div class="step-num">📝</div>
         <div class="step-body">
           <div class="step-title">Text</div>
-          <div class="step-desc">Formatted plain text. Copy button writes real bold for Word/PowerPoint and ** markers for Slack/Notion simultaneously.</div>
+          <div class="step-desc">Formatted plain text. Copy writes real bold for Word/PowerPoint and ** markers for Slack/Notion simultaneously.</div>
         </div>
       </div>
       <div class="step">
@@ -562,13 +791,43 @@
         <div class="step-num">✅</div>
         <div class="step-body">
           <div class="step-title">Trello Export</div>
-          <div class="step-desc">Copies a checklist of producer categories (with effort emoji) to paste into Trello or Planyway. Reviews, shoots, and vendor tasks with matching keywords are automatically routed to Pre-Production, Producing, or Post-Producing.</div>
+          <div class="step-desc">Copies a checklist of producer categories to paste into Trello or Planyway. Tasks are automatically routed to Pre-Production, Producing, or Post-Producing.</div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- 12. PROJECT MANAGEMENT -->
+  <!-- 15. ROLE ASSIGNEES TAB -->
+  <div class="slide">
+    <div class="slide-label">Step 4 continued</div>
+    <h2>Role Assignees Tab</h2>
+    <p>The <strong>Role Assignees</strong> tab in the Export panel is where you build the team for each project. It's separate from the export tools — think of it as project setup.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">👤</div>
+        <div class="step-body">
+          <div class="step-title">Add people per role</div>
+          <div class="step-desc">Each role (Producer, Editor, etc.) has its own input. Type a name and press Enter — they're added to this project's roster immediately.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">⚡</div>
+        <div class="step-body">
+          <div class="step-title">Suggested names</div>
+          <div class="step-desc">Dashed chip buttons show names from previous projects. Click any suggestion to add them instantly — no typing needed.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">🎯</div>
+        <div class="step-body">
+          <div class="step-title">Roster drives the palette</div>
+          <div class="step-desc">Names you add here become <strong>People chips</strong> in the palette. Drag a chip onto any task to assign that person in one move.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 16. PROJECT MANAGEMENT -->
   <div class="slide">
     <div class="slide-label">Tips</div>
     <h2>Managing Projects</h2>
@@ -577,7 +836,14 @@
         <div class="step-num">⋯</div>
         <div class="step-body">
           <div class="step-title">Right-click any project for options</div>
-          <div class="step-desc">Rename, Add Subproject, Duplicate, or Delete. Deleting a project removes all its subprojects too.</div>
+          <div class="step-desc">Rename, Add Subproject, Duplicate, Complete, or Delete. Deleting a project removes all its subprojects too.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">✓</div>
+        <div class="step-body">
+          <div class="step-title">Complete moves projects to a separate section</div>
+          <div class="step-desc">Completed projects move to a <strong>Completed</strong> section at the bottom of the sidebar, collapsed by default. Right-click to reopen or delete.</div>
         </div>
       </div>
       <div class="step">
@@ -590,12 +856,12 @@
     </div>
   </div>
 
-  <!-- 13. DONE -->
+  <!-- 17. DONE -->
   <div class="slide">
     <div class="slide-label">You're ready</div>
     <h1>That's it.</h1>
     <div class="hero-rule"></div>
-    <p>Create project → Add team → Drag tasks → Export.</p>
+    <p>Create project → Add team → Drag tasks → Review in Ops → Export.</p>
     <p style="margin-top:10px;">Questions? Ask your producer or right-click anything on the calendar for quick options.</p>
     <div style="margin-top: 32px;">
       <a href="index.html" class="go-btn">Go to the PRE-PRO Scheduler →</a>

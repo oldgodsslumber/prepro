@@ -832,8 +832,19 @@ function renderPalette() {
   const proj = getProject(activeProjectId);
   if (!proj) return;
 
-  // Collect unique person+role+category+color from all assigned tasks
+  // Collect unique person+role+category+color — start from roster so assignees always appear
   const seen = new Map(); // key: "person|role"
+  const roster = proj.roster || {};
+  ROLE_CATS.forEach(cat => {
+    cat.roles.forEach(role => {
+      (roster[role] || []).forEach(person => {
+        const key = person + '|' + role;
+        if (!seen.has(key)) seen.set(key, { person, role, category: cat.label, color: cat.color });
+      });
+    });
+  });
+
+  // Also pick up anyone assigned directly in tasks (covers cases not in roster)
   (proj.tasks || []).forEach(t => {
     if (!t.person || t.isDueDate || t.isReview) return;
     const key = t.person + '|' + t.role;
@@ -849,7 +860,7 @@ function renderPalette() {
     });
   });
 
-  if (!seen.size) return;
+  if (!seen.size) return; // no roster names and no tasks yet — nothing to show
 
   const sep3 = document.createElement('div');
   sep3.style.cssText = 'width:1px;height:20px;background:var(--border);margin:0 4px;align-self:center';
@@ -999,6 +1010,8 @@ function updateCalTitle() {
 }
 
 function renderCalendar() {
+  // Persist the active project so reload/reopen restores it
+  if (activeProjectId) localStorage.setItem('prepro_active_project', activeProjectId);
   const empty   = document.getElementById('emptyState');
   const calArea = document.getElementById('calendarArea');
   if (!activeProjectId || !getProject(activeProjectId)) {
@@ -2208,6 +2221,7 @@ function renderRosterPanel() {
         e.stopPropagation();
         removeFromRoster(role, name);
         renderRosterPanel();
+        renderPalette();
         if (panelContext && panelContext.role === role) populatePersonDropdown(role);
       });
       chip.appendChild(nameSpan);
@@ -2230,6 +2244,7 @@ function renderRosterPanel() {
           e.stopPropagation();
           addToRoster(role, name);
           renderRosterPanel();
+          renderPalette();
           if (panelContext && panelContext.role === role) populatePersonDropdown(role);
         });
         const rmSpan = document.createElement('span');
@@ -2264,6 +2279,7 @@ function renderRosterPanel() {
       if (!val) return;
       addToRoster(role, val);
       renderRosterPanel();
+      renderPalette();
       if (panelContext && panelContext.role === role) populatePersonDropdown(role);
       // Re-focus the input for this role after re-render
       const restored = document.querySelector(`.roster-add-input[data-role="${CSS.escape(role)}"]`);
@@ -2887,7 +2903,13 @@ function init() {
   loadState();
   loadNameHistory();
   const roots = getRootProjects();
-  if (roots.length) activeProjectId = roots[0].id;
+  // Restore last-open project; fall back to first root if it no longer exists
+  const savedId = localStorage.getItem('prepro_active_project');
+  if (savedId && getProject(savedId)) {
+    activeProjectId = savedId;
+  } else if (roots.length) {
+    activeProjectId = roots[0].id;
+  }
 
   viewStart = getWeekStart();
 
