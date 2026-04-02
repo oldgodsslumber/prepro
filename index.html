@@ -1252,7 +1252,7 @@ function buildDueDateMarker(task, dateStr) {
     let pl = dragPayload;
     if (!pl) { try { pl = JSON.parse(e.dataTransfer.getData('text')); } catch(_) { return; } }
     if (!pl || pl.type === 'move' || pl.type === 'copy' || pl.type === 'review' || pl.type === 'duedate' || pl.type === 'dup-project') return;
-    openPanel('add-attendee', task.date, task.id, pl.role, pl.category, pl.color);
+    openPanel('add-attendee', task.date, task.id, pl.role, pl.category, pl.color, pl.person || null);
   });
 
   return el;
@@ -1353,7 +1353,7 @@ function buildReviewBlock(task, dateStr) {
     let pl = dragPayload;
     if (!pl) { try { pl = JSON.parse(e.dataTransfer.getData('text')); } catch(_) { return; } }
     if (!pl || pl.type === 'move' || pl.type === 'copy' || pl.type === 'review') return;
-    openPanel('add-attendee', task.date, task.id, pl.role, pl.category, pl.color);
+    openPanel('add-attendee', task.date, task.id, pl.role, pl.category, pl.color, pl.person || null);
   });
 
   // Resize handles (left on start/solo, right on end/solo)
@@ -1407,7 +1407,7 @@ function buildReviewBar(task, dateStr, isEnd) {
     let pl = dragPayload;
     if (!pl) { try { pl = JSON.parse(e.dataTransfer.getData('text')); } catch(_) { return; } }
     if (!pl || pl.type === 'move' || pl.type === 'copy' || pl.type === 'review') return;
-    openPanel('add-attendee', task.date, task.id, pl.role, pl.category, pl.color);
+    openPanel('add-attendee', task.date, task.id, pl.role, pl.category, pl.color, pl.person || null);
   });
 
   if (isEnd) {
@@ -1714,6 +1714,16 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     document.getElementById('panelRoleBadge').style.background = color;
     document.getElementById('panelDateLabel').textContent      = fmtDateLabel(task.date) + ' · ' + (task.taskName || 'Review');
     populatePersonDropdown(role);
+    if (prefillPerson) {
+      const sel = document.getElementById('panelPerson');
+      const otherInp = document.getElementById('panelPersonOther');
+      if ([...sel.options].some(o => o.value === prefillPerson)) {
+        sel.value = prefillPerson;
+      } else {
+        sel.value = '__other__';
+        otherInp.style.display = ''; otherInp.value = prefillPerson;
+      }
+    }
     fieldTask.style.display = 'none';
     fieldLOE.style.display  = 'none';
     document.getElementById('panelDelete').classList.add('hidden');
