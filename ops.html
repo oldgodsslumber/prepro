@@ -291,13 +291,15 @@ function reloadState() {
   else renderCalendar();
 }
 
-// Re-read when index.html saves — fires in this tab when another tab writes localStorage
+// Re-read when index.html saves from another tab
 window.addEventListener('storage', e => {
   if (e.key === 'prepro_data') reloadState();
 });
 
-// Also re-read on tab focus (covers same-window navigation or manual edits)
-window.addEventListener('focus', reloadState);
+// Re-read when this tab becomes visible (switching tabs, Alt+Tab, etc.)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') reloadState();
+});
 
 // ── TRELLO CATEGORY LOGIC (mirrors index.html) ──
 const PW_PRE = [
