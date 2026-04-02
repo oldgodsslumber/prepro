@@ -174,6 +174,7 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
     <button class="ops-zoom-btn" id="zoomInBtn" title="Zoom in">+</button>
   </div>
   <button class="ops-wknd-btn" id="wkndBtn">Show Weekends</button>
+  <button class="ops-wknd-btn" id="refreshBtn" title="Reload latest data from the scheduler">↺ Refresh</button>
   <a href="index.html" class="ops-back">← PRE-PRO</a>
 </div>
 
@@ -291,15 +292,20 @@ function reloadState() {
   else renderCalendar();
 }
 
-// Re-read when index.html saves from another tab
+// Re-read when index.html saves from another tab (works cross-tab on http://)
 window.addEventListener('storage', e => {
   if (e.key === 'prepro_data') reloadState();
 });
 
-// Re-read when this tab becomes visible (switching tabs, Alt+Tab, etc.)
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') reloadState();
-});
+// Poll every 2 seconds — reliable on file:// where storage events may not fire
+let _lastDataStr = localStorage.getItem('prepro_data') || '';
+setInterval(() => {
+  const cur = localStorage.getItem('prepro_data') || '';
+  if (cur !== _lastDataStr) {
+    _lastDataStr = cur;
+    reloadState();
+  }
+}, 2000);
 
 // ── TRELLO CATEGORY LOGIC (mirrors index.html) ──
 const PW_PRE = [
@@ -1003,6 +1009,11 @@ function init() {
       if (!todayCell) { resetCalRange(); renderCalendar(); setTimeout(scrollToToday, 50); }
       else scrollToToday();
     }
+  });
+
+  document.getElementById('refreshBtn').addEventListener('click', () => {
+    _lastDataStr = localStorage.getItem('prepro_data') || '';
+    reloadState();
   });
 
   document.getElementById('wkndBtn').addEventListener('click', () => {
