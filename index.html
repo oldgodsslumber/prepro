@@ -61,6 +61,19 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .tree-more   { color: var(--dim); font-size: 13px; padding: 0 3px; border-radius: 3px; opacity: 0; line-height: 1; letter-spacing: .05em; }
 .tree-node:hover .tree-more, .tree-node.active .tree-more { opacity: 1; }
 .tree-more:hover { background: rgba(255,255,255,.12); }
+.rename-input { flex: 1; background: var(--bg); border: 1px solid var(--accent); border-radius: 3px; color: var(--text); font: inherit; font-size: 13px; padding: 0 4px; outline: none; min-width: 0; }
+
+/* ── COMPLETED SECTION ── */
+.completed-section { border-top: 1px solid var(--border); flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; }
+.completed-toggle { display: flex; align-items: center; gap: 6px; padding: 7px 10px; cursor: pointer; font-size: 10px; font-weight: 700; color: var(--dim); letter-spacing: .08em; text-transform: uppercase; user-select: none; transition: color .15s; flex-shrink: 0; }
+.completed-toggle:hover { color: var(--text); }
+.completed-toggle .chev { font-size: 9px; transition: transform .2s; }
+.completed-toggle.open .chev { transform: rotate(180deg); }
+.completed-count { background: var(--card); border: 1px solid var(--border); color: var(--dim); font-size: 9px; padding: 1px 6px; border-radius: 8px; margin-left: auto; }
+.completed-tree { display: none; overflow-y: auto; max-height: 180px; padding: 4px 0; }
+.completed-tree.visible { display: block; }
+.tree-node.done .tree-label { text-decoration: line-through; opacity: .55; }
+.tree-node.done.active .tree-label { opacity: 1; }
 .rename-input { background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; padding: 1px 6px; color: var(--text); font-size: 13px; outline: none; flex: 1; min-width: 0; }
 
 /* ── RIGHT COLUMN ── */
@@ -306,6 +319,14 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
       <span class="htip">?<span class="htip-popup" style="left:0;transform:none;">One project per video. Right-click any project to rename, delete, or add a sub-project (e.g. separate Pre-Production and Post-Production phases).</span></span>
     </div>
     <div class="sidebar-tree" id="sidebarTree"></div>
+    <div class="completed-section" id="completedSection" style="display:none">
+      <div class="completed-toggle" id="completedToggle">
+        <span class="chev">▲</span>
+        <span>Completed</span>
+        <span class="completed-count" id="completedCount">0</span>
+      </div>
+      <div class="completed-tree" id="completedTree"></div>
+    </div>
   </div>
 
   <!-- RIGHT COLUMN -->
@@ -565,20 +586,90 @@ function deleteProject(id) {
   const del = new Set([id, ...getDescendantIds(id)]);
   state.projects = state.projects.filter(p => !del.has(p.id));
   if (activeProjectId && del.has(activeProjectId)) {
-    const r = getRootProjects(); activeProjectId = r.length ? r[0].id : null;
+    const r = getActiveRootProjects(); activeProjectId = r.length ? r[0].id : null;
   }
   saveState();
 }
+
+function isEffectivelyCompleted(id) {
+  const proj = getProject(id);
+  if (!proj) return false;
+  if (proj.completed) return true;
+  if (proj.parentId) return isEffectivelyCompleted(proj.parentId);
+  return false;
+}
+function getActiveRootProjects() { return getRootProjects().filter(p => !p.completed); }
+
+function completeProject(id) {
+  // Mark project + all descendants as completed
+  const all = [id, ...getDescendantIds(id)];
+  all.forEach(pid => { const p = getProject(pid); if (p) p.completed = true; });
+  if (activeProjectId && all.includes(activeProjectId)) {
+    const r = getActiveRootProjects();
+    activeProjectId = r.length ? r[0].id : null;
+  }
+  saveState();
+}
+
+function restoreProject(id) {
+  // Restore project + all descendants (and any completed ancestors needed)
+  const all = [id, ...getDescendantIds(id)];
+  // Also restore any completed ancestors so the tree is valid
+  let cur = getProject(id);
+  while (cur && cur.parentId) {
+    cur = getProject(cur.parentId);
+    if (cur && cur.completed) all.push(cur.id);
+  }
+  all.forEach(pid => { const p = getProject(pid); if (p) p.completed = false; });
+  activeProjectId = id;
+  saveState();
+}
+
+let completedOpen = false;
 
 // ── SIDEBAR ──
 function renderSidebar() {
   const tree = document.getElementById('sidebarTree');
   tree.innerHTML = '';
   renderTreeLevel(null, 0, tree);
+
+  // Completed section
+  const completed = state.projects.filter(p => p.completed && (!p.parentId || !isEffectivelyCompleted(p.parentId)));
+  const section   = document.getElementById('completedSection');
+  const ctree     = document.getElementById('completedTree');
+  const count     = document.getElementById('completedCount');
+  section.style.display = completed.length ? '' : 'none';
+  count.textContent = completed.length;
+  ctree.innerHTML = '';
+  completed.forEach(proj => {
+    const node = document.createElement('div');
+    node.className = 'tree-node done' + (proj.id === activeProjectId ? ' active' : '');
+    node.style.paddingLeft = '8px';
+    node.dataset.id = proj.id;
+    const lbl = document.createElement('span');
+    lbl.className = 'tree-label';
+    lbl.textContent = '✓ ' + proj.name;
+    const more = document.createElement('button');
+    more.className = 'tree-more';
+    more.textContent = '···';
+    more.addEventListener('click', e => { e.stopPropagation(); openContextMenu(e, proj.id); });
+    node.appendChild(lbl);
+    node.appendChild(more);
+    node.addEventListener('click', () => {
+      activeProjectId = proj.id;
+      calEarliestDate = null;
+      closePanel();
+      renderSidebar();
+      renderCalendar();
+      if (exportOpen) renderExportPanel();
+    });
+    node.addEventListener('contextmenu', e => { e.preventDefault(); openContextMenu(e, proj.id); });
+    ctree.appendChild(node);
+  });
 }
 
 function renderTreeLevel(parentId, depth, container) {
-  getChildren(parentId).forEach(proj => {
+  getChildren(parentId).filter(p => !isEffectivelyCompleted(p.id)).forEach(proj => {
     const hasKids     = getChildren(proj.id).length > 0;
     const isCollapsed = collapsedIds.has(proj.id);
 
@@ -1686,12 +1777,20 @@ function openContextMenu(e, projectId) {
   closeContextMenu();
   const menu = document.getElementById('ctxMenu');
   menu.innerHTML = '';
-  [
-    { label: 'Rename',         action: 'rename' },
-    { label: 'Duplicate',      action: 'duplicate' },
-    { label: 'Add Subproject', action: 'addSub' },
-    { label: 'Delete',         action: 'delete', danger: true }
-  ].forEach(({ label, action, danger }) => {
+  const isDone = isEffectivelyCompleted(projectId);
+  const items = isDone
+    ? [
+        { label: '↩ Restore',  action: 'restore' },
+        { label: 'Delete',     action: 'delete', danger: true }
+      ]
+    : [
+        { label: 'Rename',         action: 'rename' },
+        { label: 'Duplicate',      action: 'duplicate' },
+        { label: 'Add Subproject', action: 'addSub' },
+        { label: '✓ Complete',     action: 'complete' },
+        { label: 'Delete',         action: 'delete', danger: true }
+      ];
+  items.forEach(({ label, action, danger }) => {
     const item = document.createElement('div');
     item.className = 'ctx-item' + (danger ? ' danger' : '');
     item.textContent = label;
@@ -1773,7 +1872,19 @@ function convertTask(taskId, newType) {
 }
 
 function handleContextAction(action, projectId) {
-  if (action === 'rename') {
+  if (action === 'complete') {
+    completeProject(projectId);
+    calEarliestDate = null;
+    renderSidebar();
+    renderCalendar();
+    if (exportOpen) renderExportPanel();
+  } else if (action === 'restore') {
+    restoreProject(projectId);
+    calEarliestDate = null;
+    renderSidebar();
+    renderCalendar();
+    if (exportOpen) renderExportPanel();
+  } else if (action === 'rename') {
     startRename(projectId);
   } else if (action === 'duplicate') {
     const newProj = duplicateProject(projectId);
@@ -2745,6 +2856,13 @@ function init() {
       const btn = document.getElementById('panelDelete');
       if (btn && !btn.classList.contains('hidden')) { e.preventDefault(); deleteFromPanel(); }
     }
+  });
+
+  // Completed section toggle
+  document.getElementById('completedToggle').addEventListener('click', () => {
+    completedOpen = !completedOpen;
+    document.getElementById('completedToggle').classList.toggle('open', completedOpen);
+    document.getElementById('completedTree').classList.toggle('visible', completedOpen);
   });
 
   // Dismiss context menu + type switcher
