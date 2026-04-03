@@ -4,6 +4,28 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PRE-PRO — Ops Mode</title>
+
+<!-- Firebase -->
+<script type="module">
+import { initializeApp }                       from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getDatabase, ref, onValue }           from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+
+const firebaseConfig = {
+  apiKey:      'AIzaSyDYyEv6eospGbtmWt6orY6b4X71jhdUyKI',
+  authDomain:  'prepro-e2abc.firebaseapp.com',
+  databaseURL: 'https://prepro-e2abc-default-rtdb.firebaseio.com',
+  projectId:   'prepro-e2abc',
+};
+const app = initializeApp(firebaseConfig);
+const db  = getDatabase(app);
+
+onValue(ref(db, 'prepro/state'), snapshot => {
+  const data = snapshot.val();
+  if (!data || !Array.isArray(data.projects)) return;
+  window._fbState = data;
+  if (window._opsReloadState) window._opsReloadState(data);
+}, err => console.error('ops firebase error:', err));
+</script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -175,7 +197,7 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
   </div>
   <button class="ops-wknd-btn" id="wkndBtn">Show Weekends</button>
   <button class="ops-wknd-btn" id="refreshBtn" title="Reload latest data from the scheduler">↺ Refresh</button>
-  <a href="index.html" class="ops-back">← PRE-PRO</a>
+  <a href="team.html" class="ops-back">← PRE-PRO</a>
 </div>
 
 <div class="cal-nav">
@@ -275,38 +297,19 @@ let tlColW     = 50;              // current px per visible day column (zoom)
 let tlDates    = [];              // ordered array of visible date strings
 let tlDateMap  = new Map();       // date string → column index
 
-// ── LOAD DATA ──
-function loadState() {
-  try {
-    const r = localStorage.getItem('prepro_data');
-    if (r) return JSON.parse(r);
-  } catch(e) {}
-  return { projects: [] };
-}
-let state = loadState();
+// ── LOAD DATA (Firebase) ──
+let state = { projects: [] };
 
-function reloadState() {
-  state = loadState();
+function reloadState(newState) {
+  if (newState) state = newState;
   renderFilterChips();
   renderWorkload();
   if (viewMode === 'person') renderTimeline();
   else renderCalendar();
 }
 
-// Re-read when index.html saves from another tab (works cross-tab on http://)
-window.addEventListener('storage', e => {
-  if (e.key === 'prepro_data') reloadState();
-});
-
-// Poll every 2 seconds — reliable on file:// where storage events may not fire
-let _lastDataStr = localStorage.getItem('prepro_data') || '';
-setInterval(() => {
-  const cur = localStorage.getItem('prepro_data') || '';
-  if (cur !== _lastDataStr) {
-    _lastDataStr = cur;
-    reloadState();
-  }
-}, 2000);
+window._opsReloadState = reloadState;
+if (window._fbState) reloadState(window._fbState);
 
 // ── TRELLO CATEGORY LOGIC (mirrors index.html) ──
 const PW_PRE = [
@@ -1029,8 +1032,7 @@ function init() {
   });
 
   document.getElementById('refreshBtn').addEventListener('click', () => {
-    _lastDataStr = localStorage.getItem('prepro_data') || '';
-    reloadState();
+    if (window._fbState) reloadState(window._fbState);
   });
 
   document.getElementById('wkndBtn').addEventListener('click', () => {
