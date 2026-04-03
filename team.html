@@ -2968,12 +2968,22 @@ function exportPNG() {
 
   // ── date range ──
   const todayD = new Date(); todayD.setHours(0,0,0,0);
-  // snap to Monday
-  const startD = new Date(todayD);
-  startD.setDate(startD.getDate() - ((startD.getDay() + 6) % 7));
 
+  // Start from the Monday of the week containing the first task
+  let startD;
+  if (proj.tasks.length) {
+    const minStr = proj.tasks.reduce((m, t) => t.date < m ? t.date : m, proj.tasks[0].date);
+    const minD = new Date(minStr + 'T00:00:00');
+    startD = new Date(minD);
+    startD.setDate(minD.getDate() - ((minD.getDay() + 6) % 7)); // snap to Monday
+  } else {
+    startD = new Date(todayD);
+    startD.setDate(todayD.getDate() - ((todayD.getDay() + 6) % 7));
+  }
+
+  // End at the week containing the last task
   let endD = new Date(startD);
-  endD.setDate(startD.getDate() + 27); // 4 weeks
+  endD.setDate(startD.getDate() + 27); // at least 4 weeks
 
   if (proj.tasks.length) {
     const maxStr = proj.tasks.reduce((m, t) => { const d = t.endDate || t.date; return d > m ? d : m; }, '');
