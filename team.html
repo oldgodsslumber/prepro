@@ -170,9 +170,21 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 /* Fixed height on ALL chip variants so lane positions stay aligned across cells */
 .task-chip { font-size: 10px; font-weight: 500; border-radius: 4px; padding: 0 6px; height: 22px; display: flex; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff; cursor: grab; position: relative; flex-shrink: 0; box-sizing: border-box; }
 .task-chip:active { cursor: grabbing; }
-/* Glow: outline on all selected elements — negative margins on mid/end chips
-   naturally hide the inner edges so only outer borders glow */
-[data-task-id].task-selected { outline: 2px solid rgba(255,255,255,.9); outline-offset: -1px; box-shadow: 0 0 8px 3px rgba(255,255,255,.3); }
+/* Glow: box-shadow simulates per-side borders so interior edges of multi-day spans stay dark */
+/* Solo chips and full-block events: all 4 sides */
+.task-chip.chip-solo.task-selected,
+.review-block.task-selected,
+.duedate-marker.task-selected { box-shadow: 0 0 0 2px rgba(255,255,255,.9), 0 0 8px 3px rgba(255,255,255,.3); }
+/* Start: left + top + bottom only (no right — abuts the mid chip) */
+.task-chip.chip-start.task-selected { box-shadow: -2px 0 0 0 rgba(255,255,255,.9), 0 -2px 0 0 rgba(255,255,255,.9), 0 2px 0 0 rgba(255,255,255,.9), 0 0 8px 3px rgba(255,255,255,.3); }
+/* Mid: top + bottom only */
+.task-chip.chip-mid.task-selected,
+.review-bar-mid.task-selected,
+.duedate-bar-mid.task-selected { box-shadow: 0 -2px 0 0 rgba(255,255,255,.9), 0 2px 0 0 rgba(255,255,255,.9), 0 0 8px 3px rgba(255,255,255,.3); }
+/* End: right + top + bottom only (no left — abuts the mid chip) */
+.task-chip.chip-end.task-selected,
+.review-bar-end.task-selected,
+.duedate-bar-end.task-selected { box-shadow: 2px 0 0 0 rgba(255,255,255,.9), 0 -2px 0 0 rgba(255,255,255,.9), 0 2px 0 0 rgba(255,255,255,.9), 0 0 8px 3px rgba(255,255,255,.3); }
 
 /* solo = single day: left handle + text + right handle */
 .task-chip.chip-solo  { border-radius: 4px; padding-left: 17px; padding-right: 17px; }
