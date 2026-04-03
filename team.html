@@ -170,11 +170,9 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 /* Fixed height on ALL chip variants so lane positions stay aligned across cells */
 .task-chip { font-size: 10px; font-weight: 500; border-radius: 4px; padding: 0 6px; height: 22px; display: flex; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff; cursor: grab; position: relative; flex-shrink: 0; box-sizing: border-box; }
 .task-chip:active { cursor: grabbing; }
-/* Glow only on outer edges — mid bars are interior and should not outline */
-.task-chip.chip-solo.task-selected, .task-chip.chip-start.task-selected, .task-chip.chip-end.task-selected,
-.review-block.task-selected, .duedate-marker.task-selected { outline: 2px solid #fff; outline-offset: 1px; box-shadow: 0 0 8px 2px rgba(255,255,255,.35); }
-.review-bar-end.task-selected, .duedate-bar-end.task-selected { outline: 2px solid #fff; outline-offset: 1px; box-shadow: 0 0 8px 2px rgba(255,255,255,.35); outline-left: none; }
-.task-chip.chip-mid.task-selected, .review-bar-mid.task-selected, .duedate-bar-mid.task-selected { box-shadow: 0 0 8px 2px rgba(255,255,255,.35); }
+/* Glow: outline on all selected elements — negative margins on mid/end chips
+   naturally hide the inner edges so only outer borders glow */
+[data-task-id].task-selected { outline: 2px solid rgba(255,255,255,.9); outline-offset: -1px; box-shadow: 0 0 8px 3px rgba(255,255,255,.3); }
 
 /* solo = single day: left handle + text + right handle */
 .task-chip.chip-solo  { border-radius: 4px; padding-left: 17px; padding-right: 17px; }
@@ -1152,6 +1150,22 @@ function buildGhostMap() {
   return map;
 }
 
+// Sync continuation bar/spacer heights to match the start block's actual rendered height
+function syncBarHeights() {
+  document.querySelectorAll('.review-block[data-task-id], .duedate-marker[data-task-id]').forEach(block => {
+    const id = block.dataset.taskId;
+    const h  = block.offsetHeight;
+    if (!h) return;
+    document.querySelectorAll(
+      `.review-bar[data-task-id="${id}"], .duedate-bar[data-task-id="${id}"], [data-spacer-for="${id}"]`
+    ).forEach(el => { el.style.height = h + 'px'; });
+  });
+  // Re-apply glow after DOM rebuild
+  if (selectedTaskId) {
+    document.querySelectorAll(`[data-task-id="${selectedTaskId}"]`).forEach(el => el.classList.add('task-selected'));
+  }
+}
+
 function rebuildCalGrid(adjustScrollTop) {
   const calScroll = document.getElementById('calScroll');
   const prevScrollTop = calScroll.scrollTop;
@@ -1186,6 +1200,7 @@ function rebuildCalGrid(adjustScrollTop) {
   if (adjustScrollTop) {
     calScroll.scrollTop = prevScrollTop + (calScroll.scrollHeight - prevHeight);
   }
+  syncBarHeights();
 }
 
 function extendCalendar(direction) {
@@ -1319,9 +1334,10 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghosts) {
   cell.appendChild(numDiv);
 
   laneArr.forEach(taskOrNull => {
-    if (taskOrNull === null) {
+    if (!taskOrNull || taskOrNull._spacerFor !== undefined) {
       const sp = document.createElement('div');
       sp.className = 'chip-spacer';
+      if (taskOrNull?._spacerFor) sp.dataset.spacerFor = taskOrNull._spacerFor;
       cell.appendChild(sp);
     } else {
       cell.appendChild(buildChip(taskOrNull, dateStr));
@@ -1574,9 +1590,6 @@ function buildDueDateBar(task, dateStr, isEnd) {
   const bar = document.createElement('div');
   bar.className = 'duedate-bar ' + (isEnd ? 'duedate-bar-end' : 'duedate-bar-mid');
   bar.dataset.taskId = task.id;
-  // Match height of start marker: base ~30px + ~18px per attendee row
-  const attCount = task.attendees ? task.attendees.length : 0;
-  if (attCount > 0) bar.style.minHeight = (30 + attCount * 18) + 'px';
 
   bar.addEventListener('click', e => { e.stopPropagation(); openPanel('edit-duedate', null, task.id); setSelectedTask(task.id); });
 
@@ -1724,9 +1737,6 @@ function buildReviewBar(task, dateStr, isEnd) {
   const bar = document.createElement('div');
   bar.className = 'review-bar ' + (isEnd ? 'review-bar-end' : 'review-bar-mid');
   bar.dataset.taskId = task.id;
-  // Match height of start block: base ~38px + ~22px per attendee row
-  const attCount = task.attendees ? task.attendees.length : 0;
-  if (attCount > 0) bar.style.minHeight = (38 + attCount * 22) + 'px';
 
   bar.addEventListener('click', e => { e.stopPropagation(); openPanel('edit-review', task.date, task.id); setSelectedTask(task.id); });
 
@@ -1808,7 +1818,8 @@ function buildTaskLayout(dates) {
     return durB - durA;
   });
 
-  const laneOcc = []; // laneOcc[i] = Set<dateStr> of occupied dates
+  const laneOcc      = []; // laneOcc[i]      = Set<dateStr> of occupied dates
+  const laneOwner    = []; // laneOwner[i]    = task currently owning lane i (for spacer tagging)
 
   sortedMulti.forEach(task => {
     const td = taskDates(task);
@@ -1819,9 +1830,14 @@ function buildTaskLayout(dates) {
     td.forEach(d => laneOcc[lane].add(d));
     td.forEach(d => {
       const arr = layout.get(d);
-      while (arr.length < lane) arr.push(null); // pad with spacers
+      // Pad with tagged spacer objects so bar-height sync can find them
+      while (arr.length < lane) {
+        const spacerTask = laneOwner[arr.length] || null;
+        arr.push(spacerTask ? { _spacerFor: spacerTask.id } : null);
+      }
       arr[lane] = task;
     });
+    laneOwner[lane] = task;
   });
 
   // Single-day tasks: fill first null slot or append
@@ -1987,7 +2003,6 @@ function copyTask(taskId, dropDate, grabDate) {
 // ── SELECTED TASK ──
 let selectedTaskId = null;
 function setSelectedTask(id) {
-  if (selectedTaskId === id) return;
   selectedTaskId = id;
   document.querySelectorAll('.task-selected').forEach(el => el.classList.remove('task-selected'));
   if (id) {
