@@ -213,9 +213,9 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
         <tr>
           <th>Person</th>
           <th>Today</th>
-          <th>This Week ↑</th>
-          <th>Next Week ↑</th>
-          <th>+2 Weeks ↑</th>
+          <th>This Week avg</th>
+          <th>Next Week avg</th>
+          <th>+2 Weeks avg</th>
         </tr>
       </thead>
       <tbody id="wlBody"></tbody>
@@ -396,30 +396,37 @@ function rangesOverlap(s1, e1, s2, e2) {
   return s1 <= e2 && e1 >= s2;
 }
 
-// Returns the peak single-day effort score for a person within a date window
-function getPeakWorkload(person, windowStart, windowEnd) {
+// Returns the total effort score for a single day
+function getDayWorkload(person, dateStr) {
+  let total = 0;
+  getOpsEntries().forEach(e => {
+    if (e.person !== person) return;
+    if (dateStr >= e.date && dateStr <= e.endDate) total += loePts(e.loe);
+  });
+  return total;
+}
+
+// Returns the average daily score across the 5 weekdays in a Mon–Sun window
+function getAvgWorkload(person, weekMonday) {
   const entries = getOpsEntries().filter(e => e.person === person);
   if (!entries.length) return 0;
-  let peak = 0;
-  let d = new Date(windowStart + 'T00:00:00');
-  const end = new Date(windowEnd + 'T00:00:00');
-  while (d <= end) {
-    const ds = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+  let total = 0;
+  for (let i = 0; i < 5; i++) {
+    const ds = addDays(weekMonday, i);
     let daily = 0;
     entries.forEach(e => { if (ds >= e.date && ds <= e.endDate) daily += loePts(e.loe); });
-    if (daily > peak) peak = daily;
-    d.setDate(d.getDate() + 1);
+    total += daily;
   }
-  return peak;
+  return Math.round((total / 5) * 10) / 10; // one decimal place
 }
 
 function workloadInfo(pts) {
-  if (pts === 0) return { label: '—',          color: '#4a4a60', emoji: '' };
-  if (pts === 1) return { label: 'Light',       color: '#4cba6a', emoji: '🟢' };
-  if (pts === 2) return { label: 'Manageable',  color: '#9ab84c', emoji: '🟡' };
-  if (pts === 3) return { label: 'Busy',        color: '#e07b39', emoji: '🟠' };
-  if (pts === 4) return { label: 'Very Busy',   color: '#c0394f', emoji: '🔴' };
-  return           { label: 'Overloaded',     color: '#8b1a2a', emoji: '🚨' };
+  if (pts === 0)  return { label: '—',          color: '#4a4a60', emoji: '' };
+  if (pts < 1.5)  return { label: 'Light',       color: '#4cba6a', emoji: '🟢' };
+  if (pts < 2.5)  return { label: 'Manageable',  color: '#9ab84c', emoji: '🟡' };
+  if (pts < 3.5)  return { label: 'Busy',        color: '#e07b39', emoji: '🟠' };
+  if (pts < 4.5)  return { label: 'Very Busy',   color: '#c0394f', emoji: '🔴' };
+  return            { label: 'Overloaded',     color: '#8b1a2a', emoji: '🚨' };
 }
 
 function fmtDate(y, m, d) {
@@ -452,19 +459,16 @@ function renderWorkload() {
   const people = getAllPeople();
   if (!people.length) { tbody.innerHTML = '<tr><td colspan="5" style="color:var(--dim);padding:8px 0">No internal team tasks found</td></tr>'; return; }
 
-  const today          = todayStr();
-  const thisWeekStart  = getWeekStart(today);
-  const thisWeekEnd    = addDays(thisWeekStart, 6);
-  const nextWeekStart  = addDays(thisWeekStart, 7);
-  const nextWeekEnd    = addDays(thisWeekStart, 13);
-  const twoWeekStart   = addDays(thisWeekStart, 14);
-  const twoWeekEnd     = addDays(thisWeekStart, 20);
+  const today         = todayStr();
+  const thisWeekStart = getWeekStart(today);
+  const nextWeekStart = addDays(thisWeekStart, 7);
+  const twoWeekStart  = addDays(thisWeekStart, 14);
 
   people.forEach(person => {
-    const todayPts    = getPeakWorkload(person, today, today);
-    const thisWkPts   = getPeakWorkload(person, thisWeekStart, thisWeekEnd);
-    const nextWkPts   = getPeakWorkload(person, nextWeekStart, nextWeekEnd);
-    const twoWkPts    = getPeakWorkload(person, twoWeekStart, twoWeekEnd);
+    const todayPts  = getDayWorkload(person, today);
+    const thisWkAvg = getAvgWorkload(person, thisWeekStart);
+    const nextWkAvg = getAvgWorkload(person, nextWeekStart);
+    const twoWkAvg  = getAvgWorkload(person, twoWeekStart);
 
     const tr = document.createElement('tr');
     if (hiddenPeople.has(person)) tr.style.opacity = '.3';
@@ -472,8 +476,9 @@ function renderWorkload() {
     const mkCell = (pts, isToday) => {
       const info = workloadInfo(pts);
       const td = document.createElement('td');
-      td.title = isToday ? `Daily score: ${pts}` : `Peak day score: ${pts}`;
-      td.innerHTML = `<span class="wl-score">${info.emoji ? info.emoji + ' ' : ''}<span style="color:${info.color};font-weight:600">${pts > 0 ? pts + ' · ' : ''}${info.label}</span></span>`;
+      td.title = isToday ? `Total score today: ${pts}` : `Avg daily score: ${pts}`;
+      const scoreStr = pts > 0 ? pts + ' · ' : '';
+      td.innerHTML = `<span class="wl-score">${info.emoji ? info.emoji + ' ' : ''}<span style="color:${info.color};font-weight:600">${scoreStr}${info.label}</span></span>`;
       return td;
     };
 
@@ -481,9 +486,9 @@ function renderWorkload() {
     nameTd.textContent = person;
     tr.appendChild(nameTd);
     tr.appendChild(mkCell(todayPts, true));
-    tr.appendChild(mkCell(thisWkPts));
-    tr.appendChild(mkCell(nextWkPts));
-    tr.appendChild(mkCell(twoWkPts));
+    tr.appendChild(mkCell(thisWkAvg));
+    tr.appendChild(mkCell(nextWkAvg));
+    tr.appendChild(mkCell(twoWkAvg));
     tbody.appendChild(tr);
   });
 }
