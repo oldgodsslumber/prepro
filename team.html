@@ -560,6 +560,7 @@ function loadNameHistory() {
 }
 function saveNameHistory() {
   if (!window._fb) return;
+  _suppressRemoteRender++;
   const { db, ref, set } = window._fb;
   set(ref(db, 'prepro/nameHistory'), nameHistory).catch(err => console.error('saveNameHistory:', err));
 }
@@ -600,13 +601,13 @@ function removeFromHistory(role, name) {
 }
 
 // ── PERSISTENCE (Firebase Realtime Database) ──
-let _suppressRemoteRender = false; // avoid double-render when we wrote the change ourselves
+let _suppressRemoteRender = 0; // avoid double-render when we wrote the change ourselves (counter)
 
 function loadState() { /* no-op — data arrives via onValue listener */ }
 
 function saveState() {
   if (!window._fb) return;
-  _suppressRemoteRender = true;
+  _suppressRemoteRender++;
   const { db, ref, set } = window._fb;
   set(ref(db, 'prepro/state'), state).catch(err => console.error('saveState:', err));
 }
@@ -3272,7 +3273,7 @@ function initFirebase() {
 
     // One-time initial load, then subscribe for live updates
     onValue(rootRef, snapshot => {
-      if (_suppressRemoteRender) { _suppressRemoteRender = false; return; }
+      if (_suppressRemoteRender > 0) { _suppressRemoteRender--; return; }
       applyRemoteState(snapshot);
       setFbStatus(true);
 
