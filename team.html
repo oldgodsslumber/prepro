@@ -116,7 +116,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .palette { background: var(--panel); border-bottom: 1px solid var(--border); padding: 8px 14px; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; flex-shrink: 0; }
 .pal-cat   { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 .pal-label { font-size: 10px; font-weight: 600; letter-spacing: .08em; color: var(--dim); text-transform: uppercase; white-space: nowrap; }
-.role-chip { padding: 4px 11px; border-radius: 12px; font-size: 11px; font-weight: 600; color: #fff; cursor: grab; user-select: none; white-space: nowrap; transition: opacity .1s, transform .1s; }
+.role-chip { padding: 4px 11px; border-radius: 12px; font-size: 11px; font-weight: 600; color: #fff; cursor: grab; user-select: none; white-space: nowrap; transition: opacity .1s, transform .1s; border: 1.5px solid transparent; box-sizing: border-box; }
 .role-chip:hover { opacity: .9; transform: translateY(-1px); }
 .role-chip:active { cursor: grabbing; transform: scale(.97); }
 .chip-duedate { background: #3a3a52 !important; color: var(--text) !important; border: 1.5px solid #606080; }
@@ -503,6 +503,7 @@ const ROLE_CATS = [
 ];
 const REVIEW_COLOR = '#c0394f';
 const LOE_EMOJI    = { low: '🟢', medium: '🟡', high: '🔴' };
+const ROLE_ABBR    = { 'Producer': 'PRD', 'Editor': 'EDT', 'Animator': 'ANM', 'Copywriter': 'CPY', 'Designer': 'DSN', 'Stakeholder': 'STK', 'External Vendor': 'VND', 'Other': 'OTH' };
 const MONTHS   = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DOW_ALL  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const DOW_WD   = ['Mon','Tue','Wed','Thu','Fri'];
@@ -520,9 +521,11 @@ let exportOptBold       = true;
 let exportOptRoles      = false;
 let exportOptAlign      = true;
 let exportOptDueDate    = true;
+let exportOptPTO        = false;
 let exportOptAttendees  = true;
 let exportPNGRoles      = true;
 let exportPNGAttendees  = true;
+let exportPNGPTO        = false;
 let showWeekends    = false;
 let showGhosts      = true;
 let resizeState     = null;
@@ -1030,6 +1033,7 @@ function renderPalette() {
 
   const pplGrp = document.createElement('div');
   pplGrp.className = 'pal-cat';
+  pplGrp.style.cssText = 'flex: 1 1 auto; flex-wrap: wrap;';
   const pplLbl = document.createElement('span');
   pplLbl.className = 'pal-label';
   pplLbl.textContent = 'People';
@@ -1041,7 +1045,7 @@ function renderPalette() {
     const chip = document.createElement('div');
     chip.className = 'role-chip chip-person';
     chip.draggable = true;
-    chip.textContent = `${person} (${role})`;
+    chip.textContent = `${person} (${ROLE_ABBR[role] || role.slice(0,3).toUpperCase()})`;
     chip.style.background = color;
     chip.title = `${person} · ${role} · drag to create task`;
     chip.addEventListener('dragstart', e => {
@@ -2365,7 +2369,7 @@ function buildHTMLExport() {
   const proj = getProject(activeProjectId);
   if (!proj) return { html: '', plain: '' };
   const dueTasks = exportOptDueDate
-    ? [...proj.tasks].filter(t => t.isDueDate).sort((a, b) => a.date.localeCompare(b.date))
+    ? [...proj.tasks].filter(t => t.isDueDate && (exportOptPTO || t.milestoneType !== 'pto')).sort((a, b) => a.date.localeCompare(b.date))
     : [];
   const sorted = [...proj.tasks].filter(t => !t.isDueDate).sort((a, b) => a.date.localeCompare(b.date));
   if (!sorted.length && !dueTasks.length) return { html: '<em>(No tasks scheduled)</em>', plain: '(No tasks scheduled)' };
@@ -2628,6 +2632,7 @@ function renderExportPanel() {
     mkOpt('Include roles',    exportOptRoles,      v => { exportOptRoles      = v; });
     mkOpt('Align tasks',      exportOptAlign,      v => { exportOptAlign      = v; });
     mkOpt('Show due date',    exportOptDueDate,    v => { exportOptDueDate    = v; });
+    mkOpt('Show PTO',         exportOptPTO,        v => { exportOptPTO        = v; });
     mkOpt('Show attendees',   exportOptAttendees,  v => { exportOptAttendees  = v; });
 
     const actions = document.createElement('div');
@@ -2662,6 +2667,7 @@ function renderExportPanel() {
     };
     mkPNGOpt('Include roles',    exportPNGRoles,     v => { exportPNGRoles     = v; });
     mkPNGOpt('Show attendees',   exportPNGAttendees, v => { exportPNGAttendees = v; });
+    mkPNGOpt('Show PTO',         exportPNGPTO,       v => { exportPNGPTO       = v; });
 
     const actions = document.createElement('div');
     actions.className = 'export-actions';
@@ -3097,7 +3103,7 @@ function exportPNG() {
     // tasks — split milestones (isDueDate) out so they render in their own section
     const allTasks   = getTasksForDate(activeProjectId, dateStr);
     const tasks      = allTasks.filter(t => !t.isDueDate);
-    const milestones = allTasks.filter(t => t.isDueDate);
+    const milestones = allTasks.filter(t => t.isDueDate && (exportPNGPTO || t.milestoneType !== 'pto'));
     let ty = cy + 28*SC;
 
     tasks.forEach(task => {
