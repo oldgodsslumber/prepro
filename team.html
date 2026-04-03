@@ -1269,6 +1269,16 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghosts) {
     } else if (pl.type === 'review') {
       openPanel('create-review', dateStr, null, pl.label || 'Review', null, REVIEW_COLOR);
     } else {
+      // If a people chip (person set) lands on the cell instead of the review block,
+      // and there's a review task on this date, route to add-attendee instead of create
+      if (pl.person) {
+        const proj = getProject(activeProjectId);
+        const reviewOnDate = proj && proj.tasks.find(t => t.isReview && t.date === dateStr);
+        if (reviewOnDate) {
+          openPanel('add-attendee', dateStr, reviewOnDate.id, pl.role, pl.category, pl.color, pl.person);
+          return;
+        }
+      }
       openPanel('create', dateStr, null, pl.role, pl.category, pl.color, pl.person || null);
     }
   });
