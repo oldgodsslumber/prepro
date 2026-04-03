@@ -516,7 +516,7 @@ let collapsedIds    = new Set();
 let dragPayload     = null;
 let panelContext    = null;
 let exportTabActive  = localStorage.getItem('prepro_export_tab') || 'text';
-let exportOpen       = true;
+let exportOpen       = false;
 let exportOptBold       = true;
 let exportOptRoles      = false;
 let exportOptAlign      = true;
@@ -3323,10 +3323,10 @@ function setupInitListeners() {
   if (window._listenersReady) return;
   window._listenersReady = true;
 
-  // Open export panel
-  exportOpen = true;
-  document.getElementById('exportChevron').style.transform = '';
-  document.getElementById('exportBody').classList.add('visible');
+  // Export panel starts closed
+  exportOpen = false;
+  document.getElementById('exportChevron').style.transform = 'rotate(180deg)';
+  document.getElementById('exportBody').classList.remove('visible');
 
   // New project
   document.getElementById('btnNewProject').addEventListener('click', () => {
