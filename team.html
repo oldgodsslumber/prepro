@@ -3118,13 +3118,27 @@ function exportPNG() {
 }
 
 // ── FIREBASE BOOTSTRAP ──
+function normalizeState(s) {
+  if (!s || !Array.isArray(s.projects)) { s = { projects: [] }; }
+  s.projects.forEach(p => {
+    // Firebase strips null values and empty arrays — restore safe defaults
+    if (p.parentId === undefined) p.parentId = null;
+    if (!Array.isArray(p.tasks))  p.tasks  = [];
+    if (!p.roster || typeof p.roster !== 'object') p.roster = {};
+    // Normalize tasks
+    p.tasks.forEach(t => {
+      if (!Array.isArray(t.attendees)) t.attendees = [];
+    });
+  });
+  return s;
+}
+
 function applyRemoteState(snapshot) {
   const data = snapshot.val();
   if (!data) return;
 
   if (data.state) {
-    state = data.state;
-    if (!state.projects) state.projects = [];
+    state = normalizeState(data.state);
   }
 
   if (data.nameHistory) {
