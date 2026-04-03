@@ -3091,8 +3091,8 @@ function exportPNG() {
       const isStart  = task.date === dateStr;
       const isEnd    = endDate === dateStr;
       const pad      = 4 * SC;
-      // Reviews grow taller to fit attendee rows
-      const attCount = exportPNGAttendees && task.isReview && task.attendees ? task.attendees.length : 0;
+      // Reviews grow taller to fit attendee rows — only on the start cell
+      const attCount = isStart && exportPNGAttendees && task.isReview && task.attendees ? task.attendees.length : 0;
       const chipH    = (14 + attCount * 10) * SC;
 
       if (ty + chipH > cy + CH - 4*SC) return; // no room
