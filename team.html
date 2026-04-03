@@ -1085,12 +1085,15 @@ function buildGhostMap() {
   const proj = getProject(activeProjectId);
   if (!proj) return new Map();
 
-  // Collect every person associated with the active project (roster + task assignments)
+  // Collect Internal Team people associated with the active project (roster + task assignments)
+  const INTERNAL_ROLES = new Set(['Producer', 'Editor', 'Animator']);
   const rosterPeople = new Set();
-  Object.values(proj.roster || {}).forEach(names => names.forEach(n => rosterPeople.add(n)));
+  Object.entries(proj.roster || {}).forEach(([role, names]) => {
+    if (INTERNAL_ROLES.has(role)) names.forEach(n => rosterPeople.add(n));
+  });
   (proj.tasks || []).forEach(t => {
-    if (t.person) rosterPeople.add(t.person);
-    (t.attendees || []).forEach(a => { if (a.person) rosterPeople.add(a.person); });
+    if (t.person && INTERNAL_ROLES.has(t.role)) rosterPeople.add(t.person);
+    (t.attendees || []).forEach(a => { if (a.person && a.category === 'Internal Team') rosterPeople.add(a.person); });
   });
   if (!rosterPeople.size) return new Map();
 
