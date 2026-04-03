@@ -170,8 +170,11 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 /* Fixed height on ALL chip variants so lane positions stay aligned across cells */
 .task-chip { font-size: 10px; font-weight: 500; border-radius: 4px; padding: 0 6px; height: 22px; display: flex; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff; cursor: grab; position: relative; flex-shrink: 0; box-sizing: border-box; }
 .task-chip:active { cursor: grabbing; }
-.task-chip.task-selected, .review-block.task-selected, .duedate-marker.task-selected,
-.review-bar.task-selected, .duedate-bar.task-selected { outline: 2px solid #fff; outline-offset: 1px; box-shadow: 0 0 8px 2px rgba(255,255,255,.35); }
+/* Glow only on outer edges — mid bars are interior and should not outline */
+.task-chip.chip-solo.task-selected, .task-chip.chip-start.task-selected, .task-chip.chip-end.task-selected,
+.review-block.task-selected, .duedate-marker.task-selected { outline: 2px solid #fff; outline-offset: 1px; box-shadow: 0 0 8px 2px rgba(255,255,255,.35); }
+.review-bar-end.task-selected, .duedate-bar-end.task-selected { outline: 2px solid #fff; outline-offset: 1px; box-shadow: 0 0 8px 2px rgba(255,255,255,.35); outline-left: none; }
+.task-chip.chip-mid.task-selected, .review-bar-mid.task-selected, .duedate-bar-mid.task-selected { box-shadow: 0 0 8px 2px rgba(255,255,255,.35); }
 
 /* solo = single day: left handle + text + right handle */
 .task-chip.chip-solo  { border-radius: 4px; padding-left: 17px; padding-right: 17px; }
@@ -1571,6 +1574,9 @@ function buildDueDateBar(task, dateStr, isEnd) {
   const bar = document.createElement('div');
   bar.className = 'duedate-bar ' + (isEnd ? 'duedate-bar-end' : 'duedate-bar-mid');
   bar.dataset.taskId = task.id;
+  // Match height of start marker: base ~30px + ~18px per attendee row
+  const attCount = task.attendees ? task.attendees.length : 0;
+  if (attCount > 0) bar.style.minHeight = (30 + attCount * 18) + 'px';
 
   bar.addEventListener('click', e => { e.stopPropagation(); openPanel('edit-duedate', null, task.id); setSelectedTask(task.id); });
 
@@ -1713,11 +1719,14 @@ function buildReviewBlock(task, dateStr) {
   return block;
 }
 
-// Slim bar rendered in mid/end cells of a multi-day review
+// Continuation bar rendered in mid/end cells of a multi-day review
 function buildReviewBar(task, dateStr, isEnd) {
   const bar = document.createElement('div');
   bar.className = 'review-bar ' + (isEnd ? 'review-bar-end' : 'review-bar-mid');
   bar.dataset.taskId = task.id;
+  // Match height of start block: base ~38px + ~22px per attendee row
+  const attCount = task.attendees ? task.attendees.length : 0;
+  if (attCount > 0) bar.style.minHeight = (38 + attCount * 22) + 'px';
 
   bar.addEventListener('click', e => { e.stopPropagation(); openPanel('edit-review', task.date, task.id); setSelectedTask(task.id); });
 
