@@ -502,6 +502,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
             <div class="export-tab" data-tab="planyway">Trello Export</div>
             <div class="export-tab" data-tab="roster">Role Assignees</div>
             <div class="export-tab" data-tab="invites">📅 Invites</div>
+            <div class="export-tab" data-tab="invites-web">🌐 Invite Web</div>
           </div>
           <div class="export-content" id="exportContent"></div>
         </div>
@@ -2820,6 +2821,97 @@ function downloadICS(icsStr, filename) {
   URL.revokeObjectURL(a.href);
 }
 
+function makeOutlookURL(t, proj) {
+  function pad(n) { return String(n).padStart(2,'0'); }
+  function fmtDT(s, h, m) { return s + 'T' + pad(h) + ':' + pad(m) + ':00'; }
+  function dayAfter(s) {
+    const d = new Date(s + 'T00:00:00'); d.setDate(d.getDate()+1);
+    return [d.getFullYear(), pad(d.getMonth()+1), pad(d.getDate())].join('-');
+  }
+  const lbl = (t.reviewLabel || '').toLowerCase();
+  const isOnLoc  = lbl.includes('on-location');
+  const isStudio = lbl.includes('studio shoot');
+  const allDay   = isOnLoc || (t.isDueDate && !t.isReview);
+  let startdt, enddt;
+  if (allDay) {
+    startdt = t.date;
+    enddt   = t.endDate ? dayAfter(t.endDate) : dayAfter(t.date);
+  } else if (isStudio && t.endDate) {
+    startdt = fmtDT(t.date, 9, 0);
+    enddt   = fmtDT(t.endDate, 17, 0);
+  } else if (isStudio) {
+    startdt = fmtDT(t.date, 9, 0);
+    enddt   = fmtDT(t.date, 11, 0);
+  } else {
+    startdt = fmtDT(t.date, 9, 0);
+    enddt   = fmtDT(t.date, 9, 30);
+  }
+  const rawLabel = t.reviewLabel || '';
+  const rawName  = t.taskName   || '';
+  const subject  = rawLabel && rawLabel !== rawName
+    ? rawLabel + (rawName ? ': ' + rawName : '')
+    : (rawName || 'Meeting');
+  const body = (t.attendees || []).map(a => a.person + (a.role ? ' (' + a.role + ')' : '')).join(', ');
+  const location = proj ? proj.name : '';
+  const params = new URLSearchParams({ subject, startdt, enddt });
+  if (body)     params.set('body', body);
+  if (location) params.set('location', location);
+  return 'https://outlook.office.com/calendar/action/compose?' + params.toString();
+}
+
+function renderInvitesWebPanel() {
+  const content = document.getElementById('exportContent');
+  const proj = getProject(activeProjectId);
+  const tasks = proj ? proj.tasks.filter(isMeetingTask).sort((a,b) => a.date.localeCompare(b.date)) : [];
+  if (!tasks.length) {
+    const em = document.createElement('div');
+    em.style.cssText = 'color:var(--dim);font-size:12px;padding:14px 2px;';
+    em.textContent = 'No meetings or key dates scheduled.';
+    content.appendChild(em); return;
+  }
+  const note = document.createElement('div');
+  note.style.cssText = 'font-size:11px;color:var(--dim);padding:6px 2px 4px;flex-shrink:0;';
+  note.textContent = 'Opens Outlook Web in a new tab with the event pre-filled.';
+  content.appendChild(note);
+
+  const list = document.createElement('div');
+  list.className = 'export-table-wrap';
+  tasks.forEach(t => {
+    const row = document.createElement('div');
+    row.className = 'invite-row';
+
+    const dateEl = document.createElement('span');
+    dateEl.className = 'invite-date';
+    dateEl.textContent = new Date(t.date + 'T00:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' });
+
+    const badge = document.createElement('span');
+    badge.className = 'invite-badge';
+    badge.textContent = t.reviewLabel || (t.isDueDate ? (t.milestoneType || 'Key Date') : 'Task');
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'invite-name';
+    nameEl.textContent = t.taskName || t.reviewLabel || 'Meeting';
+
+    const atts = document.createElement('span');
+    atts.className = 'invite-atts';
+    atts.textContent = (t.attendees || []).map(a => a.person + (a.role ? ' (' + a.role + ')' : '')).join(', ');
+
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-ghost';
+    btn.style.flexShrink = '0';
+    btn.textContent = '🌐 Open';
+    btn.addEventListener('click', () => { window.open(makeOutlookURL(t, proj), '_blank'); });
+
+    row.appendChild(dateEl);
+    row.appendChild(badge);
+    row.appendChild(nameEl);
+    row.appendChild(atts);
+    row.appendChild(btn);
+    list.appendChild(row);
+  });
+  content.appendChild(list);
+}
+
 function renderInvitesPanel() {
   const content = document.getElementById('exportContent');
   const proj = getProject(activeProjectId);
@@ -2995,6 +3087,10 @@ function renderExportPanel() {
 
   } else if (exportTabActive === 'invites') {
     renderInvitesPanel();
+    return;
+
+  } else if (exportTabActive === 'invites-web') {
+    renderInvitesWebPanel();
     return;
 
   } else {
