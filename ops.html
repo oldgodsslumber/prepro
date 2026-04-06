@@ -386,7 +386,7 @@ function getTaskCat(task) {
 // Returns flat list of { date, endDate, person, cat, taskName, loe, color, projectName }
 function getOpsEntries() {
   const entries = [];
-  (state.projects || []).forEach(proj => {
+  (state.projects || []).filter(p => !p.completed).forEach(proj => {
     (proj.tasks || []).forEach(task => {
       if (task.isDueDate) return;
       const loe = task.loe || 'medium';
