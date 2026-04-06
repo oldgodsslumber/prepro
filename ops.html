@@ -8,7 +8,7 @@
 <!-- Firebase -->
 <script type="module">
 import { initializeApp }                       from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getDatabase, ref, onValue }           from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+import { getDatabase, ref, onValue, set }      from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
 
 const firebaseConfig = {
   apiKey:      'AIzaSyDYyEv6eospGbtmWt6orY6b4X71jhdUyKI',
@@ -19,6 +19,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
 
+window._fb = { db, ref, set };
 onValue(ref(db, 'prepro/state'), snapshot => {
   const data = snapshot.val();
   if (!data || !Array.isArray(data.projects)) return;
@@ -170,7 +171,15 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .tl-track { flex: 1; position: relative; background: var(--card); }
 
 /* Task bars */
-.tl-task-bar { position: absolute; border-radius: 3px; color: #fff; display: flex; align-items: center; overflow: hidden; cursor: default; }
+.tl-task-bar { position: absolute; border-radius: 3px; color: #fff; display: flex; align-items: center; overflow: visible; cursor: grab; user-select: none; }
+.tl-task-bar:active { cursor: grabbing; }
+.tl-task-bar.dragging { opacity: .6; z-index: 50 !important; }
+.tl-resize-handle { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; z-index: 3; }
+.tl-resize-handle.left  { left: -3px; }
+.tl-resize-handle.right { right: -3px; }
+.tl-resize-handle::after { content: '⋮⋮'; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 8px; opacity: 0; color: #fff; pointer-events: none; }
+.tl-task-bar:hover .tl-resize-handle::after { opacity: .7; }
+.tl-person-row.drop-target { background: rgba(108,99,255,.12); }
 .tl-bar-inner { padding: 0 5px; display: flex; align-items: center; gap: 3px; overflow: hidden; min-width: 0; width: 100%; }
 .tl-bar-cat  { font-size: 7px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; opacity: .85; flex-shrink: 0; }
 .tl-bar-name { font-size: 9px; opacity: .9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
@@ -307,14 +316,27 @@ let tlDateMap  = new Map();       // date string → column index
 
 // ── LOAD DATA (Firebase) ──
 let state = { projects: [] };
+let _suppressRemoteRender = 0;  // counter to avoid re-render echo from our own writes
+
+function saveState() {
+  if (!window._fb) return;
+  _suppressRemoteRender++;
+  const { db, ref, set } = window._fb;
+  set(ref(db, 'prepro/state'), state).catch(err => console.error('saveState:', err));
+}
 
 function reloadState(newState) {
+  if (_suppressRemoteRender > 0) { _suppressRemoteRender--; if (newState) state = newState; return; }
   if (newState) state = newState;
   renderFilterChips();
   renderWorkload();
   if (viewMode === 'person') renderTimeline();
   else renderCalendar();
 }
+
+// ── DRAG / RESIZE STATE ──
+let tlDragState  = null;  // { entry, bar, startX, origDate, origEndDate, origPersonRow }
+let tlResizeState = null; // { entry, bar, side, startX }
 
 window._opsReloadState = reloadState;
 if (window._fbState) reloadState(window._fbState);
@@ -373,8 +395,8 @@ function getOpsEntries() {
         const color = CAT_COLORS[cat] || '#6c63ff';
         const internalAtts = (task.attendees || []).filter(a => a.category === 'Internal Team');
         if (internalAtts.length) {
-          internalAtts.forEach(att => {
-            entries.push({ date: task.date, endDate: task.endDate || task.date, person: att.person || att.role, cat, taskName: task.taskName || task.reviewLabel || 'Review', loe, color, projectName: proj.name });
+          internalAtts.forEach((att, attIdx) => {
+            entries.push({ date: task.date, endDate: task.endDate || task.date, person: att.person || att.role, cat, taskName: task.taskName || task.reviewLabel || 'Review', loe, color, projectName: proj.name, projectId: proj.id, taskId: task.id, isReview: true, attIdx });
           });
         }
         return;
@@ -383,7 +405,7 @@ function getOpsEntries() {
       const cat = getTaskCat(task);
       if (!cat) return;
       const color = CAT_COLORS[cat] || '#6c63ff';
-      entries.push({ date: task.date, endDate: task.endDate || task.date, person: task.person || task.role, cat, taskName: task.taskName || '(untitled)', loe, color, projectName: proj.name });
+      entries.push({ date: task.date, endDate: task.endDate || task.date, person: task.person || task.role, cat, taskName: task.taskName || '(untitled)', loe, color, projectName: proj.name, projectId: proj.id, taskId: task.id });
     });
   });
   return entries;
@@ -655,6 +677,203 @@ function updateZoomButtons() {
   document.getElementById('zoomLabel').textContent = tlColW + 'px';
 }
 
+// ── TIMELINE DRAG (move + reassign) ──
+function colToDate(col) {
+  if (col < 0) col = 0;
+  if (col >= tlDates.length) col = tlDates.length - 1;
+  return tlDates[col] || null;
+}
+
+function findTask(projectId, taskId) {
+  const proj = state.projects.find(p => p.id === projectId);
+  if (!proj) return null;
+  const task = proj.tasks.find(t => t.id === taskId);
+  return task ? { proj, task } : null;
+}
+
+function getPersonRowAtY(y) {
+  const rows = document.querySelectorAll('.tl-person-row');
+  for (const row of rows) {
+    const rect = row.getBoundingClientRect();
+    if (y >= rect.top && y <= rect.bottom) {
+      const nameEl = row.querySelector('.tl-row-name-text');
+      return nameEl ? nameEl.textContent : null;
+    }
+  }
+  return null;
+}
+
+function startTlDrag(e, entry, bar, personRow) {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  const sc = document.getElementById('tlScroll');
+  const startX = e.clientX;
+  const startScrollLeft = sc.scrollLeft;
+  let moved = false;
+  let lastHighlightRow = null;
+
+  function onMove(ev) {
+    const dx = ev.clientX - startX;
+    if (!moved && Math.abs(dx) < 4) return;
+    moved = true;
+    bar.classList.add('dragging');
+
+    // Horizontal shift
+    const totalDx = dx + (sc.scrollLeft - startScrollLeft);
+    const colShift = Math.round(totalDx / tlColW);
+    const origStartCol = nearestCol(entry.date, true);
+    const origEndCol   = nearestCol(entry.endDate || entry.date, false);
+    if (origStartCol === null) return;
+    const newStartCol = origStartCol + colShift;
+    const newEndCol   = (origEndCol !== null ? origEndCol : origStartCol) + colShift;
+    const left  = newStartCol * tlColW + 2;
+    const width = Math.max(TL_BAR_H, (newEndCol - newStartCol + 1) * tlColW - 4);
+    bar.style.left  = left + 'px';
+    bar.style.width = width + 'px';
+
+    // Vertical — highlight target person row
+    const targetPerson = getPersonRowAtY(ev.clientY);
+    if (lastHighlightRow) lastHighlightRow.classList.remove('drop-target');
+    if (targetPerson && targetPerson !== entry.person) {
+      const rows = document.querySelectorAll('.tl-person-row');
+      for (const r of rows) {
+        const nm = r.querySelector('.tl-row-name-text');
+        if (nm && nm.textContent === targetPerson) { r.classList.add('drop-target'); lastHighlightRow = r; break; }
+      }
+    }
+  }
+
+  function onUp(ev) {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    bar.classList.remove('dragging');
+    if (lastHighlightRow) lastHighlightRow.classList.remove('drop-target');
+    if (!moved) return;
+
+    const dx = ev.clientX - startX;
+    const totalDx = dx + (sc.scrollLeft - startScrollLeft);
+    const colShift = Math.round(totalDx / tlColW);
+    const found = findTask(entry.projectId, entry.taskId);
+    if (!found) return;
+    const { task } = found;
+
+    // Apply date shift
+    if (colShift !== 0) {
+      const startD = new Date(task.date + 'T00:00:00');
+      const newStart = new Date(startD);
+      // Walk column-by-column to account for hidden weekends
+      let remaining = Math.abs(colShift);
+      const dir = colShift > 0 ? 1 : -1;
+      while (remaining > 0) {
+        newStart.setDate(newStart.getDate() + dir);
+        if (!showWeekends && (newStart.getDay() === 0 || newStart.getDay() === 6)) continue;
+        remaining--;
+      }
+      const newStartStr = fmtDate(newStart.getFullYear(), newStart.getMonth() + 1, newStart.getDate());
+      if (task.endDate && task.endDate !== task.date) {
+        const durMs = new Date(task.endDate + 'T00:00:00') - new Date(task.date + 'T00:00:00');
+        const newEndD = new Date(newStart.getTime() + durMs);
+        task.endDate = fmtDate(newEndD.getFullYear(), newEndD.getMonth() + 1, newEndD.getDate());
+      }
+      task.date = newStartStr;
+    }
+
+    // Apply person reassignment
+    const targetPerson = getPersonRowAtY(ev.clientY);
+    if (targetPerson && targetPerson !== entry.person) {
+      if (entry.isReview) {
+        // Reassign the attendee
+        const att = (task.attendees || [])[entry.attIdx];
+        if (att) att.person = targetPerson;
+      } else {
+        task.person = targetPerson;
+      }
+    }
+
+    saveState();
+    renderTimeline();
+    renderWorkload();
+  }
+
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+// ── TIMELINE RESIZE ──
+function startTlResize(e, entry, bar, side) {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const sc = document.getElementById('tlScroll');
+  const startX = e.clientX;
+  const startScrollLeft = sc.scrollLeft;
+  const origLeft  = parseFloat(bar.style.left);
+  const origWidth = parseFloat(bar.style.width);
+
+  function onMove(ev) {
+    const dx = ev.clientX - startX + (sc.scrollLeft - startScrollLeft);
+    if (side === 'right') {
+      bar.style.width = Math.max(TL_BAR_H, origWidth + dx) + 'px';
+    } else {
+      const newLeft  = origLeft + dx;
+      const newWidth = origWidth - dx;
+      if (newWidth >= TL_BAR_H) {
+        bar.style.left  = newLeft + 'px';
+        bar.style.width = newWidth + 'px';
+      }
+    }
+  }
+
+  function onUp(ev) {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+
+    const found = findTask(entry.projectId, entry.taskId);
+    if (!found) return;
+    const { task } = found;
+
+    const dx = ev.clientX - startX + (sc.scrollLeft - startScrollLeft);
+    const colShift = Math.round(dx / tlColW);
+    if (colShift === 0) { renderTimeline(); return; }
+
+    if (side === 'right') {
+      const endD = new Date((task.endDate || task.date) + 'T00:00:00');
+      let remaining = Math.abs(colShift);
+      const dir = colShift > 0 ? 1 : -1;
+      while (remaining > 0) {
+        endD.setDate(endD.getDate() + dir);
+        if (!showWeekends && (endD.getDay() === 0 || endD.getDay() === 6)) continue;
+        remaining--;
+      }
+      const newEndStr = fmtDate(endD.getFullYear(), endD.getMonth() + 1, endD.getDate());
+      if (newEndStr < task.date) return renderTimeline();
+      if (newEndStr === task.date) delete task.endDate;
+      else task.endDate = newEndStr;
+    } else {
+      const startD = new Date(task.date + 'T00:00:00');
+      let remaining = Math.abs(colShift);
+      const dir = colShift > 0 ? 1 : -1;
+      while (remaining > 0) {
+        startD.setDate(startD.getDate() + dir);
+        if (!showWeekends && (startD.getDay() === 0 || startD.getDay() === 6)) continue;
+        remaining--;
+      }
+      const newStartStr = fmtDate(startD.getFullYear(), startD.getMonth() + 1, startD.getDate());
+      const endDate = task.endDate || task.date;
+      if (newStartStr > endDate) return renderTimeline();
+      task.date = newStartStr;
+      if (task.date === task.endDate) delete task.endDate;
+    }
+
+    saveState();
+    renderTimeline();
+    renderWorkload();
+  }
+
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
 // ── TIMELINE RENDER ──
 function renderTimeline() {
   buildTlDates();
@@ -801,14 +1020,37 @@ function renderTimeline() {
       bar.className = 'tl-task-bar';
       bar.style.cssText = `left:${left}px;width:${width}px;top:${top}px;height:${TL_BAR_H}px;background:${entry.color};z-index:2;`;
       bar.title = `${entry.person} · ${entry.cat} · ${entry.taskName}\n${entry.date}${entry.endDate && entry.endDate !== entry.date ? ' → ' + entry.endDate : ''} (${entry.projectName})`;
+      bar.dataset.projectId = entry.projectId;
+      bar.dataset.taskId    = entry.taskId;
+      if (entry.isReview) bar.dataset.attIdx = entry.attIdx;
+
+      // Resize handles (for multi-day tasks)
+      const isMulti = entry.endDate && entry.endDate !== entry.date;
+      if (isMulti) {
+        const lh = document.createElement('div');
+        lh.className = 'tl-resize-handle left';
+        lh.addEventListener('mousedown', e => startTlResize(e, entry, bar, 'left'));
+        bar.appendChild(lh);
+      }
+      const rh = document.createElement('div');
+      rh.className = 'tl-resize-handle right';
+      rh.addEventListener('mousedown', e => startTlResize(e, entry, bar, 'right'));
+      bar.appendChild(rh);
+
+      // Drag to move / reassign
+      bar.addEventListener('mousedown', e => {
+        if (e.target.classList.contains('tl-resize-handle')) return;
+        startTlDrag(e, entry, bar, row);
+      });
 
       const inner = document.createElement('div');
       inner.className = 'tl-bar-inner';
+      inner.style.pointerEvents = 'none';
 
       if (chipDisplay === 'categories') {
         const catSp = document.createElement('span');
         catSp.className = 'tl-bar-cat';
-        catSp.textContent = entry.cat;   // full category name
+        catSp.textContent = entry.cat;
         inner.appendChild(catSp);
       } else {
         const nameSp = document.createElement('span');
