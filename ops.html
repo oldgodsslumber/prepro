@@ -156,8 +156,15 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .tl-person-row { display: flex; border-bottom: 1px solid var(--border); }
 .tl-person-row.dimmed { opacity: .18; pointer-events: none; }
 
-.tl-row-name { flex-shrink: 0; width: 130px; position: sticky; left: 0; z-index: 10; background: var(--card); border-right: 1px solid var(--border); display: flex; align-items: center; gap: 7px; padding: 0 10px; font-size: 11px; font-weight: 600; color: var(--text); word-break: break-word; }
+.tl-row-name { flex-shrink: 0; width: 130px; position: sticky; left: 0; z-index: 10; background: var(--card); border-right: 1px solid var(--border); display: flex; align-items: center; gap: 7px; padding: 0 6px 0 10px; font-size: 11px; font-weight: 600; color: var(--text); word-break: break-word; }
 .tl-row-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.tl-row-name-text { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.tl-reorder { display: flex; flex-direction: column; gap: 1px; margin-left: auto; flex-shrink: 0; opacity: 0; transition: opacity .15s; }
+.tl-row-name:hover .tl-reorder { opacity: 1; }
+.tl-reorder-btn { width: 16px; height: 12px; display: flex; align-items: center; justify-content: center; font-size: 8px; color: var(--dim); background: var(--panel); border: 1px solid var(--border); border-radius: 2px; cursor: pointer; padding: 0; line-height: 1; }
+.tl-reorder-btn:hover { color: var(--accent); border-color: var(--accent); }
+.tl-person-row.drag-over-above { box-shadow: inset 0 2px 0 0 var(--accent); }
+.tl-person-row.drag-over-below { box-shadow: inset 0 -2px 0 0 var(--accent); }
 
 /* Scrollable track where task bars live */
 .tl-track { flex: 1; position: relative; background: var(--card); }
@@ -287,6 +294,7 @@ let calEarliestDate = null;
 let calLatestDate   = null;
 let calObserver     = null;
 let chipDisplay = 'categories'; // 'categories' | 'tasks'
+let personOrder = JSON.parse(localStorage.getItem('ops_person_order') || '[]'); // persisted row order
 let viewMode    = 'person';     // 'calendar' | 'person'
 
 // Timeline-specific state
@@ -385,7 +393,27 @@ function getOpsEntries() {
 function getAllPeople() {
   const people = new Set();
   getOpsEntries().forEach(e => { if (e.person) people.add(e.person); });
-  return [...people].sort();
+  const alpha = [...people].sort();
+  if (!personOrder.length) return alpha;
+  // Saved order first (only those still present), then any new people alphabetically
+  const ordered = personOrder.filter(p => people.has(p));
+  const rest = alpha.filter(p => !personOrder.includes(p));
+  return [...ordered, ...rest];
+}
+function savePersonOrder(arr) {
+  personOrder = arr;
+  try { localStorage.setItem('ops_person_order', JSON.stringify(arr)); } catch(_) {}
+}
+function movePerson(person, dir) {
+  const current = getAllPeople();
+  const idx = current.indexOf(person);
+  if (idx < 0) return;
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= current.length) return;
+  current.splice(idx, 1);
+  current.splice(newIdx, 0, person);
+  savePersonOrder(current);
+  renderTimeline();
 }
 
 // ── WORKLOAD ──
@@ -719,7 +747,27 @@ function renderTimeline() {
     dot.className = 'tl-row-dot';
     dot.style.background = personColor[person] || '#6c63ff';
     nameCell.appendChild(dot);
-    nameCell.appendChild(document.createTextNode(person));
+    const nameText = document.createElement('span');
+    nameText.className = 'tl-row-name-text';
+    nameText.textContent = person;
+    nameCell.appendChild(nameText);
+
+    // Reorder buttons
+    const reorder = document.createElement('div');
+    reorder.className = 'tl-reorder';
+    const btnUp = document.createElement('button');
+    btnUp.className = 'tl-reorder-btn';
+    btnUp.textContent = '▲';
+    btnUp.title = 'Move up';
+    btnUp.addEventListener('click', e => { e.stopPropagation(); movePerson(person, -1); });
+    const btnDn = document.createElement('button');
+    btnDn.className = 'tl-reorder-btn';
+    btnDn.textContent = '▼';
+    btnDn.title = 'Move down';
+    btnDn.addEventListener('click', e => { e.stopPropagation(); movePerson(person, 1); });
+    reorder.appendChild(btnUp);
+    reorder.appendChild(btnDn);
+    nameCell.appendChild(reorder);
     row.appendChild(nameCell);
 
     const track = document.createElement('div');
