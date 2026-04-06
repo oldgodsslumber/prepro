@@ -107,6 +107,9 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .completed-tree.visible { display: block; }
 .tree-node.done .tree-label { text-decoration: line-through; opacity: .55; }
 .tree-node.done.active .tree-label { opacity: 1; }
+.tree-node.ghost .tree-label { opacity: .45; font-style: italic; }
+.tree-node.ghost .tree-label::after { content: ' 👻'; font-style: normal; }
+.tree-node.ghost.active .tree-label { opacity: 1; }
 .rename-input { background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; padding: 1px 6px; color: var(--text); font-size: 13px; outline: none; flex: 1; min-width: 0; }
 
 /* ── RIGHT COLUMN ── */
@@ -781,7 +784,7 @@ function renderTreeLevel(parentId, depth, container) {
     const isCollapsed = collapsedIds.has(proj.id);
 
     const node = document.createElement('div');
-    node.className = 'tree-node' + (proj.id === activeProjectId ? ' active' : '');
+    node.className = 'tree-node' + (proj.id === activeProjectId ? ' active' : '') + (proj.ghost ? ' ghost' : '');
     node.style.paddingLeft = (8 + depth * 16) + 'px';
     node.dataset.id = proj.id;
 
@@ -1132,7 +1135,7 @@ function buildGhostMap() {
   };
 
   state.projects.forEach(p => {
-    if (p.id === activeProjectId || p.completed) return;
+    if (p.id === activeProjectId || p.completed || p.ghost) return;
     (p.tasks || []).forEach(t => {
       if (t.isDueDate) return;
       const endDate = t.endDate || t.date;
@@ -2326,6 +2329,7 @@ function openContextMenu(e, projectId) {
   closeContextMenu();
   const menu = document.getElementById('ctxMenu');
   menu.innerHTML = '';
+  const proj = getProject(projectId);
   const isDone = isEffectivelyCompleted(projectId);
   const items = isDone
     ? [
@@ -2336,6 +2340,7 @@ function openContextMenu(e, projectId) {
         { label: 'Rename',         action: 'rename' },
         { label: 'Duplicate',      action: 'duplicate' },
         { label: 'Add Subproject', action: 'addSub' },
+        { label: proj.ghost ? '👁 Show in Ops' : '👻 Ghost (hide from Ops)', action: 'ghost' },
         { label: '✓ Complete',     action: 'complete' },
         { label: 'Delete',         action: 'delete', danger: true }
       ];
@@ -2444,6 +2449,9 @@ function handleContextAction(action, projectId) {
       renderSidebar(); renderCalendar();
       if (exportOpen) renderExportPanel();
     }
+  } else if (action === 'ghost') {
+    const p = getProject(projectId);
+    if (p) { p.ghost = !p.ghost; saveState(); renderSidebar(); }
   } else if (action === 'addSub') {
     const name = prompt('Subproject name:');
     if (name && name.trim()) {
