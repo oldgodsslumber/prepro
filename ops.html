@@ -459,18 +459,37 @@ function getDayWorkload(person, dateStr) {
   return total;
 }
 
-// Returns the average daily score across the 5 weekdays in a Mon–Sun window
+// Check if a person has PTO on a given date (scans all non-completed projects)
+function isPersonPTO(person, dateStr) {
+  const lowerPerson = person.toLowerCase();
+  for (const proj of (state.projects || [])) {
+    for (const t of (proj.tasks || [])) {
+      if (!t.isDueDate || t.milestoneType !== 'pto') continue;
+      const end = t.endDate || t.date;
+      if (dateStr < t.date || dateStr > end) continue;
+      // Check attendees
+      if ((t.attendees || []).some(a => a.person && a.person.toLowerCase() === lowerPerson)) return true;
+      // Check taskName contains person name (e.g. "John PTO")
+      if (t.taskName && t.taskName.toLowerCase().includes(lowerPerson)) return true;
+    }
+  }
+  return false;
+}
+
+// Returns the average daily score across the weekdays in a Mon–Sun window, excluding PTO days
 function getAvgWorkload(person, weekMonday) {
   const entries = getOpsEntries().filter(e => e.person === person);
   if (!entries.length) return 0;
   let total = 0;
+  let workDays = 0;
   for (let i = 0; i < 5; i++) {
     const ds = addDays(weekMonday, i);
-    let daily = 0;
-    entries.forEach(e => { if (ds >= e.date && ds <= e.endDate) daily += loePts(e.loe); });
-    total += daily;
+    if (isPersonPTO(person, ds)) continue;
+    workDays++;
+    entries.forEach(e => { if (ds >= e.date && ds <= e.endDate) total += loePts(e.loe); });
   }
-  return Math.round((total / 5) * 10) / 10; // one decimal place
+  if (workDays === 0) return 0;
+  return Math.round((total / workDays) * 10) / 10;
 }
 
 function workloadInfo(pts) {
