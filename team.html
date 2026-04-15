@@ -168,6 +168,8 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 /* ── GHOST CHIPS (cross-project busyness overlay) ── */
 .ghost-chip { font-size: 10px; font-weight: 500; border-radius: 4px; padding: 2px 6px; color: rgba(255,255,255,.45); background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); pointer-events: none; user-select: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-style: italic; min-width: 0; max-width: 100%; }
 .ghost-name { font-weight: 600; color: rgba(255,255,255,.65); }
+.ghost-pto { background: rgba(255,180,50,.12); border-color: rgba(255,180,50,.25); }
+.ghost-pto .ghost-name { color: rgba(255,200,80,.8); }
 
 /* ── TASK CHIPS ── */
 /* Fixed height on ALL chip variants so lane positions stay aligned across cells */
@@ -1137,8 +1139,23 @@ function buildGhostMap() {
   state.projects.forEach(p => {
     if (p.id === activeProjectId || p.completed || p.ghost) return;
     (p.tasks || []).forEach(t => {
-      if (t.isDueDate) return;
+      if (t.isDueDate && t.milestoneType !== 'pto') return; // allow PTO through
       const endDate = t.endDate || t.date;
+
+      // PTO: show for any attendee who's on this project's roster
+      if (t.isDueDate && t.milestoneType === 'pto') {
+        (t.attendees || []).forEach(a => {
+          if (!a.person || !rosterPeople.has(a.person)) return;
+          let d = new Date(t.date + 'T00:00:00');
+          const end = new Date(endDate + 'T00:00:00');
+          while (d <= end) {
+            const ds = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+            addEntry(ds, { person: a.person, role: 'PTO', color: '#555', projectName: p.name, isPTO: true });
+            d.setDate(d.getDate() + 1);
+          }
+        });
+        return;
+      }
 
       // Direct task assignment
       if (t.person && rosterPeople.has(t.person)) {
@@ -1370,15 +1387,17 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghosts) {
       if (seen.has(key)) return;
       seen.add(key);
       const gc = document.createElement('div');
-      gc.className = 'ghost-chip';
+      gc.className = 'ghost-chip' + (g.isPTO ? ' ghost-pto' : '');
       gc.title = g.person + ' · ' + g.role + ' (' + g.projectName + ')';
       const nameSpan = document.createElement('span');
       nameSpan.className = 'ghost-name';
-      nameSpan.textContent = g.person;
+      nameSpan.textContent = g.isPTO ? '🏖 ' + g.person + ' PTO' : g.person;
       gc.appendChild(nameSpan);
-      const projSpan = document.createElement('span');
-      projSpan.textContent = ' · ' + g.projectName;
-      gc.appendChild(projSpan);
+      if (!g.isPTO) {
+        const projSpan = document.createElement('span');
+        projSpan.textContent = ' · ' + g.projectName;
+        gc.appendChild(projSpan);
+      }
       cell.appendChild(gc);
     });
   }
@@ -3764,9 +3783,27 @@ function setupInitListeners() {
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') { closePanel(); closeContextMenu(); }
     if (e.key === 'Enter' && panelContext && e.target.tagName === 'INPUT') { e.preventDefault(); savePanel(); }
-    if ((e.key === 'Delete' || e.key === 'Backspace') && panelContext && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'SELECT') {
-      const btn = document.getElementById('panelDelete');
-      if (btn && !btn.classList.contains('hidden')) { e.preventDefault(); deleteFromPanel(); }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'SELECT') {
+      // If panel is open with a delete button, use that
+      if (panelContext) {
+        const btn = document.getElementById('panelDelete');
+        if (btn && !btn.classList.contains('hidden')) { e.preventDefault(); deleteFromPanel(); return; }
+      }
+      // Otherwise delete the selected chip directly
+      if (selectedTaskId) {
+        const proj = getProject(activeProjectId);
+        if (proj) {
+          const task = proj.tasks.find(t => t.id === selectedTaskId);
+          if (task && confirm('Delete "' + (task.taskName || task.reviewLabel || task.role || 'this task') + '"?')) {
+            proj.tasks = proj.tasks.filter(t => t.id !== selectedTaskId);
+            selectedTaskId = null;
+            closePanel();
+            saveState();
+            renderCalendar();
+            if (exportOpen) renderExportPanel();
+          }
+        }
+      }
     }
   });
 
