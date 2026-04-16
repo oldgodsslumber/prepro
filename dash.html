@@ -312,6 +312,15 @@ function removeSubtask(taskId, subId) {
   saveDashData();
   renderAll();
 }
+function editSubtask(taskId, subId, newText) {
+  const subs = dashData.subtasks[taskId];
+  if (!subs) return;
+  const sub = subs.find(s => s.id === subId);
+  if (!sub) return;
+  if (newText.trim()) sub.text = newText.trim();
+  saveDashData();
+  renderAll();
+}
 
 // ── STATUS ──
 function getStatus(person, projectId) { return (dashData.status[person] || {})[projectId] || 'on-schedule'; }
@@ -744,6 +753,29 @@ function renderTodaySection() {
         const subText = document.createElement('span');
         subText.className = 'subtask-text' + (sub.done ? ' done' : '');
         subText.textContent = sub.text;
+        subText.style.cursor = 'text';
+        subText.title = 'Click to edit';
+        subText.addEventListener('click', () => {
+          const editInput = document.createElement('input');
+          editInput.className = 'subtask-input';
+          editInput.value = sub.text;
+          editInput.style.flex = '1';
+          let committed = false;
+          const commitEdit = () => {
+            if (committed) return;
+            committed = true;
+            if (editInput.value.trim()) editSubtask(task.id, sub.id, editInput.value);
+            else renderAll();
+          };
+          editInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter') commitEdit();
+            if (e.key === 'Escape') { committed = true; renderAll(); }
+          });
+          editInput.addEventListener('blur', commitEdit);
+          subText.replaceWith(editInput);
+          editInput.focus();
+          editInput.select();
+        });
         subRow.appendChild(subText);
         const subDel = document.createElement('button');
         subDel.className = 'subtask-del';
@@ -765,14 +797,18 @@ function renderTodaySection() {
         const input = document.createElement('input');
         input.className = 'subtask-input';
         input.placeholder = 'Subtask...';
-        input.addEventListener('keydown', e => {
-          if (e.key === 'Enter' && input.value.trim()) { addSubtask(task.id, input.value); }
-          if (e.key === 'Escape') { inputRow.remove(); addBtn.style.display = ''; }
-        });
-        input.addEventListener('blur', () => {
+        let committed = false;
+        const commit = () => {
+          if (committed) return;
+          committed = true;
           if (input.value.trim()) addSubtask(task.id, input.value);
           else { inputRow.remove(); addBtn.style.display = ''; }
+        };
+        input.addEventListener('keydown', e => {
+          if (e.key === 'Enter') commit();
+          if (e.key === 'Escape') { committed = true; inputRow.remove(); addBtn.style.display = ''; }
         });
+        input.addEventListener('blur', commit);
         inputRow.appendChild(input);
         subArea.appendChild(inputRow);
         input.focus();
