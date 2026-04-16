@@ -99,11 +99,9 @@ body { display: flex; flex-direction: column; }
 .dash-main { overflow-y: auto; padding: 20px 28px 40px; }
 .dash-empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--dim); font-size: 14px; }
 
-/* ── STATUS BAR ── */
-.status-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
-.status-label { font-size: 10px; font-weight: 700; color: var(--dim); letter-spacing: .08em; text-transform: uppercase; }
-.status-seg { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-.status-seg-btn { font-size: 11px; font-weight: 600; padding: 4px 14px; color: var(--dim); background: var(--card); border: none; cursor: pointer; transition: all .15s; border-right: 1px solid var(--border); }
+/* ── STATUS CONTROL (per-project) ── */
+.status-seg { display: flex; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; margin-left: auto; flex-shrink: 0; }
+.status-seg-btn { font-size: 9px; font-weight: 600; padding: 2px 8px; color: var(--dim); background: var(--bg); border: none; cursor: pointer; transition: all .15s; border-right: 1px solid var(--border); }
 .status-seg-btn:last-child { border-right: none; }
 .status-seg-btn:hover { color: var(--text); }
 .status-seg-btn.active-behind { background: rgba(192,57,79,.2); color: #e07070; }
@@ -125,7 +123,7 @@ body { display: flex; flex-direction: column; }
 .today-hero { margin-bottom: 28px; min-height: 200px; }
 .today-date-heading { font-size: 22px; font-weight: 800; color: var(--text); margin-bottom: 16px; letter-spacing: -.02em; }
 .today-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 10px; }
-.today-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.today-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
 .today-card-project { font-size: 14px; font-weight: 700; }
 .role-tag { font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 10px; color: #fff; white-space: nowrap; }
 .today-task-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px; }
@@ -316,10 +314,10 @@ function removeSubtask(taskId, subId) {
 }
 
 // ── STATUS ──
-function getStatus(person, dateStr) { return (dashData.status[person] || {})[dateStr] || 'on-schedule'; }
-function setStatus(person, dateStr, val) {
+function getStatus(person, projectId) { return (dashData.status[person] || {})[projectId] || 'on-schedule'; }
+function setStatus(person, projectId, val) {
   if (!dashData.status[person]) dashData.status[person] = {};
-  dashData.status[person][dateStr] = val;
+  dashData.status[person][projectId] = val;
   saveDashData();
   renderAll();
 }
@@ -578,9 +576,6 @@ function renderDashboard() {
 
   main.innerHTML = '';
 
-  // Status bar
-  main.appendChild(renderStatusBar());
-
   // Weekly effort bar
   main.appendChild(renderEffortBar());
 
@@ -591,32 +586,24 @@ function renderDashboard() {
   main.appendChild(renderComingUpSection());
 }
 
-// ── STATUS BAR ──
-function renderStatusBar() {
-  const bar = document.createElement('div');
-  bar.className = 'status-bar';
-  const label = document.createElement('span');
-  label.className = 'status-label';
-  label.textContent = 'Status';
-  bar.appendChild(label);
-
+// ── STATUS CONTROL (per-project) ──
+function buildStatusSeg(projectId) {
   const seg = document.createElement('div');
   seg.className = 'status-seg';
-  const current = getStatus(selectedPerson, selectedDate);
+  const current = getStatus(selectedPerson, projectId);
   const opts = [
     { key: 'behind', label: 'Behind', cls: 'active-behind' },
-    { key: 'on-schedule', label: 'On Schedule', cls: 'active-on' },
+    { key: 'on-schedule', label: 'On Track', cls: 'active-on' },
     { key: 'ahead', label: 'Ahead', cls: 'active-ahead' }
   ];
   opts.forEach(o => {
     const btn = document.createElement('button');
     btn.className = 'status-seg-btn' + (current === o.key ? ' ' + o.cls : '');
     btn.textContent = o.label;
-    btn.addEventListener('click', () => setStatus(selectedPerson, selectedDate, o.key));
+    btn.addEventListener('click', () => setStatus(selectedPerson, projectId, o.key));
     seg.appendChild(btn);
   });
-  bar.appendChild(seg);
-  return bar;
+  return seg;
 }
 
 // ── EFFORT BAR ──
@@ -667,7 +654,7 @@ function renderTodaySection() {
     byProject.get(t.projectId).tasks.push(t);
   });
 
-  byProject.forEach(({ name, tasks: projTasks }) => {
+  byProject.forEach(({ name, tasks: projTasks }, projectId) => {
     const card = document.createElement('div');
     card.className = 'today-card';
 
@@ -678,6 +665,7 @@ function renderTodaySection() {
     header.className = 'today-card-header';
     header.innerHTML = `<span class="today-card-project">${esc(name)}</span>` +
       roles.map(r => `<span class="role-tag" style="background:${getRoleColor(r)}">${esc(r)}</span>`).join('');
+    header.appendChild(buildStatusSeg(projectId));
     card.appendChild(header);
 
     projTasks.forEach(task => {
