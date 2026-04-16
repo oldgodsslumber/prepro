@@ -169,6 +169,7 @@ body { display: flex; flex-direction: column; }
 .headsup-item.pto .headsup-icon { opacity: .8; }
 .headsup-item.review { border-color: rgba(192,57,79,.3); }
 .headsup-item.shoot { border-color: rgba(192,57,79,.4); }
+.headsup-prompt { font-size: 11px; color: var(--dim); font-style: italic; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--border); }
 
 /* ── COMING UP CARDS ── */
 .coming-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
@@ -871,8 +872,10 @@ function getHeadsUpItems(personName, afterDate) {
             icon: isShoot ? '\u{1F3AC}' : '\u{1F4CB}',
             title: task.taskName || task.reviewLabel || 'Review',
             project: proj.name,
+            projectId: proj.id,
             date: start,
-            endDate: end !== start ? end : null
+            endDate: end !== start ? end : null,
+            taskId: task.id
           });
         }
       }
@@ -886,8 +889,11 @@ function getHeadsUpItems(personName, afterDate) {
             icon: '\u{1F3D6}',
             title: a.person + ' — PTO',
             project: proj.name,
+            projectId: proj.id,
             date: start,
-            endDate: end !== start ? end : null
+            endDate: end !== start ? end : null,
+            teammateName: a.person,
+            teammateRole: a.role || null
           });
         });
         // Also check taskName for person references (PTO without attendees)
@@ -897,8 +903,11 @@ function getHeadsUpItems(personName, afterDate) {
             icon: '\u{1F3D6}',
             title: task.taskName,
             project: proj.name,
+            projectId: proj.id,
             date: start,
-            endDate: end !== start ? end : null
+            endDate: end !== start ? end : null,
+            teammateName: null,
+            teammateRole: null
           });
         }
       }
@@ -924,13 +933,25 @@ function getHeadsUpItems(personName, afterDate) {
           if (myProjectIds.has(pid)) { sharedProject = theirInfo.projects.get(pid).name; break; }
         }
         if (sharedProject) {
+          // Find their role on the shared project
+          let sharedRole = null;
+          for (const [pid] of theirInfo.projects) {
+            if (myProjectIds.has(pid)) {
+              const roles = theirInfo.projects.get(pid).roles;
+              if (roles && roles.size) sharedRole = [...roles][0];
+              break;
+            }
+          }
           items.push({
             type: 'pto',
             icon: '\u{1F3D6}',
             title: a.person + ' — PTO',
             project: sharedProject,
+            projectId: [...myProjectIds].find(pid => theirInfo.projects.has(pid)) || null,
             date: start,
-            endDate: end !== start ? end : null
+            endDate: end !== start ? end : null,
+            teammateName: a.person,
+            teammateRole: sharedRole
           });
         }
       });
@@ -947,6 +968,83 @@ function getHeadsUpItems(personName, afterDate) {
   });
 
   return deduped.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function getHeadsUpPrompt(item, personName, afterDate) {
+  const bizDays = getNextBusinessDays(afterDate, 5);
+  const windowEnd = bizDays[bizDays.length - 1];
+
+  if (item.type === 'pto' && item.teammateName && item.projectId) {
+    const proj = (state.projects || []).find(p => p.id === item.projectId);
+    if (!proj) return null;
+    const name = item.teammateName;
+    const role = item.teammateRole || '';
+    const roleLower = role.toLowerCase();
+
+    // Find tasks assigned to this teammate in the 5-day window
+    const theirTasks = (proj.tasks || []).filter(t => {
+      if (t.isDueDate) return false;
+      if (t.person !== name) return false;
+      const end = t.endDate || t.date;
+      return t.date <= windowEnd && end >= afterDate;
+    });
+
+    // Check if they're an attendee on any reviews in the window
+    const theirReviews = (proj.tasks || []).filter(t => {
+      if (!t.isReview) return false;
+      const end = t.endDate || t.date;
+      if (t.date > windowEnd || end < afterDate) return false;
+      return (t.attendees || []).some(a => a.person === name);
+    });
+
+    if (roleLower === 'stakeholder' || roleLower === 'designer' || roleLower === 'copywriter') {
+      if (theirReviews.length) return `Do you need sign-off from ${name} before they leave?`;
+      if (theirTasks.length) return `Does ${name} need to deliver anything before PTO?`;
+      return `Need anything from ${name} before they\u2019re out?`;
+    }
+    if (roleLower === 'editor' || roleLower === 'animator') {
+      if (theirTasks.length) return `Is ${name}\u2019s work on track to finish before PTO?`;
+      return `Has ${name} handed off their work?`;
+    }
+    if (roleLower === 'producer') {
+      return `Who\u2019s covering for ${name} while they\u2019re out?`;
+    }
+    // Generic
+    if (theirTasks.length) return `Has ${name} handed off their ${theirTasks.length} task${theirTasks.length > 1 ? 's' : ''}?`;
+    return `Need anything from ${name} before they\u2019re out?`;
+  }
+
+  if (item.type === 'review' || item.type === 'shoot') {
+    const proj = (state.projects || []).find(p => p.id === item.projectId);
+    if (!proj) return null;
+    const eventName = (item.title || '').toLowerCase();
+
+    // Find tasks on this project in the window that come before the event
+    const leadingTasks = (proj.tasks || []).filter(t => {
+      if (t.isDueDate || t.isReview) return false;
+      const end = t.endDate || t.date;
+      return end >= afterDate && t.date < item.date;
+    });
+
+    // Try keyword matching: look for overlapping words between task names and event name
+    const eventWords = eventName.split(/[\s·\-—:,]+/).filter(w => w.length > 2).map(w => w.toLowerCase());
+    const matched = leadingTasks.filter(t => {
+      const tn = (t.taskName || '').toLowerCase();
+      return eventWords.some(w => tn.includes(w));
+    });
+
+    if (matched.length) {
+      const taskName = matched[0].taskName || '(untitled)';
+      return `Will \u201c${taskName}\u201d be ready for this?`;
+    }
+    if (leadingTasks.length) {
+      return `${leadingTasks.length} task${leadingTasks.length > 1 ? 's' : ''} due before this \u2014 everything on track?`;
+    }
+    if (item.type === 'shoot') return 'Is everything prepped for the shoot?';
+    return 'Is everything ready for review?';
+  }
+
+  return null;
 }
 
 function renderHeadsUpSection() {
@@ -977,7 +1075,12 @@ function renderHeadsUpSection() {
     body.className = 'headsup-body';
     let dateText = fmtDateShort(item.date);
     if (item.endDate) dateText += ' \u2013 ' + fmtDateShort(item.endDate);
-    body.innerHTML = `<div class="headsup-title">${esc(item.title)}</div><div class="headsup-date">${esc(dateText)}</div><div class="headsup-meta">${esc(item.project)}</div>`;
+    let bodyHtml = `<div class="headsup-title">${esc(item.title)}</div><div class="headsup-date">${esc(dateText)}</div><div class="headsup-meta">${esc(item.project)}</div>`;
+
+    const prompt = getHeadsUpPrompt(item, selectedPerson, selectedDate);
+    if (prompt) bodyHtml += `<div class="headsup-prompt">${esc(prompt)}</div>`;
+
+    body.innerHTML = bodyHtml;
     row.appendChild(body);
 
     list.appendChild(row);
