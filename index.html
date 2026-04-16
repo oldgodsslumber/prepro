@@ -1715,12 +1715,12 @@ function buildTaskLayout(dates) {
   const layout = new Map(dates.map(d => [d, []]));
   const taskDates = t => dates.filter(d => d >= t.date && d <= (t.endDate || t.date));
 
-  // Sort: earliest start first, then longest span first
+  // Sort: longest span first, then earliest start as tiebreaker
   const sortedMulti = [...multi].sort((a, b) => {
-    if (a.date !== b.date) return a.date.localeCompare(b.date);
     const durA = new Date((a.endDate||a.date)+'T00:00:00') - new Date(a.date+'T00:00:00');
     const durB = new Date((b.endDate||b.date)+'T00:00:00') - new Date(b.date+'T00:00:00');
-    return durB - durA;
+    if (durB !== durA) return durB - durA;
+    return a.date.localeCompare(b.date);
   });
 
   const laneOcc = []; // laneOcc[i] = Set<dateStr> of occupied dates
@@ -1758,10 +1758,6 @@ function getTasksForDate(projectId, dateStr) {
   return proj.tasks.filter(t => {
     const end = t.endDate || t.date;
     return t.date <= dateStr && dateStr <= end;
-  }).sort((a, b) => {
-    const aDays = Math.round((new Date((a.endDate || a.date) + 'T00:00:00') - new Date(a.date + 'T00:00:00')) / 86400000);
-    const bDays = Math.round((new Date((b.endDate || b.date) + 'T00:00:00') - new Date(b.date + 'T00:00:00')) / 86400000);
-    return bDays - aDays;
   });
 }
 
