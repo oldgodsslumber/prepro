@@ -169,6 +169,7 @@ body { display: flex; flex-direction: column; }
 .headsup-item.pto .headsup-icon { opacity: .8; }
 .headsup-item.review { border-color: rgba(192,57,79,.3); }
 .headsup-item.shoot { border-color: rgba(192,57,79,.4); }
+.headsup-item.milestone { border-color: rgba(108,99,255,.3); }
 .headsup-prompt { font-size: 11px; color: var(--dim); font-style: italic; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--border); }
 
 /* ── COMING UP CARDS ── */
@@ -880,6 +881,33 @@ function getHeadsUpItems(personName, afterDate) {
         }
       }
 
+      // Milestones with action keywords on my projects
+      if (task.isDueDate && task.milestoneType !== 'pto' && myProjectIds.has(proj.id)) {
+        const tn = (task.taskName || '').toLowerCase();
+        const actionKeywords = [
+          'kick-off','kick off','kickoff',
+          'delivery','deliverable','deliver','handoff','hand-off','hand off',
+          'launch','go live','go-live','golive',
+          'final','finalize','lock',
+          'approval','sign-off','sign off','signoff',
+          'presentation','present','pitch',
+          'onboard','on-board','onboarding',
+          'start','begins','begin','deadline'
+        ];
+        if (actionKeywords.some(kw => tn.includes(kw))) {
+          items.push({
+            type: 'milestone',
+            icon: '\u{1F3AF}',
+            title: task.taskName || 'Milestone',
+            project: proj.name,
+            projectId: proj.id,
+            date: start,
+            endDate: end !== start ? end : null,
+            taskId: task.id
+          });
+        }
+      }
+
       // Teammate PTO on projects I'm involved in
       if (task.isDueDate && task.milestoneType === 'pto' && myProjectIds.has(proj.id)) {
         (task.attendees || []).forEach(a => {
@@ -1014,7 +1042,7 @@ function getHeadsUpPrompt(item, personName, afterDate) {
     return `Need anything from ${name} before they\u2019re out?`;
   }
 
-  if (item.type === 'review' || item.type === 'shoot') {
+  if (item.type === 'review' || item.type === 'shoot' || item.type === 'milestone') {
     const proj = (state.projects || []).find(p => p.id === item.projectId);
     if (!proj) return null;
     const eventName = (item.title || '').toLowerCase();
@@ -1027,20 +1055,26 @@ function getHeadsUpPrompt(item, personName, afterDate) {
     });
 
     // Try keyword matching: look for overlapping words between task names and event name
-    const eventWords = eventName.split(/[\s·\-—:,]+/).filter(w => w.length > 2).map(w => w.toLowerCase());
+    // Filter out common stop words so "Animation Kick-Off" matches an "Animation" task
+    const stopWords = new Set(['the','and','for','with','this','that','from','into','kick','off','final','date','due']);
+    const eventWords = eventName.split(/[\s·\-—:,]+/).filter(w => w.length > 2 && !stopWords.has(w)).map(w => w.toLowerCase());
     const matched = leadingTasks.filter(t => {
       const tn = (t.taskName || '').toLowerCase();
       return eventWords.some(w => tn.includes(w));
     });
 
     if (matched.length) {
-      const taskName = matched[0].taskName || '(untitled)';
-      return `Will \u201c${taskName}\u201d be ready for this?`;
+      if (matched.length === 1) {
+        const taskName = matched[0].taskName || '(untitled)';
+        return `Will \u201c${taskName}\u201d be ready for this?`;
+      }
+      return `${matched.length} related tasks need to land before this \u2014 on track?`;
     }
     if (leadingTasks.length) {
       return `${leadingTasks.length} task${leadingTasks.length > 1 ? 's' : ''} due before this \u2014 everything on track?`;
     }
     if (item.type === 'shoot') return 'Is everything prepped for the shoot?';
+    if (item.type === 'milestone') return 'Is everything ready for this?';
     return 'Is everything ready for review?';
   }
 
