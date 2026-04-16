@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PRE-PRO — Dashboard</title>
+
+<!-- Firebase -->
+<script type="module">
+import { initializeApp }                       from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getDatabase, ref, onValue, set }      from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+
+const firebaseConfig = {
+  apiKey:      'AIzaSyDYyEv6eospGbtmWt6orY6b4X71jhdUyKI',
+  authDomain:  'prepro-e2abc.firebaseapp.com',
+  databaseURL: 'https://prepro-e2abc-default-rtdb.firebaseio.com',
+  projectId:   'prepro-e2abc',
+};
+const app = initializeApp(firebaseConfig);
+const db  = getDatabase(app);
+
+window._fb = { db, ref, set };
+onValue(ref(db, 'prepro/state'), snapshot => {
+  const data = snapshot.val();
+  if (!data || !Array.isArray(data.projects)) return;
+  window._fbState = data;
+  if (window._dashReloadState) window._dashReloadState(data);
+}, err => console.error('dash firebase error:', err));
+</script>
+
+<style>
+/* ── RESET ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+button { font: inherit; cursor: pointer; border: none; background: none; }
+input  { font: inherit; }
+
+/* ── VARIABLES ── */
+:root {
+  --bg:        #0d0d12;
+  --panel:     #16161e;
+  --card:      #1e1e28;
+  --border:    #2c2c3e;
+  --text:      #e0e0ec;
+  --dim:       #8080a0;
+  --accent:    #6c63ff;
+  --danger:    #e05555;
+  --cat-internal: #4a90d9;
+  --cat-external: #e07b39;
+  --cat-vendor:   #7c5cbf;
+  --cat-other:    #4cba6a;
+}
+
+/* ── BASE ── */
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; font-size: 13px; overflow: hidden; }
+body { display: flex; flex-direction: column; }
+
+/* ── HEADER ── */
+.dash-header { display: flex; align-items: center; gap: 14px; padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.dash-title { font-size: 13px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+.dash-subtitle { font-size: 11px; color: var(--dim); }
+.dash-spacer { flex: 1; }
+.dash-back { font-size: 11px; font-weight: 600; color: var(--dim); text-decoration: none; background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 4px 12px; transition: color .15s, border-color .15s; }
+.dash-back:hover { color: var(--text); border-color: var(--dim); }
+
+/* ── DATE NAV ── */
+.date-nav { display: flex; align-items: center; gap: 6px; }
+.date-nav-btn { font-size: 14px; font-weight: 700; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 5px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all .15s; user-select: none; }
+.date-nav-btn:hover { color: var(--text); border-color: var(--dim); }
+.date-nav-label { font-size: 12px; font-weight: 600; color: var(--text); cursor: pointer; min-width: 140px; text-align: center; }
+.date-nav-label:hover { color: var(--accent); }
+.btn-today { font-size: 11px; font-weight: 600; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+.btn-today:hover { color: var(--text); }
+#datePicker { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+
+/* ── LAYOUT ── */
+.dash-layout { display: grid; grid-template-columns: 220px 1fr; flex: 1; min-height: 0; }
+
+/* ── SIDEBAR ── */
+.dash-sidebar { background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+.dash-sidebar-head { padding: 8px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.dash-search { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; color: var(--text); padding: 5px 8px; font-size: 12px; outline: none; }
+.dash-search:focus { border-color: var(--accent); }
+.dash-search::placeholder { color: var(--dim); }
+.dash-people { flex: 1; overflow-y: auto; padding: 6px 0; }
+.dash-person { display: flex; flex-direction: column; gap: 1px; padding: 6px 10px; cursor: pointer; border-radius: 5px; margin: 1px 6px; user-select: none; transition: background .1s; }
+.dash-person:hover { background: var(--card); }
+.dash-person.active { background: var(--accent); }
+.dash-person-name { font-size: 13px; font-weight: 600; }
+.dash-person.active .dash-person-name { color: #fff; }
+.dash-person-roles { font-size: 10px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-person.active .dash-person-roles { color: rgba(255,255,255,.7); }
+
+/* ── MAIN ── */
+.dash-main { overflow-y: auto; padding: 20px 28px 40px; }
+.dash-empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--dim); font-size: 14px; }
+
+/* ── EFFORT BAR ── */
+.effort-bar { display: flex; gap: 4px; margin-bottom: 20px; }
+.effort-day { flex: 1; background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 6px 4px; text-align: center; min-width: 0; }
+.effort-day.today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.effort-day-label { font-size: 9px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 3px; }
+.effort-day-score { font-size: 14px; font-weight: 700; }
+
+/* ── SECTIONS ── */
+.dash-section { margin-bottom: 24px; }
+.dash-section-title { font-size: 10px; font-weight: 700; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 10px; }
+
+/* ── TODAY CARDS ── */
+.today-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; }
+.today-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.today-card-project { font-size: 13px; font-weight: 700; }
+.role-tag { font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 10px; color: #fff; white-space: nowrap; }
+.today-task-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px; }
+.today-task-row + .today-task-row { border-top: 1px solid var(--border); }
+.task-name { flex: 1; }
+.task-loe { flex-shrink: 0; }
+.task-badge { font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 8px; background: rgba(192,57,79,.2); color: #e07070; white-space: nowrap; }
+.task-days { font-size: 10px; color: var(--dim); flex-shrink: 0; }
+.no-tasks { color: var(--dim); font-size: 12px; font-style: italic; }
+
+/* ── COMING UP ── */
+.coming-day { display: flex; gap: 12px; padding: 6px 0; align-items: baseline; }
+.coming-day + .coming-day { border-top: 1px solid var(--border); }
+.coming-day-label { font-size: 11px; font-weight: 700; color: var(--dim); min-width: 90px; flex-shrink: 0; }
+.coming-day-tasks { font-size: 12px; color: var(--text); flex: 1; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.coming-task { display: flex; align-items: center; gap: 4px; }
+.coming-task-project { font-size: 10px; color: var(--dim); }
+.coming-day.free .coming-day-tasks { color: var(--dim); font-style: italic; }
+
+/* ── MY PROJECTS ── */
+.projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.project-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+.project-card-name { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+.project-card-roles { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.project-card-meta { font-size: 11px; color: var(--dim); }
+.project-card-meta span + span::before { content: ' \00b7 '; }
+</style>
+</head>
+
+<body>
+
+<!-- ── HEADER ── -->
+<header class="dash-header">
+  <span class="dash-title">PRE-PRO</span>
+  <span class="dash-subtitle">Dashboard</span>
+  <div style="width: 16px;"></div>
+  <div class="date-nav">
+    <button class="date-nav-btn" id="btnPrevDay" title="Previous day">&#8249;</button>
+    <span class="date-nav-label" id="dateLabel" title="Click to pick a date"></span>
+    <button class="date-nav-btn" id="btnNextDay" title="Next day">&#8250;</button>
+    <button class="btn-today" id="btnToday">Today</button>
+    <input type="date" id="datePicker">
+  </div>
+  <div class="dash-spacer"></div>
+  <a href="index.html" class="dash-back">&#8592; Projects</a>
+</header>
+
+<!-- ── BODY ── -->
+<div class="dash-layout">
+  <!-- Sidebar -->
+  <aside class="dash-sidebar">
+    <div class="dash-sidebar-head">
+      <input type="text" class="dash-search" id="personSearch" placeholder="Search people...">
+    </div>
+    <div class="dash-people" id="peopleList"></div>
+  </aside>
+  <!-- Main -->
+  <main class="dash-main" id="dashMain">
+    <div class="dash-empty" id="emptyState">Select a person from the sidebar</div>
+  </main>
+</div>
+
+<script>
+'use strict';
+
+// ── CONSTANTS ──
+const ROLE_CATS = [
+  { label: 'Internal Team', color: '#4a90d9', roles: ['Producer', 'Editor', 'Animator'] },
+  { label: 'External',      color: '#e07b39', roles: ['Copywriter', 'Designer', 'Stakeholder'] },
+  { label: 'Vendors',       color: '#7c5cbf', roles: ['External Vendor'] },
+  { label: 'Other',         color: '#4cba6a', roles: ['Other'] }
+];
+const LOE_EMOJI = { low: '\u{1F7E2}', medium: '\u{1F7E1}', high: '\u{1F534}' };
+const LOE_PTS   = { low: 1, medium: 2, high: 3 };
+const DOW_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+// ── STATE ──
+let state = { projects: [] };
+let selectedPerson = localStorage.getItem('dash_selected_person') || null;
+let selectedDate   = todayStr();
+let searchFilter   = '';
+
+// ── DATA LOADING ──
+function loadState() {
+  try { const r = localStorage.getItem('prepro_data'); if (r) state = JSON.parse(r); } catch(e) {}
+  if (!state || !state.projects) state = { projects: [] };
+}
+
+window._dashReloadState = function(data) {
+  if (data && Array.isArray(data.projects)) state = data;
+  renderAll();
+};
+
+loadState();
+if (window._fbState) window._dashReloadState(window._fbState);
+
+// ── DATE UTILITIES ──
+function fmtDate(y, m, d) {
+  return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+function todayStr() {
+  const d = new Date();
+  return fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+}
+function addDays(dateStr, n) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+}
+function getWeekStart(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const day = d.getDay();
+  const mon = new Date(d);
+  mon.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+  return fmtDate(mon.getFullYear(), mon.getMonth() + 1, mon.getDate());
+}
+function fmtDateLong(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+}
+function fmtDateShort(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+function isWeekend(dateStr) {
+  const day = new Date(dateStr + 'T00:00:00').getDay();
+  return day === 0 || day === 6;
+}
+function getNextBusinessDays(startDate, count) {
+  const days = [];
+  let cursor = addDays(startDate, 1);
+  while (days.length < count) {
+    if (!isWeekend(cursor)) days.push(cursor);
+    cursor = addDays(cursor, 1);
+  }
+  return days;
+}
+function loePts(loe) { return LOE_PTS[loe] || 2; }
+
+function workloadInfo(pts) {
+  if (pts === 0)  return { label: '\u2014',       color: '#4a4a60' };
+  if (pts < 1.5)  return { label: 'Light',       color: '#4cba6a' };
+  if (pts < 2.5)  return { label: 'Manageable',  color: '#9ab84c' };
+  if (pts < 3.5)  return { label: 'Busy',        color: '#e07b39' };
+  if (pts < 4.5)  return { label: 'Very Busy',   color: '#c0394f' };
+  return            { label: 'Overloaded',     color: '#8b1a2a' };
+}
+
+// ── ROLE COLOR LOOKUP ──
+function getRoleColor(role) {
+  for (const cat of ROLE_CATS) {
+    if (cat.roles.includes(role)) return cat.color;
+  }
+  return '#8080a0';
+}
+
+// ── PERSON EXTRACTION & DEDUP ──
+function getAllPeople() {
+  const personMap = new Map(); // name -> { roles: Set, projects: Map<id, {name, roles}> }
+
+  (state.projects || []).filter(p => !p.completed && !p.ghost).forEach(proj => {
+    const roster = proj.roster || {};
+
+    // From roster
+    for (const [role, names] of Object.entries(roster)) {
+      (names || []).forEach(name => {
+        if (!name) return;
+        if (!personMap.has(name)) personMap.set(name, { roles: new Set(), projects: new Map() });
+        const entry = personMap.get(name);
+        entry.roles.add(role);
+        if (!entry.projects.has(proj.id)) entry.projects.set(proj.id, { name: proj.name, roles: new Set(), id: proj.id });
+        entry.projects.get(proj.id).roles.add(role);
+      });
+    }
+
+    // From task assignments
+    (proj.tasks || []).forEach(t => {
+      if (!t.person || t.isDueDate) return;
+      const name = t.person;
+      if (!personMap.has(name)) personMap.set(name, { roles: new Set(), projects: new Map() });
+      const entry = personMap.get(name);
+      if (t.role) entry.roles.add(t.role);
+      if (!entry.projects.has(proj.id)) entry.projects.set(proj.id, { name: proj.name, roles: new Set(), id: proj.id });
+      if (t.role) entry.projects.get(proj.id).roles.add(t.role);
+    });
+
+    // From review/event attendees
+    (proj.tasks || []).forEach(t => {
+      if (!t.attendees) return;
+      (t.attendees || []).forEach(a => {
+        if (!a.person) return;
+        const name = a.person;
+        if (!personMap.has(name)) personMap.set(name, { roles: new Set(), projects: new Map() });
+        const entry = personMap.get(name);
+        if (a.role) entry.roles.add(a.role);
+        if (!entry.projects.has(proj.id)) entry.projects.set(proj.id, { name: proj.name, roles: new Set(), id: proj.id });
+        if (a.role) entry.projects.get(proj.id).roles.add(a.role);
+      });
+    });
+  });
+
+  return personMap;
+}
+
+// ── TASK FILTERING ──
+function getTasksForPerson(personName, dateStr) {
+  const results = [];
+  (state.projects || []).filter(p => !p.completed && !p.ghost).forEach(proj => {
+    (proj.tasks || []).forEach(task => {
+      const start = task.date;
+      const end = task.endDate || task.date;
+      if (!start || dateStr < start || dateStr > end) return;
+
+      let isMatch = false;
+      let matchRoles = [];
+
+      // Direct assignment
+      if (task.person === personName) {
+        isMatch = true;
+        if (task.role) matchRoles.push(task.role);
+      }
+
+      // Review/event attendee
+      if (task.attendees) {
+        task.attendees.forEach(a => {
+          if (a.person === personName) {
+            isMatch = true;
+            matchRoles.push(a.role || 'Attendee');
+          }
+        });
+      }
+
+      // PTO: check attendees + taskName
+      if (task.isDueDate && task.milestoneType === 'pto') {
+        const lp = personName.toLowerCase();
+        if ((task.attendees || []).some(a => a.person && a.person.toLowerCase() === lp)) isMatch = true;
+        if (task.taskName && task.taskName.toLowerCase().includes(lp)) isMatch = true;
+      }
+
+      if (isMatch) {
+        results.push({
+          ...task,
+          projectName: proj.name,
+          projectId: proj.id,
+          matchRoles: [...new Set(matchRoles)]
+        });
+      }
+    });
+  });
+  return results;
+}
+
+function getTasksForPersonRange(personName, startDate, endDate) {
+  const results = [];
+  (state.projects || []).filter(p => !p.completed && !p.ghost).forEach(proj => {
+    (proj.tasks || []).forEach(task => {
+      const tStart = task.date;
+      const tEnd = task.endDate || task.date;
+      if (!tStart) return;
+      // Check if task range overlaps with query range
+      if (tStart > endDate || tEnd < startDate) return;
+
+      let isMatch = false;
+      let matchRoles = [];
+
+      if (task.person === personName) {
+        isMatch = true;
+        if (task.role) matchRoles.push(task.role);
+      }
+      if (task.attendees) {
+        task.attendees.forEach(a => {
+          if (a.person === personName) {
+            isMatch = true;
+            matchRoles.push(a.role || 'Attendee');
+          }
+        });
+      }
+      if (task.isDueDate && task.milestoneType === 'pto') {
+        const lp = personName.toLowerCase();
+        if ((task.attendees || []).some(a => a.person && a.person.toLowerCase() === lp)) isMatch = true;
+        if (task.taskName && task.taskName.toLowerCase().includes(lp)) isMatch = true;
+      }
+
+      if (isMatch) {
+        results.push({
+          ...task,
+          projectName: proj.name,
+          projectId: proj.id,
+          matchRoles: [...new Set(matchRoles)]
+        });
+      }
+    });
+  });
+  return results;
+}
+
+// ── WORKLOAD FOR A DAY ──
+function getDayWorkload(personName, dateStr) {
+  let total = 0;
+  (state.projects || []).filter(p => !p.completed && !p.ghost).forEach(proj => {
+    (proj.tasks || []).forEach(task => {
+      if (task.isDueDate) return;
+      const start = task.date;
+      const end = task.endDate || task.date;
+      if (!start || dateStr < start || dateStr > end) return;
+
+      let isMatch = false;
+      if (task.person === personName) isMatch = true;
+      if (task.attendees) {
+        task.attendees.forEach(a => { if (a.person === personName) isMatch = true; });
+      }
+      if (isMatch) total += loePts(task.loe);
+    });
+  });
+  return total;
+}
+
+// ── PROJECT DUE DATE ──
+function getProjectDueDate(proj) {
+  let earliest = null;
+  (proj.tasks || []).forEach(t => {
+    if (t.isDueDate && (t.milestoneType === 'due-date' || t.milestoneType === 'delivery')) {
+      if (!earliest || t.date < earliest) earliest = t.date;
+    }
+  });
+  return earliest;
+}
+
+// ── MULTI-DAY INFO ──
+function getMultiDayInfo(task, dateStr) {
+  if (!task.endDate || task.endDate === task.date) return null;
+  const start = new Date(task.date + 'T00:00:00');
+  const end = new Date(task.endDate + 'T00:00:00');
+  const current = new Date(dateStr + 'T00:00:00');
+  const totalDays = Math.round((end - start) / 86400000) + 1;
+  const currentDay = Math.round((current - start) / 86400000) + 1;
+  return { currentDay, totalDays };
+}
+
+// ── RENDER ALL ──
+function renderAll() {
+  renderSidebar();
+  renderDashboard();
+  updateDateLabel();
+}
+
+// ── SIDEBAR ──
+function renderSidebar() {
+  const peopleMap = getAllPeople();
+  const list = document.getElementById('peopleList');
+  list.innerHTML = '';
+
+  const filter = searchFilter.toLowerCase();
+  const sorted = [...peopleMap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+
+  // If saved person no longer exists, clear selection
+  if (selectedPerson && !peopleMap.has(selectedPerson)) {
+    selectedPerson = null;
+    localStorage.removeItem('dash_selected_person');
+  }
+
+  sorted.forEach(([name, info]) => {
+    if (filter && !name.toLowerCase().includes(filter)) return;
+    const el = document.createElement('div');
+    el.className = 'dash-person' + (name === selectedPerson ? ' active' : '');
+    const roles = [...info.roles].sort().join(', ');
+    el.innerHTML = `<div class="dash-person-name">${esc(name)}</div><div class="dash-person-roles">${esc(roles)}</div>`;
+    el.addEventListener('click', () => {
+      selectedPerson = name;
+      localStorage.setItem('dash_selected_person', name);
+      renderAll();
+    });
+    list.appendChild(el);
+  });
+}
+
+// ── DATE LABEL ──
+function updateDateLabel() {
+  document.getElementById('dateLabel').textContent = fmtDateLong(selectedDate);
+}
+
+// ── MAIN DASHBOARD ──
+function renderDashboard() {
+  const main = document.getElementById('dashMain');
+  const empty = document.getElementById('emptyState');
+
+  if (!selectedPerson) {
+    main.innerHTML = '';
+    main.appendChild(empty);
+    empty.style.display = 'flex';
+    return;
+  }
+
+  main.innerHTML = '';
+
+  // Weekly effort bar
+  main.appendChild(renderEffortBar());
+
+  // Today section
+  main.appendChild(renderTodaySection());
+
+  // Coming Up section
+  main.appendChild(renderComingUpSection());
+
+  // My Projects section
+  main.appendChild(renderProjectsSection());
+}
+
+// ── EFFORT BAR ──
+function renderEffortBar() {
+  const weekStart = getWeekStart(selectedDate);
+  const today = todayStr();
+  const container = document.createElement('div');
+  container.className = 'effort-bar';
+
+  for (let i = 0; i < 5; i++) {
+    const dayStr = addDays(weekStart, i);
+    const pts = getDayWorkload(selectedPerson, dayStr);
+    const info = workloadInfo(pts);
+    const isToday = dayStr === today;
+    const dayEl = document.createElement('div');
+    dayEl.className = 'effort-day' + (isToday ? ' today' : '');
+    dayEl.innerHTML = `<div class="effort-day-label">${DOW_SHORT[new Date(dayStr + 'T00:00:00').getDay()]}</div><div class="effort-day-score" style="color:${info.color}">${pts === 0 ? '\u2014' : pts}</div>`;
+    dayEl.title = `${fmtDateShort(dayStr)}: ${info.label} (${pts} pts)`;
+    container.appendChild(dayEl);
+  }
+  return container;
+}
+
+// ── TODAY SECTION ──
+function renderTodaySection() {
+  const section = document.createElement('div');
+  section.className = 'dash-section';
+
+  const title = document.createElement('div');
+  title.className = 'dash-section-title';
+  title.textContent = fmtDateLong(selectedDate);
+  section.appendChild(title);
+
+  const tasks = getTasksForPerson(selectedPerson, selectedDate);
+
+  if (!tasks.length) {
+    const noTasks = document.createElement('div');
+    noTasks.className = 'no-tasks';
+    noTasks.textContent = 'Nothing scheduled';
+    section.appendChild(noTasks);
+    return section;
+  }
+
+  // Group by project
+  const byProject = new Map();
+  tasks.forEach(t => {
+    if (!byProject.has(t.projectId)) byProject.set(t.projectId, { name: t.projectName, tasks: [] });
+    byProject.get(t.projectId).tasks.push(t);
+  });
+
+  byProject.forEach(({ name, tasks: projTasks }) => {
+    const card = document.createElement('div');
+    card.className = 'today-card';
+
+    // Collect unique roles for this project
+    const roles = [...new Set(projTasks.flatMap(t => t.matchRoles))];
+
+    const header = document.createElement('div');
+    header.className = 'today-card-header';
+    header.innerHTML = `<span class="today-card-project">${esc(name)}</span>` +
+      roles.map(r => `<span class="role-tag" style="background:${getRoleColor(r)}">${esc(r)}</span>`).join('');
+    card.appendChild(header);
+
+    projTasks.forEach(task => {
+      const row = document.createElement('div');
+      row.className = 'today-task-row';
+
+      let html = '';
+
+      // Task name
+      const taskLabel = task.taskName || task.reviewLabel || '(untitled)';
+      html += `<span class="task-name">${esc(taskLabel)}</span>`;
+
+      // Multi-day info
+      const multiDay = getMultiDayInfo(task, selectedDate);
+      if (multiDay) {
+        html += `<span class="task-days">Day ${multiDay.currentDay} of ${multiDay.totalDays}</span>`;
+      }
+
+      // Badges
+      if (task.isReview) {
+        const label = task.reviewLabel || 'Review';
+        html += `<span class="task-badge">${esc(label)}</span>`;
+      }
+      if (task.isDueDate && task.milestoneType === 'pto') {
+        html += `<span class="task-badge" style="background:rgba(108,99,255,.2);color:var(--accent)">PTO</span>`;
+      }
+      if (task.isDueDate && task.milestoneType === 'due-date') {
+        html += `<span class="task-badge" style="background:rgba(224,123,57,.2);color:#e07b39">Due Date</span>`;
+      }
+      if (task.isDueDate && task.milestoneType === 'delivery') {
+        html += `<span class="task-badge" style="background:rgba(76,186,106,.2);color:#4cba6a">Delivery</span>`;
+      }
+      if (task.isDueDate && task.milestoneType === 'milestone') {
+        html += `<span class="task-badge" style="background:rgba(108,99,255,.2);color:var(--accent)">Milestone</span>`;
+      }
+
+      // LOE
+      if (!task.isDueDate && task.loe) {
+        html += `<span class="task-loe">${LOE_EMOJI[task.loe] || ''}</span>`;
+      }
+
+      row.innerHTML = html;
+      card.appendChild(row);
+    });
+
+    section.appendChild(card);
+  });
+
+  return section;
+}
+
+// ── COMING UP SECTION ──
+function renderComingUpSection() {
+  const section = document.createElement('div');
+  section.className = 'dash-section';
+
+  const title = document.createElement('div');
+  title.className = 'dash-section-title';
+  title.textContent = 'Coming Up';
+  section.appendChild(title);
+
+  const days = getNextBusinessDays(selectedDate, 5);
+
+  days.forEach(dayStr => {
+    const tasks = getTasksForPerson(selectedPerson, dayStr);
+    const dayEl = document.createElement('div');
+    dayEl.className = 'coming-day' + (tasks.length === 0 ? ' free' : '');
+
+    const label = document.createElement('div');
+    label.className = 'coming-day-label';
+    label.textContent = fmtDateShort(dayStr);
+    dayEl.appendChild(label);
+
+    const tasksEl = document.createElement('div');
+    tasksEl.className = 'coming-day-tasks';
+
+    if (!tasks.length) {
+      tasksEl.textContent = 'Free';
+    } else {
+      tasks.forEach(t => {
+        const chip = document.createElement('span');
+        chip.className = 'coming-task';
+        const taskLabel = t.taskName || t.reviewLabel || '(untitled)';
+        const loe = (!t.isDueDate && t.loe) ? ` ${LOE_EMOJI[t.loe] || ''}` : '';
+        chip.innerHTML = `${esc(taskLabel)} <span class="coming-task-project">(${esc(t.projectName)})</span>${loe}`;
+        tasksEl.appendChild(chip);
+      });
+    }
+
+    dayEl.appendChild(tasksEl);
+    section.appendChild(dayEl);
+  });
+
+  return section;
+}
+
+// ── MY PROJECTS SECTION ──
+function renderProjectsSection() {
+  const section = document.createElement('div');
+  section.className = 'dash-section';
+
+  const title = document.createElement('div');
+  title.className = 'dash-section-title';
+  title.textContent = 'My Projects';
+  section.appendChild(title);
+
+  const peopleMap = getAllPeople();
+  const personInfo = peopleMap.get(selectedPerson);
+  if (!personInfo || personInfo.projects.size === 0) {
+    const noProjects = document.createElement('div');
+    noProjects.className = 'no-tasks';
+    noProjects.textContent = 'No active projects';
+    section.appendChild(noProjects);
+    return section;
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'projects-grid';
+
+  const today = todayStr();
+
+  personInfo.projects.forEach((projInfo) => {
+    const proj = (state.projects || []).find(p => p.id === projInfo.id);
+    if (!proj || proj.completed || proj.ghost) return;
+
+    const card = document.createElement('div');
+    card.className = 'project-card';
+
+    // Name
+    card.innerHTML = `<div class="project-card-name">${esc(projInfo.name)}</div>`;
+
+    // Role tags
+    const rolesDiv = document.createElement('div');
+    rolesDiv.className = 'project-card-roles';
+    [...projInfo.roles].sort().forEach(role => {
+      const tag = document.createElement('span');
+      tag.className = 'role-tag';
+      tag.style.background = getRoleColor(role);
+      tag.textContent = role;
+      rolesDiv.appendChild(tag);
+    });
+    card.appendChild(rolesDiv);
+
+    // Meta: due date + task count
+    const dueDate = getProjectDueDate(proj);
+    const upcomingTasks = getTasksForPersonRange(selectedPerson, today, addDays(today, 365))
+      .filter(t => t.projectId === projInfo.id && !t.isDueDate).length;
+
+    const meta = document.createElement('div');
+    meta.className = 'project-card-meta';
+    let metaHtml = '';
+    if (dueDate) {
+      metaHtml += `<span>Due ${fmtDateShort(dueDate)}</span>`;
+    }
+    metaHtml += `<span>${upcomingTasks} upcoming task${upcomingTasks !== 1 ? 's' : ''}</span>`;
+    meta.innerHTML = metaHtml;
+    card.appendChild(meta);
+
+    grid.appendChild(card);
+  });
+
+  section.appendChild(grid);
+  return section;
+}
+
+// ── ESCAPE HTML ──
+function esc(str) {
+  const div = document.createElement('div');
+  div.textContent = str || '';
+  return div.innerHTML;
+}
+
+// ── DATE NAVIGATION ──
+document.getElementById('btnPrevDay').addEventListener('click', () => {
+  selectedDate = addDays(selectedDate, -1);
+  renderAll();
+});
+document.getElementById('btnNextDay').addEventListener('click', () => {
+  selectedDate = addDays(selectedDate, 1);
+  renderAll();
+});
+document.getElementById('btnToday').addEventListener('click', () => {
+  selectedDate = todayStr();
+  renderAll();
+});
+document.getElementById('dateLabel').addEventListener('click', () => {
+  const picker = document.getElementById('datePicker');
+  picker.value = selectedDate;
+  picker.showPicker();
+});
+document.getElementById('datePicker').addEventListener('change', (e) => {
+  if (e.target.value) {
+    selectedDate = e.target.value;
+    renderAll();
+  }
+});
+
+// ── SEARCH ──
+document.getElementById('personSearch').addEventListener('input', (e) => {
+  searchFilter = e.target.value;
+  renderSidebar();
+});
+
+// ── INIT ──
+renderAll();
+</script>
+
+</body>
+</html>
