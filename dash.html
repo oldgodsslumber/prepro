@@ -159,12 +159,12 @@ body { display: flex; flex-direction: column; }
 
 /* ── HEADS UP ── */
 .headsup-list { display: flex; flex-direction: column; gap: 6px; }
-.headsup-item { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 12px; }
-.headsup-icon { font-size: 14px; flex-shrink: 0; }
+.headsup-item { display: flex; align-items: flex-start; gap: 10px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 12px; }
+.headsup-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
 .headsup-body { flex: 1; min-width: 0; }
 .headsup-title { font-weight: 600; }
+.headsup-date { font-size: 10px; color: var(--dim); margin-top: 1px; }
 .headsup-meta { font-size: 10px; color: var(--dim); margin-top: 1px; }
-.headsup-date { font-size: 10px; color: var(--dim); flex-shrink: 0; white-space: nowrap; }
 .headsup-item.pto { border-color: rgba(255,180,50,.25); }
 .headsup-item.pto .headsup-icon { opacity: .8; }
 .headsup-item.review { border-color: rgba(192,57,79,.3); }
@@ -974,15 +974,10 @@ function renderHeadsUpSection() {
 
     const body = document.createElement('div');
     body.className = 'headsup-body';
-    body.innerHTML = `<div class="headsup-title">${esc(item.title)}</div><div class="headsup-meta">${esc(item.project)}</div>`;
-    row.appendChild(body);
-
-    const dateEl = document.createElement('span');
-    dateEl.className = 'headsup-date';
     let dateText = fmtDateShort(item.date);
     if (item.endDate) dateText += ' \u2013 ' + fmtDateShort(item.endDate);
-    dateEl.textContent = dateText;
-    row.appendChild(dateEl);
+    body.innerHTML = `<div class="headsup-title">${esc(item.title)}</div><div class="headsup-date">${esc(dateText)}</div><div class="headsup-meta">${esc(item.project)}</div>`;
+    row.appendChild(body);
 
     list.appendChild(row);
   });
