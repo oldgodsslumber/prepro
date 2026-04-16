@@ -845,7 +845,8 @@ function renderTodaySection() {
 // ── HEADS UP — upcoming reviews, shoots, and teammate PTO ──
 function getHeadsUpItems(personName, afterDate) {
   const items = [];
-  const cutoff = addDays(afterDate, 21); // look 3 weeks ahead
+  const bizDays = getNextBusinessDays(afterDate, 5);
+  const cutoff = bizDays[bizDays.length - 1]; // next 5 business days
   const peopleMap = getAllPeople();
   const personInfo = peopleMap.get(personName);
   if (!personInfo) return items;
