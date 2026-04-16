@@ -3598,6 +3598,18 @@ function exportPNG() {
         }
 
         ctx.restore();
+      } else if (col === 0) {
+        // Continuation label — dimmed text on first column of a new row
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(chipX + 2*SC, ty, chipW - 4*SC, chipH);
+        ctx.clip();
+        const contLabel = getContLabel(task);
+        ctx.fillStyle = 'rgba(255,255,255,0.45)';
+        ctx.font = `${7*SC}px system-ui,sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.fillText(contLabel, chipX + 5*SC, ty + 10*SC);
+        ctx.restore();
       }
 
       ty += chipH + 3*SC;
