@@ -157,6 +157,19 @@ body { display: flex; flex-direction: column; }
 
 .no-tasks { color: var(--dim); font-size: 14px; font-style: italic; padding: 24px 0; }
 
+/* ── HEADS UP ── */
+.headsup-list { display: flex; flex-direction: column; gap: 6px; }
+.headsup-item { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 12px; }
+.headsup-icon { font-size: 14px; flex-shrink: 0; }
+.headsup-body { flex: 1; min-width: 0; }
+.headsup-title { font-weight: 600; }
+.headsup-meta { font-size: 10px; color: var(--dim); margin-top: 1px; }
+.headsup-date { font-size: 10px; color: var(--dim); flex-shrink: 0; white-space: nowrap; }
+.headsup-item.pto { border-color: rgba(255,180,50,.25); }
+.headsup-item.pto .headsup-icon { opacity: .8; }
+.headsup-item.review { border-color: rgba(192,57,79,.3); }
+.headsup-item.shoot { border-color: rgba(192,57,79,.4); }
+
 /* ── COMING UP CARDS ── */
 .coming-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
 .coming-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; min-height: 70px; }
@@ -591,6 +604,10 @@ function renderDashboard() {
   // Today section
   main.appendChild(renderTodaySection());
 
+  // Heads Up — upcoming reviews, shoots, teammate PTO
+  const headsUp = renderHeadsUpSection();
+  if (headsUp) main.appendChild(headsUp);
+
   // Coming Up section
   main.appendChild(renderComingUpSection());
 }
@@ -822,6 +839,155 @@ function renderTodaySection() {
     section.appendChild(card);
   });
 
+  return section;
+}
+
+// ── HEADS UP — upcoming reviews, shoots, and teammate PTO ──
+function getHeadsUpItems(personName, afterDate) {
+  const items = [];
+  const cutoff = addDays(afterDate, 21); // look 3 weeks ahead
+  const peopleMap = getAllPeople();
+  const personInfo = peopleMap.get(personName);
+  if (!personInfo) return items;
+  const myProjectIds = new Set(personInfo.projects.keys());
+
+  (state.projects || []).filter(p => !p.completed && !p.ghost).forEach(proj => {
+    (proj.tasks || []).forEach(task => {
+      const start = task.date;
+      const end = task.endDate || task.date;
+      if (!start || end <= afterDate || start > cutoff) return;
+
+      // Reviews & shoots this person is part of
+      if (task.isReview) {
+        let involved = false;
+        if (task.attendees) {
+          task.attendees.forEach(a => { if (a.person === personName) involved = true; });
+        }
+        if (involved) {
+          const isShoot = (task.reviewLabel || '').includes('Shoot');
+          items.push({
+            type: isShoot ? 'shoot' : 'review',
+            icon: isShoot ? '\u{1F3AC}' : '\u{1F4CB}',
+            title: task.taskName || task.reviewLabel || 'Review',
+            project: proj.name,
+            date: start,
+            endDate: end !== start ? end : null
+          });
+        }
+      }
+
+      // Teammate PTO on projects I'm involved in
+      if (task.isDueDate && task.milestoneType === 'pto' && myProjectIds.has(proj.id)) {
+        (task.attendees || []).forEach(a => {
+          if (!a.person || a.person === personName) return;
+          items.push({
+            type: 'pto',
+            icon: '\u{1F3D6}',
+            title: a.person + ' — PTO',
+            project: proj.name,
+            date: start,
+            endDate: end !== start ? end : null
+          });
+        });
+        // Also check taskName for person references (PTO without attendees)
+        if (!(task.attendees || []).length && task.taskName) {
+          items.push({
+            type: 'pto',
+            icon: '\u{1F3D6}',
+            title: task.taskName,
+            project: proj.name,
+            date: start,
+            endDate: end !== start ? end : null
+          });
+        }
+      }
+    });
+  });
+
+  // Also find teammate PTO from OTHER projects where a teammate overlaps
+  (state.projects || []).filter(p => !p.completed && !p.ghost && !myProjectIds.has(p.id)).forEach(proj => {
+    (proj.tasks || []).forEach(task => {
+      if (!task.isDueDate || task.milestoneType !== 'pto') return;
+      const start = task.date;
+      const end = task.endDate || task.date;
+      if (!start || end <= afterDate || start > cutoff) return;
+
+      // Check if any attendee is a teammate on one of my projects
+      (task.attendees || []).forEach(a => {
+        if (!a.person || a.person === personName) return;
+        // Is this person on any of my projects?
+        const theirInfo = peopleMap.get(a.person);
+        if (!theirInfo) return;
+        let sharedProject = null;
+        for (const [pid] of theirInfo.projects) {
+          if (myProjectIds.has(pid)) { sharedProject = theirInfo.projects.get(pid).name; break; }
+        }
+        if (sharedProject) {
+          items.push({
+            type: 'pto',
+            icon: '\u{1F3D6}',
+            title: a.person + ' — PTO',
+            project: sharedProject,
+            date: start,
+            endDate: end !== start ? end : null
+          });
+        }
+      });
+    });
+  });
+
+  // Deduplicate by type+title+date
+  const seen = new Set();
+  const deduped = items.filter(item => {
+    const key = item.type + '|' + item.title + '|' + item.date;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  return deduped.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function renderHeadsUpSection() {
+  const items = getHeadsUpItems(selectedPerson, selectedDate);
+  if (!items.length) return null;
+
+  const section = document.createElement('div');
+  section.className = 'dash-section';
+
+  const title = document.createElement('div');
+  title.className = 'dash-section-title';
+  title.textContent = 'Heads Up';
+  section.appendChild(title);
+
+  const list = document.createElement('div');
+  list.className = 'headsup-list';
+
+  items.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'headsup-item ' + item.type;
+
+    const icon = document.createElement('span');
+    icon.className = 'headsup-icon';
+    icon.textContent = item.icon;
+    row.appendChild(icon);
+
+    const body = document.createElement('div');
+    body.className = 'headsup-body';
+    body.innerHTML = `<div class="headsup-title">${esc(item.title)}</div><div class="headsup-meta">${esc(item.project)}</div>`;
+    row.appendChild(body);
+
+    const dateEl = document.createElement('span');
+    dateEl.className = 'headsup-date';
+    let dateText = fmtDateShort(item.date);
+    if (item.endDate) dateText += ' \u2013 ' + fmtDateShort(item.endDate);
+    dateEl.textContent = dateText;
+    row.appendChild(dateEl);
+
+    list.appendChild(row);
+  });
+
+  section.appendChild(list);
   return section;
 }
 
