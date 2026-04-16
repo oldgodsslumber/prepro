@@ -105,35 +105,33 @@ body { display: flex; flex-direction: column; }
 .dash-section { margin-bottom: 24px; }
 .dash-section-title { font-size: 10px; font-weight: 700; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 10px; }
 
-/* ── TODAY CARDS ── */
-.today-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; }
+/* ── TODAY HERO ── */
+.today-hero { margin-bottom: 28px; min-height: 200px; }
+.today-date-heading { font-size: 22px; font-weight: 800; color: var(--text); margin-bottom: 16px; letter-spacing: -.02em; }
+.today-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 10px; }
 .today-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.today-card-project { font-size: 13px; font-weight: 700; }
+.today-card-project { font-size: 14px; font-weight: 700; }
 .role-tag { font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 10px; color: #fff; white-space: nowrap; }
-.today-task-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px; }
+.today-task-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px; }
 .today-task-row + .today-task-row { border-top: 1px solid var(--border); }
 .task-name { flex: 1; }
-.task-loe { flex-shrink: 0; }
+.task-loe { flex-shrink: 0; cursor: pointer; padding: 2px 4px; border-radius: 4px; transition: background .15s; user-select: none; font-size: 14px; }
+.task-loe:hover { background: rgba(255,255,255,.1); }
 .task-badge { font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 8px; background: rgba(192,57,79,.2); color: #e07070; white-space: nowrap; }
 .task-days { font-size: 10px; color: var(--dim); flex-shrink: 0; }
-.no-tasks { color: var(--dim); font-size: 12px; font-style: italic; }
+.no-tasks { color: var(--dim); font-size: 14px; font-style: italic; padding: 24px 0; }
 
-/* ── COMING UP ── */
-.coming-day { display: flex; gap: 12px; padding: 6px 0; align-items: baseline; }
-.coming-day + .coming-day { border-top: 1px solid var(--border); }
-.coming-day-label { font-size: 11px; font-weight: 700; color: var(--dim); min-width: 90px; flex-shrink: 0; }
-.coming-day-tasks { font-size: 12px; color: var(--text); flex: 1; display: flex; flex-wrap: wrap; gap: 4px 12px; }
-.coming-task { display: flex; align-items: center; gap: 4px; }
-.coming-task-project { font-size: 10px; color: var(--dim); }
-.coming-day.free .coming-day-tasks { color: var(--dim); font-style: italic; }
-
-/* ── MY PROJECTS ── */
-.projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
-.project-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
-.project-card-name { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
-.project-card-roles { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
-.project-card-meta { font-size: 11px; color: var(--dim); }
-.project-card-meta span + span::before { content: ' \00b7 '; }
+/* ── COMING UP CARDS ── */
+.coming-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+.coming-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; min-height: 70px; }
+.coming-card.free { opacity: .45; }
+.coming-card-date { font-size: 11px; font-weight: 700; color: var(--dim); margin-bottom: 6px; }
+.coming-card-task { font-size: 12px; padding: 4px 0; }
+.coming-card-task + .coming-card-task { border-top: 1px solid var(--border); }
+.coming-card-task-row { display: flex; align-items: center; gap: 6px; }
+.coming-card-task-row .task-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.coming-card-project { font-size: 9px; color: var(--dim); margin-top: 1px; }
+.coming-card-free { font-size: 12px; color: var(--dim); font-style: italic; }
 </style>
 </head>
 
@@ -201,6 +199,26 @@ window._dashReloadState = function(data) {
   renderAll();
 };
 
+function saveState() {
+  try { localStorage.setItem('prepro_data', JSON.stringify(state)); } catch(e) {}
+  if (window._fb) {
+    const { db, ref, set } = window._fb;
+    set(ref(db, 'prepro/state'), state).catch(e => console.error('dash firebase save error:', e));
+  }
+}
+
+const LOE_CYCLE = ['low', 'medium', 'high'];
+function cycleLoe(projectId, taskId) {
+  const proj = (state.projects || []).find(p => p.id === projectId);
+  if (!proj) return;
+  const task = (proj.tasks || []).find(t => t.id === taskId);
+  if (!task || task.isDueDate) return;
+  const idx = LOE_CYCLE.indexOf(task.loe || 'medium');
+  task.loe = LOE_CYCLE[(idx + 1) % 3];
+  saveState();
+  renderAll();
+}
+
 loadState();
 if (window._fbState) window._dashReloadState(window._fbState);
 
@@ -256,6 +274,8 @@ function workloadInfo(pts) {
   return            { label: 'Overloaded',     color: '#8b1a2a' };
 }
 
+const INTERNAL_ROLES = new Set(ROLE_CATS[0].roles); // Producer, Editor, Animator
+
 // ── ROLE COLOR LOOKUP ──
 function getRoleColor(role) {
   for (const cat of ROLE_CATS) {
@@ -264,15 +284,16 @@ function getRoleColor(role) {
   return '#8080a0';
 }
 
-// ── PERSON EXTRACTION & DEDUP ──
+// ── PERSON EXTRACTION & DEDUP (internal team only) ──
 function getAllPeople() {
   const personMap = new Map(); // name -> { roles: Set, projects: Map<id, {name, roles}> }
 
   (state.projects || []).filter(p => !p.completed && !p.ghost).forEach(proj => {
     const roster = proj.roster || {};
 
-    // From roster
+    // From roster — only internal team roles
     for (const [role, names] of Object.entries(roster)) {
+      if (!INTERNAL_ROLES.has(role)) continue;
       (names || []).forEach(name => {
         if (!name) return;
         if (!personMap.has(name)) personMap.set(name, { roles: new Set(), projects: new Map() });
@@ -283,9 +304,10 @@ function getAllPeople() {
       });
     }
 
-    // From task assignments
+    // From task assignments — only internal team roles
     (proj.tasks || []).forEach(t => {
       if (!t.person || t.isDueDate) return;
+      if (!INTERNAL_ROLES.has(t.role)) return;
       const name = t.person;
       if (!personMap.has(name)) personMap.set(name, { roles: new Set(), projects: new Map() });
       const entry = personMap.get(name);
@@ -294,11 +316,12 @@ function getAllPeople() {
       if (t.role) entry.projects.get(proj.id).roles.add(t.role);
     });
 
-    // From review/event attendees
+    // From review/event attendees — only internal team roles
     (proj.tasks || []).forEach(t => {
       if (!t.attendees) return;
       (t.attendees || []).forEach(a => {
         if (!a.person) return;
+        if (!INTERNAL_ROLES.has(a.role)) return;
         const name = a.person;
         if (!personMap.has(name)) personMap.set(name, { roles: new Set(), projects: new Map() });
         const entry = personMap.get(name);
@@ -360,50 +383,6 @@ function getTasksForPerson(personName, dateStr) {
   return results;
 }
 
-function getTasksForPersonRange(personName, startDate, endDate) {
-  const results = [];
-  (state.projects || []).filter(p => !p.completed && !p.ghost).forEach(proj => {
-    (proj.tasks || []).forEach(task => {
-      const tStart = task.date;
-      const tEnd = task.endDate || task.date;
-      if (!tStart) return;
-      // Check if task range overlaps with query range
-      if (tStart > endDate || tEnd < startDate) return;
-
-      let isMatch = false;
-      let matchRoles = [];
-
-      if (task.person === personName) {
-        isMatch = true;
-        if (task.role) matchRoles.push(task.role);
-      }
-      if (task.attendees) {
-        task.attendees.forEach(a => {
-          if (a.person === personName) {
-            isMatch = true;
-            matchRoles.push(a.role || 'Attendee');
-          }
-        });
-      }
-      if (task.isDueDate && task.milestoneType === 'pto') {
-        const lp = personName.toLowerCase();
-        if ((task.attendees || []).some(a => a.person && a.person.toLowerCase() === lp)) isMatch = true;
-        if (task.taskName && task.taskName.toLowerCase().includes(lp)) isMatch = true;
-      }
-
-      if (isMatch) {
-        results.push({
-          ...task,
-          projectName: proj.name,
-          projectId: proj.id,
-          matchRoles: [...new Set(matchRoles)]
-        });
-      }
-    });
-  });
-  return results;
-}
-
 // ── WORKLOAD FOR A DAY ──
 function getDayWorkload(personName, dateStr) {
   let total = 0;
@@ -423,17 +402,6 @@ function getDayWorkload(personName, dateStr) {
     });
   });
   return total;
-}
-
-// ── PROJECT DUE DATE ──
-function getProjectDueDate(proj) {
-  let earliest = null;
-  (proj.tasks || []).forEach(t => {
-    if (t.isDueDate && (t.milestoneType === 'due-date' || t.milestoneType === 'delivery')) {
-      if (!earliest || t.date < earliest) earliest = t.date;
-    }
-  });
-  return earliest;
 }
 
 // ── MULTI-DAY INFO ──
@@ -511,9 +479,6 @@ function renderDashboard() {
 
   // Coming Up section
   main.appendChild(renderComingUpSection());
-
-  // My Projects section
-  main.appendChild(renderProjectsSection());
 }
 
 // ── EFFORT BAR ──
@@ -540,10 +505,10 @@ function renderEffortBar() {
 // ── TODAY SECTION ──
 function renderTodaySection() {
   const section = document.createElement('div');
-  section.className = 'dash-section';
+  section.className = 'today-hero';
 
   const title = document.createElement('div');
-  title.className = 'dash-section-title';
+  title.className = 'today-date-heading';
   title.textContent = fmtDateLong(selectedDate);
   section.appendChild(title);
 
@@ -611,12 +576,18 @@ function renderTodaySection() {
         html += `<span class="task-badge" style="background:rgba(108,99,255,.2);color:var(--accent)">Milestone</span>`;
       }
 
-      // LOE
-      if (!task.isDueDate && task.loe) {
-        html += `<span class="task-loe">${LOE_EMOJI[task.loe] || ''}</span>`;
+      row.innerHTML = html;
+
+      // LOE — clickable to cycle
+      if (!task.isDueDate) {
+        const loeBtn = document.createElement('span');
+        loeBtn.className = 'task-loe';
+        loeBtn.textContent = LOE_EMOJI[task.loe || 'medium'] || LOE_EMOJI.medium;
+        loeBtn.title = 'Click to change effort level';
+        loeBtn.addEventListener('click', () => cycleLoe(task.projectId, task.id));
+        row.appendChild(loeBtn);
       }
 
-      row.innerHTML = html;
       card.appendChild(row);
     });
 
@@ -636,102 +607,36 @@ function renderComingUpSection() {
   title.textContent = 'Coming Up';
   section.appendChild(title);
 
+  const grid = document.createElement('div');
+  grid.className = 'coming-grid';
+
   const days = getNextBusinessDays(selectedDate, 5);
 
   days.forEach(dayStr => {
     const tasks = getTasksForPerson(selectedPerson, dayStr);
-    const dayEl = document.createElement('div');
-    dayEl.className = 'coming-day' + (tasks.length === 0 ? ' free' : '');
+    const card = document.createElement('div');
+    card.className = 'coming-card' + (tasks.length === 0 ? ' free' : '');
 
-    const label = document.createElement('div');
-    label.className = 'coming-day-label';
-    label.textContent = fmtDateShort(dayStr);
-    dayEl.appendChild(label);
-
-    const tasksEl = document.createElement('div');
-    tasksEl.className = 'coming-day-tasks';
+    const dateLabel = document.createElement('div');
+    dateLabel.className = 'coming-card-date';
+    dateLabel.textContent = fmtDateShort(dayStr);
+    card.appendChild(dateLabel);
 
     if (!tasks.length) {
-      tasksEl.textContent = 'Free';
+      const free = document.createElement('div');
+      free.className = 'coming-card-free';
+      free.textContent = 'Free';
+      card.appendChild(free);
     } else {
       tasks.forEach(t => {
-        const chip = document.createElement('span');
-        chip.className = 'coming-task';
+        const taskEl = document.createElement('div');
+        taskEl.className = 'coming-card-task';
         const taskLabel = t.taskName || t.reviewLabel || '(untitled)';
-        const loe = (!t.isDueDate && t.loe) ? ` ${LOE_EMOJI[t.loe] || ''}` : '';
-        chip.innerHTML = `${esc(taskLabel)} <span class="coming-task-project">(${esc(t.projectName)})</span>${loe}`;
-        tasksEl.appendChild(chip);
+        const loe = (!t.isDueDate && t.loe) ? LOE_EMOJI[t.loe] || '' : '';
+        taskEl.innerHTML = `<div class="coming-card-task-row"><span class="task-name">${esc(taskLabel)}</span>${loe ? `<span>${loe}</span>` : ''}</div><div class="coming-card-project">${esc(t.projectName)}</div>`;
+        card.appendChild(taskEl);
       });
     }
-
-    dayEl.appendChild(tasksEl);
-    section.appendChild(dayEl);
-  });
-
-  return section;
-}
-
-// ── MY PROJECTS SECTION ──
-function renderProjectsSection() {
-  const section = document.createElement('div');
-  section.className = 'dash-section';
-
-  const title = document.createElement('div');
-  title.className = 'dash-section-title';
-  title.textContent = 'My Projects';
-  section.appendChild(title);
-
-  const peopleMap = getAllPeople();
-  const personInfo = peopleMap.get(selectedPerson);
-  if (!personInfo || personInfo.projects.size === 0) {
-    const noProjects = document.createElement('div');
-    noProjects.className = 'no-tasks';
-    noProjects.textContent = 'No active projects';
-    section.appendChild(noProjects);
-    return section;
-  }
-
-  const grid = document.createElement('div');
-  grid.className = 'projects-grid';
-
-  const today = todayStr();
-
-  personInfo.projects.forEach((projInfo) => {
-    const proj = (state.projects || []).find(p => p.id === projInfo.id);
-    if (!proj || proj.completed || proj.ghost) return;
-
-    const card = document.createElement('div');
-    card.className = 'project-card';
-
-    // Name
-    card.innerHTML = `<div class="project-card-name">${esc(projInfo.name)}</div>`;
-
-    // Role tags
-    const rolesDiv = document.createElement('div');
-    rolesDiv.className = 'project-card-roles';
-    [...projInfo.roles].sort().forEach(role => {
-      const tag = document.createElement('span');
-      tag.className = 'role-tag';
-      tag.style.background = getRoleColor(role);
-      tag.textContent = role;
-      rolesDiv.appendChild(tag);
-    });
-    card.appendChild(rolesDiv);
-
-    // Meta: due date + task count
-    const dueDate = getProjectDueDate(proj);
-    const upcomingTasks = getTasksForPersonRange(selectedPerson, today, addDays(today, 365))
-      .filter(t => t.projectId === projInfo.id && !t.isDueDate).length;
-
-    const meta = document.createElement('div');
-    meta.className = 'project-card-meta';
-    let metaHtml = '';
-    if (dueDate) {
-      metaHtml += `<span>Due ${fmtDateShort(dueDate)}</span>`;
-    }
-    metaHtml += `<span>${upcomingTasks} upcoming task${upcomingTasks !== 1 ? 's' : ''}</span>`;
-    meta.innerHTML = metaHtml;
-    card.appendChild(meta);
 
     grid.appendChild(card);
   });
@@ -739,6 +644,7 @@ function renderProjectsSection() {
   section.appendChild(grid);
   return section;
 }
+
 
 // ── ESCAPE HTML ──
 function esc(str) {
