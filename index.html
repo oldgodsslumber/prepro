@@ -47,10 +47,12 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .btn-toggle.on { background: rgba(108,99,255,.18); color: var(--accent); border-color: var(--accent); }
 
 /* ── APP ROW ── */
-.app-row { display: grid; grid-template-columns: 220px 1fr; flex: 1; min-height: 0; }
+.app-row { display: grid; grid-template-columns: 220px 4px 1fr; flex: 1; min-height: 0; }
 
 /* ── SIDEBAR ── */
-.sidebar { background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+.sidebar { background: var(--panel); border-right: none; display: flex; flex-direction: column; overflow: hidden; }
+.sidebar-resize { width: 4px; background: var(--border); cursor: col-resize; flex-shrink: 0; transition: background .15s; user-select: none; }
+.sidebar-resize:hover, .sidebar-resize.active { background: var(--accent); }
 .sidebar-head { padding: 8px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .sidebar-head-label { font-size: 13px; font-weight: 700; color: var(--text); }
 .data-migration { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--border); flex-shrink: 0; }
@@ -58,7 +60,10 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .data-mig-btn:hover { color: var(--text); border-color: var(--accent); }
 .sidebar-tree { flex: 1; overflow-y: auto; padding: 6px 0; }
 
-.tree-node { display: flex; align-items: center; gap: 4px; padding: 5px 8px 5px 0; cursor: pointer; border-radius: 5px; margin: 1px 6px; user-select: none; }
+.tree-node { display: flex; align-items: center; gap: 4px; padding: 5px 8px 5px 0; cursor: pointer; border-radius: 5px; margin: 1px 6px; user-select: none; position: relative; }
+.tree-node.drop-above::before { content: ''; position: absolute; top: -1px; left: 4px; right: 4px; height: 2px; background: var(--accent); border-radius: 2px; pointer-events: none; }
+.tree-node.drop-below::after  { content: ''; position: absolute; bottom: -1px; left: 4px; right: 4px; height: 2px; background: var(--accent); border-radius: 2px; pointer-events: none; }
+.tree-node.drop-onto { background: rgba(108,99,255,.22) !important; outline: 1px solid var(--accent); outline-offset: -1px; }
 .tree-node:hover { background: var(--card); }
 .tree-node.active { background: var(--accent); }
 .tree-node.active .tree-more, .tree-node.active .tree-toggle, .tree-node.active .tree-label { color: #fff; }
@@ -83,9 +88,6 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .tree-node.ghost .tree-label { opacity: .45; font-style: italic; }
 .tree-node.ghost .tree-label::after { content: ' 👻'; font-style: normal; }
 .tree-node.ghost.active .tree-label { opacity: 1; }
-.tree-node.drop-above::before { content: ''; position: absolute; top: -1px; left: 4px; right: 4px; height: 2px; background: var(--accent); border-radius: 2px; pointer-events: none; }
-.tree-node.drop-below::after  { content: ''; position: absolute; bottom: -1px; left: 4px; right: 4px; height: 2px; background: var(--accent); border-radius: 2px; pointer-events: none; }
-.tree-node.drop-onto { background: rgba(108,99,255,.22) !important; outline: 1px solid var(--accent); outline-offset: -1px; }
 .rename-input { background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; padding: 1px 6px; color: var(--text); font-size: 13px; outline: none; flex: 1; min-width: 0; }
 
 /* ── RIGHT COLUMN ── */
@@ -95,7 +97,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .palette { background: var(--panel); border-bottom: 1px solid var(--border); padding: 8px 14px; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; flex-shrink: 0; }
 .pal-cat   { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 .pal-label { font-size: 10px; font-weight: 600; letter-spacing: .08em; color: var(--dim); text-transform: uppercase; white-space: nowrap; }
-.role-chip { padding: 4px 11px; border-radius: 12px; font-size: 11px; font-weight: 600; color: #fff; cursor: grab; user-select: none; white-space: nowrap; transition: opacity .1s, transform .1s; }
+.role-chip { padding: 0 11px; height: 26px; display: inline-flex; align-items: center; border-radius: 12px; font-size: 11px; font-weight: 600; color: #fff; cursor: grab; user-select: none; white-space: nowrap; transition: opacity .1s, transform .1s; border: 1.5px solid transparent; box-sizing: border-box; }
 .role-chip:hover { opacity: .9; transform: translateY(-1px); }
 .role-chip:active { cursor: grabbing; transform: scale(.97); }
 .chip-duedate { background: #3a3a52 !important; color: var(--text) !important; border: 1.5px solid #606080; }
@@ -112,9 +114,9 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .duedate-marker.drag-accepting { outline: 2px solid rgba(128,128,160,.5); outline-offset: -1px; }
 .duedate-marker.drag-accepting .review-drop-hint { display: block; }
 .duedate-marker .review-drop-hint { color: rgba(200,200,220,.6); }
-/* slim continuation bars for multi-day key dates */
-.duedate-bar { height: 20px; flex-shrink: 0; width: 100%; position: relative; cursor: pointer; background: rgba(128,128,160,.45); font-size: 0; box-sizing: border-box; }
-.duedate-bar-mid { border-radius: 0; margin-left: -5px; margin-right: -6px; width: calc(100% + 11px); }
+/* continuation bars for multi-day key dates — full height */
+.duedate-bar { flex-shrink: 0; width: 100%; position: relative; cursor: pointer; background: #3a3a52; border: 1.5px solid #8080a0; border-left: none; font-size: 0; display: flex; align-items: center; min-height: 30px; box-sizing: border-box; }
+.duedate-bar-mid { border-radius: 0; border-right: none; margin-left: -5px; margin-right: -6px; width: calc(100% + 11px); }
 .duedate-bar-end { border-radius: 0 4px 4px 0; margin-left: -5px; padding-right: 17px; width: calc(100% + 5px); }
 
 /* ── CALENDAR WRAPPER ── */
@@ -144,22 +146,46 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 /* ── GHOST CHIPS (cross-project busyness overlay) ── */
 .ghost-chip { font-size: 10px; font-weight: 500; border-radius: 4px; padding: 2px 6px; color: rgba(255,255,255,.45); background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); pointer-events: none; user-select: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-style: italic; min-width: 0; max-width: 100%; }
 .ghost-name { font-weight: 600; color: rgba(255,255,255,.65); }
+.ghost-pto { background: rgba(255,180,50,.12); border-color: rgba(255,180,50,.25); }
+.ghost-pto .ghost-name { color: rgba(255,200,80,.8); }
 
 /* ── TASK CHIPS ── */
-.task-chip { font-size: 10px; font-weight: 500; border-radius: 4px; padding: 2px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff; cursor: grab; line-height: 1.5; position: relative; flex-shrink: 0; }
+/* Fixed height on ALL chip variants so lane positions stay aligned across cells */
+.task-chip { font-size: 10px; font-weight: 500; border-radius: 4px; padding: 0 6px; height: 22px; display: flex; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff; cursor: grab; position: relative; flex-shrink: 0; box-sizing: border-box; }
 .task-chip:active { cursor: grabbing; }
+/* Glow: box-shadow simulates per-side borders so interior edges of multi-day spans stay dark */
+/* Solo chips and full-block events: all 4 sides */
+.task-chip.chip-solo.task-selected,
+.review-block.task-selected,
+.duedate-marker.task-selected { box-shadow: 0 0 0 2px rgba(255,255,255,.9), 0 0 8px 3px rgba(255,255,255,.3); }
+/* Start: left + top + bottom only (no right — abuts the mid chip) */
+.task-chip.chip-start.task-selected { box-shadow: -2px 0 0 0 rgba(255,255,255,.9), 0 -2px 0 0 rgba(255,255,255,.9), 0 2px 0 0 rgba(255,255,255,.9), 0 0 8px 3px rgba(255,255,255,.3); }
+/* Mid: top + bottom only */
+.task-chip.chip-mid.task-selected,
+.review-bar-mid.task-selected,
+.duedate-bar-mid.task-selected { box-shadow: 0 -2px 0 0 rgba(255,255,255,.9), 0 2px 0 0 rgba(255,255,255,.9), 0 0 8px 3px rgba(255,255,255,.3); }
+/* End: right + top + bottom only (no left — abuts the mid chip) */
+.task-chip.chip-end.task-selected,
+.review-bar-end.task-selected,
+.duedate-bar-end.task-selected { box-shadow: 2px 0 0 0 rgba(255,255,255,.9), 0 -2px 0 0 rgba(255,255,255,.9), 0 2px 0 0 rgba(255,255,255,.9), 0 0 8px 3px rgba(255,255,255,.3); }
 
 /* solo = single day: left handle + text + right handle */
 .task-chip.chip-solo  { border-radius: 4px; padding-left: 17px; padding-right: 17px; }
 /* start: bleeds 6px right (5px cell padding + 1px grid gap) */
 .task-chip.chip-start { border-radius: 4px 0 0 4px; padding-left: 17px; margin-right: -6px; position: relative; z-index: 1; }
 /* mid: extends left past padding, bleeds right into gap */
-.task-chip.chip-mid   { border-radius: 0; min-height: 18px; font-size: 0; margin-left: -5px; margin-right: -6px; }
+.task-chip.chip-mid   { border-radius: 0; font-size: 0; margin-left: -5px; margin-right: -6px; opacity: .85; overflow: hidden; }
 /* end: extends left past padding, right stays normal */
-.task-chip.chip-end   { border-radius: 0 4px 4px 0; min-height: 18px; font-size: 0; padding-right: 17px; margin-left: -5px; }
+.task-chip.chip-end   { border-radius: 0 4px 4px 0; font-size: 0; padding-right: 17px; margin-left: -5px; opacity: .85; overflow: hidden; }
+/* Row-start continuation label */
+.task-chip.chip-mid.row-start, .task-chip.chip-end.row-start { font-size: 10px; padding-left: 6px; }
+.cont-label { font-size: 10px; opacity: .5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.review-bar .cont-label, .duedate-bar .cont-label { font-size: 10px; opacity: .45; padding-left: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Hover highlight for connected multi-day segments */
+[data-task-id].task-hover { outline: 2px solid rgba(255,255,255,.5); outline-offset: -1px; opacity: 1 !important; }
 
-/* lane spacer: same height as a chip row so multi-day bars stay aligned */
-.chip-spacer { height: 20px; flex-shrink: 0; pointer-events: none; }
+/* lane spacer: must match chip height exactly */
+.chip-spacer { height: 22px; flex-shrink: 0; pointer-events: none; }
 
 /* shared handle base */
 .chip-handle-l, .chip-handle-r {
@@ -186,11 +212,11 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .review-block .chip-handle-r { top: 10px; transform: none; }
 .review-block:hover .chip-handle-l,
 .review-block:hover .chip-handle-r { color: rgba(255,255,255,.9); }
-/* slim continuation bars for multi-day reviews */
-.review-bar { height: 20px; flex-shrink: 0; position: relative; cursor: pointer; background: rgba(192,57,79,.45); font-size: 0; }
-.review-bar-mid { border-radius: 0; margin-left: -5px; margin-right: -6px; }
-.review-bar-end { border-radius: 0 4px 4px 0; margin-left: -5px; padding-right: 17px; }
-.review-bar.drag-accepting { background: rgba(192,57,79,.7); }
+/* continuation bars for multi-day reviews — full height, matching start block */
+.review-bar { flex-shrink: 0; position: relative; cursor: pointer; background: rgba(192,57,79,.15); border: 1.5px solid rgba(192,57,79,.6); border-left: none; font-size: 0; display: flex; align-items: center; min-height: 38px; }
+.review-bar-mid { border-radius: 0; border-right: none; margin-left: -5px; margin-right: -6px; }
+.review-bar-end { border-radius: 0 5px 5px 0; margin-left: -5px; padding-right: 17px; }
+.review-bar.drag-accepting { background: rgba(192,57,79,.32); }
 .review-block:hover { background: rgba(192,57,79,.22); }
 .review-block.drag-accepting { background: rgba(192,57,79,.32); border-color: #c0394f; outline: 2px solid rgba(192,57,79,.5); outline-offset: -1px; }
 .review-hd { display: flex; align-items: center; gap: 5px; }
@@ -219,19 +245,21 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
   overflow: hidden;
   transition: max-height .2s ease, border-top-color .15s;
 }
-.task-panel.open { max-height: 70px; border-top-color: var(--accent); }
+.task-panel.open { max-height: 90px; border-top-color: var(--accent); }
 
 .task-panel-inner {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 10px 16px;
-  height: 70px;
+  min-height: 70px;
 }
 
 .panel-meta    { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .panel-role-badge { padding: 3px 10px; border-radius: 10px; font-size: 11px; font-weight: 600; color: #fff; white-space: nowrap; }
 .panel-date    { font-size: 11px; color: var(--dim); white-space: nowrap; }
+.panel-date-range { font-size: 10px; color: var(--dim); opacity: .75; white-space: nowrap; margin-top: 2px; }
+.panel-meta-wrap { display: flex; flex-direction: column; }
 .panel-divider { width: 1px; height: 28px; background: var(--border); flex-shrink: 0; }
 .panel-fields  { display: flex; gap: 10px; flex: 1; align-items: center; }
 .panel-field   { display: flex; align-items: center; gap: 6px; flex: 1; }
@@ -358,13 +386,14 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
     </div>
     <div class="data-migration">
       <a href="guide.html" target="_blank" class="data-mig-btn" title="Open guide">❓ Help</a>
-      <a href="ops.html" target="_blank" class="data-mig-btn" title="Ops mode — team workload view">📊 Ops</a>
       <a href="dash.html" target="_blank" class="data-mig-btn" title="Personal dashboard view">📋 Dash</a>
       <button class="data-mig-btn" id="btnExportData" title="Download all projects as a JSON backup file">⬇ Export Data</button>
       <button class="data-mig-btn" id="btnImportData" title="Load projects from a JSON backup file">⬆ Import Data</button>
       <input type="file" id="importFileInput" accept=".json" style="display:none">
     </div>
   </div>
+
+  <div class="sidebar-resize" id="sidebarResizeHandle"></div>
 
   <!-- RIGHT COLUMN -->
   <div class="right-col">
@@ -402,7 +431,10 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
       <div class="task-panel-inner">
         <div class="panel-meta">
           <span class="panel-role-badge" id="panelRoleBadge"></span>
-          <span class="panel-date" id="panelDateLabel"></span>
+          <div class="panel-meta-wrap">
+            <span class="panel-date" id="panelDateLabel"></span>
+            <span class="panel-date-range" id="panelDateRange" style="display:none;"></span>
+          </div>
         </div>
         <div class="panel-divider"></div>
         <div class="panel-fields">
@@ -479,6 +511,7 @@ const ROLE_CATS = [
 ];
 const REVIEW_COLOR = '#c0394f';
 const LOE_EMOJI    = { low: '🟢', medium: '🟡', high: '🔴' };
+const ROLE_ABBR    = { 'Producer': 'PRD', 'Editor': 'EDT', 'Animator': 'ANM', 'Copywriter': 'CPY', 'Designer': 'DSN', 'Stakeholder': 'STK', 'External Vendor': 'VND', 'Other': 'OTH' };
 const MONTHS   = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DOW_ALL  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const DOW_WD   = ['Mon','Tue','Wed','Thu','Fri'];
@@ -491,14 +524,16 @@ let collapsedIds    = new Set();
 let dragPayload     = null;
 let panelContext    = null;
 let exportTabActive  = localStorage.getItem('prepro_export_tab') || 'text';
-let exportOpen       = true;
+let exportOpen       = false;
 let exportOptBold       = true;
 let exportOptRoles      = false;
 let exportOptAlign      = true;
 let exportOptDueDate    = true;
+let exportOptPTO        = false;
 let exportOptAttendees  = true;
 let exportPNGRoles      = true;
 let exportPNGAttendees  = true;
+let exportPNGPTO        = false;
 let showWeekends    = false;
 let showGhosts      = true;
 let resizeState     = null;
@@ -526,7 +561,6 @@ const DEFAULT_NAME_HISTORY = {
 function loadNameHistory() {
   try { const r = localStorage.getItem('prepro_name_history'); if (r) nameHistory = JSON.parse(r); } catch(e) {}
   if (!nameHistory || typeof nameHistory !== 'object') nameHistory = {};
-  // Seed defaults for any role not yet in history
   Object.entries(DEFAULT_NAME_HISTORY).forEach(([role, names]) => {
     if (!nameHistory[role]) nameHistory[role] = [];
     names.forEach(n => { if (!nameHistory[role].includes(n)) nameHistory[role].push(n); });
@@ -570,11 +604,12 @@ function removeFromHistory(role, name) {
   saveNameHistory();
 }
 
-// ── PERSISTENCE ──
+// ── PERSISTENCE (localStorage) ──
 function loadState() {
   try { const r = localStorage.getItem('prepro_data'); if (r) state = JSON.parse(r); } catch(e) {}
   if (!state || !state.projects) state = { projects: [] };
 }
+
 function saveState() { localStorage.setItem('prepro_data', JSON.stringify(state)); }
 function genId() {
   try { return crypto.randomUUID(); }
@@ -589,14 +624,6 @@ function getDescendantIds(id) {
   const ids = [], q = [id];
   while (q.length) { const c = q.shift(); getChildren(c).forEach(x => { ids.push(x.id); q.push(x.id); }); }
   return ids;
-}
-function isDescendantOf(childId, ancestorId) {
-  let p = getProject(childId);
-  while (p && p.parentId) {
-    if (p.parentId === ancestorId) return true;
-    p = getProject(p.parentId);
-  }
-  return false;
 }
 function addProject(name, parentId) {
   const p = { id: genId(), name, parentId: parentId || null, tasks: [], roster: {}, dueDate: null };
@@ -755,11 +782,12 @@ function renderTreeLevel(parentId, depth, container) {
     });
     node.addEventListener('contextmenu', e => { e.preventDefault(); openContextMenu(e, proj.id); });
 
-    // Drag to reorder / reparent (Alt+drag = duplicate)
+    // Drag: regular = reorder/reparent, Alt = duplicate
     node.draggable = true;
     node.addEventListener('dragstart', e => {
       if (e.altKey) {
         dragPayload = { type: 'dup-project', projectId: proj.id };
+        e.dataTransfer.setData('text', JSON.stringify(dragPayload));
         e.dataTransfer.effectAllowed = 'copy';
       } else {
         dragPayload = { type: 'tree-move', projectId: proj.id };
@@ -770,6 +798,7 @@ function renderTreeLevel(parentId, depth, container) {
     });
     node.addEventListener('dragend', () => {
       node.style.opacity = '';
+      clearTreeDropIndicator();
       if (dragPayload && dragPayload.type === 'dup-project' && dragPayload.projectId === proj.id) {
         const newProj = duplicateProject(proj.id);
         dragPayload = null;
@@ -780,6 +809,7 @@ function renderTreeLevel(parentId, depth, container) {
           if (exportOpen) renderExportPanel();
         }
       }
+      dragPayload = null;
     });
 
     // Drop target: accept tree-move drags for reorder / reparent
@@ -787,7 +817,7 @@ function renderTreeLevel(parentId, depth, container) {
       if (!dragPayload || dragPayload.type !== 'tree-move') return;
       const movingId = dragPayload.projectId;
       if (movingId === proj.id) return;
-      if (isDescendantOf(proj.id, movingId)) return;
+      if (isDescendantOf(proj.id, movingId)) return; // can't drop into own descendant
       e.preventDefault(); e.stopPropagation();
       const rect = node.getBoundingClientRect();
       const ratio = (e.clientY - rect.top) / rect.height;
@@ -833,15 +863,24 @@ function clearTreeDropIndicator() {
   }
 }
 
+function isDescendantOf(childId, ancestorId) {
+  let p = getProject(childId);
+  while (p && p.parentId) {
+    if (p.parentId === ancestorId) return true;
+    p = getProject(p.parentId);
+  }
+  return false;
+}
+
 function moveProjectInTree(movingId, targetId, position) {
   const movingProj = getProject(movingId);
   const targetProj = getProject(targetId);
   if (!movingProj || !targetProj) return;
   if (position === 'into') {
     movingProj.parentId = targetId;
-    collapsedIds.delete(targetId);
+    collapsedIds.delete(targetId); // expand target so new child is visible
   } else {
-    movingProj.parentId = targetProj.parentId;
+    movingProj.parentId = targetProj.parentId; // match target's level
     const arr = state.projects;
     arr.splice(arr.findIndex(p => p.id === movingId), 1);
     const toIdx = arr.findIndex(p => p.id === targetId);
@@ -982,6 +1021,7 @@ function renderPalette() {
 
   const pplGrp = document.createElement('div');
   pplGrp.className = 'pal-cat';
+  pplGrp.style.cssText = 'flex: 1 1 auto; flex-wrap: wrap;';
   const pplLbl = document.createElement('span');
   pplLbl.className = 'pal-label';
   pplLbl.textContent = 'People';
@@ -993,7 +1033,7 @@ function renderPalette() {
     const chip = document.createElement('div');
     chip.className = 'role-chip chip-person';
     chip.draggable = true;
-    chip.textContent = `${person} (${role})`;
+    chip.textContent = `${person} (${ROLE_ABBR[role] || role.slice(0,3).toUpperCase()})`;
     chip.style.background = color;
     chip.title = `${person} · ${role} · drag to create task`;
     chip.addEventListener('dragstart', e => {
@@ -1038,12 +1078,15 @@ function buildGhostMap() {
   const proj = getProject(activeProjectId);
   if (!proj) return new Map();
 
-  // Collect every person associated with the active project (roster + task assignments)
+  // Collect Internal Team people associated with the active project (roster + task assignments)
+  const INTERNAL_ROLES = new Set(['Producer', 'Editor', 'Animator']);
   const rosterPeople = new Set();
-  Object.values(proj.roster || {}).forEach(names => names.forEach(n => rosterPeople.add(n)));
+  Object.entries(proj.roster || {}).forEach(([role, names]) => {
+    if (INTERNAL_ROLES.has(role)) names.forEach(n => rosterPeople.add(n));
+  });
   (proj.tasks || []).forEach(t => {
-    if (t.person) rosterPeople.add(t.person);
-    (t.attendees || []).forEach(a => { if (a.person) rosterPeople.add(a.person); });
+    if (t.person && INTERNAL_ROLES.has(t.role)) rosterPeople.add(t.person);
+    (t.attendees || []).forEach(a => { if (a.person && a.category === 'Internal Team') rosterPeople.add(a.person); });
   });
   if (!rosterPeople.size) return new Map();
 
@@ -1056,8 +1099,23 @@ function buildGhostMap() {
   state.projects.forEach(p => {
     if (p.id === activeProjectId || p.completed || p.ghost) return;
     (p.tasks || []).forEach(t => {
-      if (t.isDueDate) return;
+      if (t.isDueDate && t.milestoneType !== 'pto') return; // allow PTO through
       const endDate = t.endDate || t.date;
+
+      // PTO: show for any attendee who's on this project's roster
+      if (t.isDueDate && t.milestoneType === 'pto') {
+        (t.attendees || []).forEach(a => {
+          if (!a.person || !rosterPeople.has(a.person)) return;
+          let d = new Date(t.date + 'T00:00:00');
+          const end = new Date(endDate + 'T00:00:00');
+          while (d <= end) {
+            const ds = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+            addEntry(ds, { person: a.person, role: 'PTO', color: '#555', projectName: p.name, isPTO: true });
+            d.setDate(d.getDate() + 1);
+          }
+        });
+        return;
+      }
 
       // Direct task assignment
       if (t.person && rosterPeople.has(t.person)) {
@@ -1084,6 +1142,22 @@ function buildGhostMap() {
     });
   });
   return map;
+}
+
+// Sync continuation bar/spacer heights to match the start block's actual rendered height
+function syncBarHeights() {
+  document.querySelectorAll('.review-block[data-task-id], .duedate-marker[data-task-id]').forEach(block => {
+    const id = block.dataset.taskId;
+    const h  = block.offsetHeight;
+    if (!h) return;
+    document.querySelectorAll(
+      `.review-bar[data-task-id="${id}"], .duedate-bar[data-task-id="${id}"], [data-spacer-for="${id}"]`
+    ).forEach(el => { el.style.height = h + 'px'; });
+  });
+  // Re-apply glow after DOM rebuild
+  if (selectedTaskId) {
+    document.querySelectorAll(`[data-task-id="${selectedTaskId}"]`).forEach(el => el.classList.add('task-selected'));
+  }
 }
 
 function rebuildCalGrid(adjustScrollTop) {
@@ -1120,6 +1194,7 @@ function rebuildCalGrid(adjustScrollTop) {
   if (adjustScrollTop) {
     calScroll.scrollTop = prevScrollTop + (calScroll.scrollHeight - prevHeight);
   }
+  syncBarHeights();
 }
 
 function extendCalendar(direction) {
@@ -1253,9 +1328,10 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghosts) {
   cell.appendChild(numDiv);
 
   laneArr.forEach(taskOrNull => {
-    if (taskOrNull === null) {
+    if (!taskOrNull || taskOrNull._spacerFor !== undefined) {
       const sp = document.createElement('div');
       sp.className = 'chip-spacer';
+      if (taskOrNull?._spacerFor) sp.dataset.spacerFor = taskOrNull._spacerFor;
       cell.appendChild(sp);
     } else {
       cell.appendChild(buildChip(taskOrNull, dateStr));
@@ -1271,22 +1347,24 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghosts) {
       if (seen.has(key)) return;
       seen.add(key);
       const gc = document.createElement('div');
-      gc.className = 'ghost-chip';
+      gc.className = 'ghost-chip' + (g.isPTO ? ' ghost-pto' : '');
       gc.title = g.person + ' · ' + g.role + ' (' + g.projectName + ')';
       const nameSpan = document.createElement('span');
       nameSpan.className = 'ghost-name';
-      nameSpan.textContent = g.person;
+      nameSpan.textContent = g.isPTO ? '🏖 ' + g.person + ' PTO' : g.person;
       gc.appendChild(nameSpan);
-      const projSpan = document.createElement('span');
-      projSpan.textContent = ' · ' + g.projectName;
-      gc.appendChild(projSpan);
+      if (!g.isPTO) {
+        const projSpan = document.createElement('span');
+        projSpan.textContent = ' · ' + g.projectName;
+        gc.appendChild(projSpan);
+      }
       cell.appendChild(gc);
     });
   }
 
   cell.addEventListener('dragover', e => {
     if (!dragPayload && !e.dataTransfer.types.includes('text')) return;
-    if (dragPayload && dragPayload.type === 'dup-project') return;
+    if (dragPayload && (dragPayload.type === 'dup-project' || dragPayload.type === 'tree-move')) return;
     e.preventDefault();
     cell.classList.add('drag-over');
   });
@@ -1300,9 +1378,9 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghosts) {
     if (!pl) { try { pl = JSON.parse(e.dataTransfer.getData('text')); } catch(_) { return; } }
     if (!pl || !activeProjectId || pl.type === 'dup-project') return;
     if (pl.type === 'move') {
-      moveTask(pl.taskId, dateStr);
+      moveTask(pl.taskId, dateStr, pl.grabDate);
     } else if (pl.type === 'copy') {
-      copyTask(pl.taskId, dateStr);
+      copyTask(pl.taskId, dateStr, pl.grabDate);
     } else if (pl.type === 'duedate') {
       const proj = getProject(activeProjectId);
       if (!proj) return;
@@ -1311,11 +1389,33 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghosts) {
     } else if (pl.type === 'review') {
       openPanel('create-review', dateStr, null, pl.label || 'Review', null, REVIEW_COLOR);
     } else {
+      // If a people chip (person set) lands on the cell instead of the review block,
+      // and there's a review task on this date, route to add-attendee instead of create
+      if (pl.person) {
+        const proj = getProject(activeProjectId);
+        const reviewOnDate = proj && proj.tasks.find(t => t.isReview && t.date === dateStr);
+        if (reviewOnDate) {
+          openPanel('add-attendee', dateStr, reviewOnDate.id, pl.role, pl.category, pl.color, pl.person);
+          return;
+        }
+      }
       openPanel('create', dateStr, null, pl.role, pl.category, pl.color, pl.person || null);
     }
   });
 
   return cell;
+}
+
+// Check if a date is the first column of a calendar row (Monday for weekday mode, Sunday for 7-day)
+function isRowStart(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return showWeekends ? d.getDay() === 0 : d.getDay() === 1;
+}
+
+// Get a short label for continuation bars
+function getContLabel(task) {
+  if (task.person && task.taskName) return task.person + ' · ' + task.taskName;
+  return task.person || task.taskName || task.reviewLabel || task.role || '';
 }
 
 function buildChip(task, dateStr) {
@@ -1337,6 +1437,12 @@ function buildChip(task, dateStr) {
       ? `${task.person} · ${task.taskName}`
       : task.person || task.taskName || task.role;
     chip.textContent = loe + txt;
+  } else if ((pos === 'mid' || pos === 'end') && isRowStart(dateStr)) {
+    chip.classList.add('row-start');
+    const lbl = document.createElement('span');
+    lbl.className = 'cont-label';
+    lbl.textContent = getContLabel(task);
+    chip.appendChild(lbl);
   }
   chip.title = `${task.role}${task.person ? ': ' + task.person : ''}${task.taskName ? ' — ' + task.taskName : ''}${endDate !== task.date ? ' (' + task.date + ' \u2192 ' + endDate + ')' : ''}`;
 
@@ -1362,13 +1468,14 @@ function buildChip(task, dateStr) {
   chip.addEventListener('dragstart', e => {
     if (isResizing) { e.preventDefault(); return; }
     const isCopy = e.altKey;
-    dragPayload = { type: isCopy ? 'copy' : 'move', taskId: task.id };
+    dragPayload = { type: isCopy ? 'copy' : 'move', taskId: task.id, grabDate: dateStr };
     e.dataTransfer.setData('text', JSON.stringify(dragPayload));
     e.dataTransfer.effectAllowed = isCopy ? 'copy' : 'move';
   });
   chip.addEventListener('dragend', () => { dragPayload = null; });
 
-  chip.addEventListener('click', e => { e.stopPropagation(); openPanel('edit', task.date, task.id); });
+  chip.addEventListener('click', e => { e.stopPropagation(); openPanel('edit', task.date, task.id); setSelectedTask(task.id); });
+  chip.dataset.taskId = task.id;
   return chip;
 }
 
@@ -1441,7 +1548,7 @@ function buildDueDateMarker(task, dateStr) {
   el.addEventListener('dragstart', e => {
     if (isResizing) { e.preventDefault(); return; }
     const isCopy = e.altKey;
-    dragPayload = { type: isCopy ? 'copy' : 'move', taskId: task.id };
+    dragPayload = { type: isCopy ? 'copy' : 'move', taskId: task.id, grabDate: dateStr };
     e.dataTransfer.setData('text', JSON.stringify(dragPayload));
     e.dataTransfer.effectAllowed = isCopy ? 'copy' : 'move';
   });
@@ -1452,11 +1559,12 @@ function buildDueDateMarker(task, dateStr) {
     if (e.target.classList.contains('review-att-rm')) return;
     e.stopPropagation();
     openPanel('edit-duedate', null, task.id);
+    setSelectedTask(task.id);
   });
 
   // Accept role drops
   el.addEventListener('dragover', e => {
-    if (!dragPayload || dragPayload.type === 'move' || dragPayload.type === 'copy' || dragPayload.type === 'review' || dragPayload.type === 'duedate' || dragPayload.type === 'dup-project') return;
+    if (!dragPayload || dragPayload.type === 'move' || dragPayload.type === 'copy' || dragPayload.type === 'review' || dragPayload.type === 'duedate' || dragPayload.type === 'dup-project' || dragPayload.type === 'tree-move') return;
     e.preventDefault(); e.stopPropagation();
     el.classList.add('drag-accepting');
   });
@@ -1497,13 +1605,13 @@ function buildDueDateBar(task, dateStr, isEnd) {
   bar.className = 'duedate-bar ' + (isEnd ? 'duedate-bar-end' : 'duedate-bar-mid');
   bar.dataset.taskId = task.id;
 
-  bar.addEventListener('click', e => { e.stopPropagation(); openPanel('edit-duedate', null, task.id); });
+  bar.addEventListener('click', e => { e.stopPropagation(); openPanel('edit-duedate', null, task.id); setSelectedTask(task.id); });
 
   bar.draggable = true;
   bar.addEventListener('dragstart', e => {
     if (isResizing) { e.preventDefault(); return; }
     const isCopy = e.altKey;
-    dragPayload = { type: isCopy ? 'copy' : 'move', taskId: task.id };
+    dragPayload = { type: isCopy ? 'copy' : 'move', taskId: task.id, grabDate: dateStr };
     e.dataTransfer.setData('text', JSON.stringify(dragPayload));
     e.dataTransfer.effectAllowed = isCopy ? 'copy' : 'move';
   });
@@ -1515,6 +1623,13 @@ function buildDueDateBar(task, dateStr, isEnd) {
     rh.textContent = '\u22ee\u22ee';
     rh.addEventListener('mousedown', e => startResize(e, task.id, 'right'));
     bar.appendChild(rh);
+  }
+
+  if (isRowStart(dateStr)) {
+    const lbl = document.createElement('span');
+    lbl.className = 'cont-label';
+    lbl.textContent = getContLabel(task);
+    bar.appendChild(lbl);
   }
 
   return bar;
@@ -1585,6 +1700,7 @@ function buildReviewBlock(task, dateStr) {
     if (e.target.classList.contains('review-badge')) return;
     e.stopPropagation();
     openPanel('edit-review', task.date, task.id);
+    setSelectedTask(task.id);
   });
 
   // Drag to move (alt+drag = copy)
@@ -1592,7 +1708,7 @@ function buildReviewBlock(task, dateStr) {
   block.addEventListener('dragstart', e => {
     if (isResizing) { e.preventDefault(); return; }
     const isCopy = e.altKey;
-    dragPayload = { type: isCopy ? 'copy' : 'move', taskId: task.id };
+    dragPayload = { type: isCopy ? 'copy' : 'move', taskId: task.id, grabDate: dateStr };
     e.dataTransfer.setData('text', JSON.stringify(dragPayload));
     e.dataTransfer.effectAllowed = isCopy ? 'copy' : 'move';
   });
@@ -1600,7 +1716,7 @@ function buildReviewBlock(task, dateStr) {
 
   // Accept role drops onto the review block
   block.addEventListener('dragover', e => {
-    if (!dragPayload || dragPayload.type === 'move' || dragPayload.type === 'review') return;
+    if (!dragPayload || dragPayload.type === 'move' || dragPayload.type === 'review' || dragPayload.type === 'tree-move') return;
     e.preventDefault();
     e.stopPropagation();
     block.classList.add('drag-accepting');
@@ -1637,26 +1753,26 @@ function buildReviewBlock(task, dateStr) {
   return block;
 }
 
-// Slim bar rendered in mid/end cells of a multi-day review
+// Continuation bar rendered in mid/end cells of a multi-day review
 function buildReviewBar(task, dateStr, isEnd) {
   const bar = document.createElement('div');
   bar.className = 'review-bar ' + (isEnd ? 'review-bar-end' : 'review-bar-mid');
   bar.dataset.taskId = task.id;
 
-  bar.addEventListener('click', e => { e.stopPropagation(); openPanel('edit-review', task.date, task.id); });
+  bar.addEventListener('click', e => { e.stopPropagation(); openPanel('edit-review', task.date, task.id); setSelectedTask(task.id); });
 
   bar.draggable = true;
   bar.addEventListener('dragstart', e => {
     if (isResizing) { e.preventDefault(); return; }
     const isCopy = e.altKey;
-    dragPayload = { type: isCopy ? 'copy' : 'move', taskId: task.id };
+    dragPayload = { type: isCopy ? 'copy' : 'move', taskId: task.id, grabDate: dateStr };
     e.dataTransfer.setData('text', JSON.stringify(dragPayload));
     e.dataTransfer.effectAllowed = isCopy ? 'copy' : 'move';
   });
   bar.addEventListener('dragend', () => { dragPayload = null; });
 
   bar.addEventListener('dragover', e => {
-    if (!dragPayload || dragPayload.type === 'move' || dragPayload.type === 'copy' || dragPayload.type === 'review') return;
+    if (!dragPayload || dragPayload.type === 'move' || dragPayload.type === 'copy' || dragPayload.type === 'review' || dragPayload.type === 'tree-move') return;
     e.preventDefault(); e.stopPropagation();
     bar.classList.add('drag-accepting');
   });
@@ -1678,6 +1794,13 @@ function buildReviewBar(task, dateStr, isEnd) {
     rh.textContent = '\u22ee\u22ee';
     rh.addEventListener('mousedown', e => startResize(e, task.id, 'right'));
     bar.appendChild(rh);
+  }
+
+  if (isRowStart(dateStr)) {
+    const lbl = document.createElement('span');
+    lbl.className = 'cont-label';
+    lbl.textContent = getContLabel(task);
+    bar.appendChild(lbl);
   }
 
   return bar;
@@ -1723,7 +1846,8 @@ function buildTaskLayout(dates) {
     return a.date.localeCompare(b.date);
   });
 
-  const laneOcc = []; // laneOcc[i] = Set<dateStr> of occupied dates
+  const laneOcc      = []; // laneOcc[i]      = Set<dateStr> of occupied dates
+  const laneOwner    = []; // laneOwner[i]    = task currently owning lane i (for spacer tagging)
 
   sortedMulti.forEach(task => {
     const td = taskDates(task);
@@ -1734,9 +1858,14 @@ function buildTaskLayout(dates) {
     td.forEach(d => laneOcc[lane].add(d));
     td.forEach(d => {
       const arr = layout.get(d);
-      while (arr.length < lane) arr.push(null); // pad with spacers
+      // Pad with tagged spacer objects so bar-height sync can find them
+      while (arr.length < lane) {
+        const spacerTask = laneOwner[arr.length] || null;
+        arr.push(spacerTask ? { _spacerFor: spacerTask.id } : null);
+      }
       arr[lane] = task;
     });
+    laneOwner[lane] = task;
   });
 
   // Single-day tasks: fill first null slot or append
@@ -1827,32 +1956,66 @@ function onResizeUp(e) {
 }
 
 // ── MOVE TASK ──
-function moveTask(taskId, newStartDate) {
+// grabDate: which day of the task was dragged. The drop target becomes that day's new position.
+function moveTask(taskId, dropDate, grabDate) {
   const proj = getProject(activeProjectId);
   if (!proj) return;
   const task = proj.tasks.find(t => t.id === taskId);
   if (!task) return;
+
+  const endDate    = task.endDate || task.date;
+  const taskStartD = new Date(task.date   + 'T00:00:00');
+  const taskEndD   = new Date(endDate      + 'T00:00:00');
+  const grabD      = new Date((grabDate || task.date) + 'T00:00:00');
+  const dropD      = new Date(dropDate + 'T00:00:00');
+
+  // Offset from grab point to start of task (in ms)
+  const offsetToStart = taskStartD - grabD; // negative if grab was after start
+  const durMs         = taskEndD   - taskStartD;
+
+  // New start = drop position shifted by the offset
+  let newStartD = new Date(dropD.getTime() + offsetToStart);
+
+  // If weekends hidden, snap start to a workday
+  if (!showWeekends) newStartD = skipToWorkday(newStartD);
+
+  const newStartStr = fmtDate(newStartD.getFullYear(), newStartD.getMonth() + 1, newStartD.getDate());
+
   if (task.endDate && task.endDate !== task.date) {
-    const dur = new Date(task.endDate + 'T00:00:00') - new Date(task.date + 'T00:00:00');
-    const newEnd = new Date(new Date(newStartDate + 'T00:00:00').getTime() + dur);
-    task.endDate = fmtDate(newEnd.getFullYear(), newEnd.getMonth() + 1, newEnd.getDate());
+    // Preserve calendar duration, but skip weekends if hidden
+    const newEndD = !showWeekends
+      ? addBusinessDays(newStartD, durMs)
+      : new Date(newStartD.getTime() + durMs);
+    task.endDate = fmtDate(newEndD.getFullYear(), newEndD.getMonth() + 1, newEndD.getDate());
   }
-  task.date = newStartDate;
+
+  task.date = newStartStr;
   saveState();
   renderCalendar();
   if (exportOpen) renderExportPanel();
 }
 
-function copyTask(taskId, newStartDate) {
+function copyTask(taskId, dropDate, grabDate) {
   const proj = getProject(activeProjectId);
   if (!proj) return;
   const orig = proj.tasks.find(t => t.id === taskId);
   if (!orig) return;
+
+  const origEndDate = orig.endDate || orig.date;
+  const origStartD  = new Date(orig.date    + 'T00:00:00');
+  const origEndD    = new Date(origEndDate   + 'T00:00:00');
+  const grabD       = new Date((grabDate || orig.date) + 'T00:00:00');
+  const dropD       = new Date(dropDate + 'T00:00:00');
+  const offsetToStart = origStartD - grabD;
+  let newStartD = new Date(dropD.getTime() + offsetToStart);
+  if (!showWeekends) newStartD = skipToWorkday(newStartD);
+  const newStartDate = fmtDate(newStartD.getFullYear(), newStartD.getMonth() + 1, newStartD.getDate());
+
   const copy = Object.assign({}, orig, { id: genId(), date: newStartDate });
   if (orig.endDate && orig.endDate !== orig.date) {
-    const dur = new Date(orig.endDate + 'T00:00:00') - new Date(orig.date + 'T00:00:00');
-    const newEnd = new Date(new Date(newStartDate + 'T00:00:00').getTime() + dur);
-    copy.endDate = fmtDate(newEnd.getFullYear(), newEnd.getMonth() + 1, newEnd.getDate());
+    const durMs = origEndD - origStartD;
+    const newEndD = !showWeekends ? addBusinessDays(newStartD, durMs) : new Date(newStartD.getTime() + durMs);
+    copy.endDate = fmtDate(newEndD.getFullYear(), newEndD.getMonth() + 1, newEndD.getDate());
   } else {
     delete copy.endDate;
   }
@@ -1865,10 +2028,56 @@ function copyTask(taskId, newStartDate) {
   if (exportOpen) renderExportPanel();
 }
 
+// ── SELECTED TASK ──
+let selectedTaskId = null;
+function setSelectedTask(id) {
+  selectedTaskId = id;
+  document.querySelectorAll('.task-selected').forEach(el => el.classList.remove('task-selected'));
+  if (id) {
+    document.querySelectorAll(`[data-task-id="${id}"]`).forEach(el => el.classList.add('task-selected'));
+  }
+}
+
 // ── TASK PANEL ──
 function fmtDateLabel(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+}
+function fmtDateShort(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+function setPanelDateRange(task) {
+  const el = document.getElementById('panelDateRange');
+  if (!el) return;
+  if (task && task.endDate && task.endDate !== task.date) {
+    el.textContent = fmtDateShort(task.date) + ' → ' + fmtDateShort(task.endDate);
+    el.style.display = '';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+// ── WEEKEND SKIP ──
+// Given a start date and a duration in ms, compute end date skipping weekends if they're hidden
+function addBusinessDays(startDate, durationMs) {
+  if (showWeekends || durationMs <= 0) {
+    return new Date(startDate.getTime() + durationMs);
+  }
+  // Count calendar days in duration, then add extra days for each weekend crossed
+  const calDays = Math.round(durationMs / 86400000);
+  let d = new Date(startDate);
+  let remaining = calDays;
+  while (remaining > 0) {
+    d.setDate(d.getDate() + 1);
+    if (!isWeekend(d.getDay())) remaining--;
+  }
+  return d;
+}
+function skipToWorkday(d) {
+  // If d lands on a weekend, advance to Monday
+  while (isWeekend(d.getDay())) d.setDate(d.getDate() + 1);
+  return d;
 }
 
 function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) {
@@ -1918,6 +2127,8 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     document.getElementById('panelRoleBadge').textContent      = task.role;
     document.getElementById('panelRoleBadge').style.background = task.color;
     document.getElementById('panelDateLabel').textContent      = fmtDateLabel(task.date);
+    setPanelDateRange(task);
+    setSelectedTask(taskId);
     populatePersonDropdown(task.role);
     // Restore saved person — if in roster use dropdown, else show Other input
     const sel = document.getElementById('panelPerson');
@@ -1959,6 +2170,8 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     badge.title            = 'Click to change type';
     badge.onclick          = e => { closePanel(); openTypeSwitcher(e, taskId, lbl); };
     document.getElementById('panelDateLabel').textContent      = fmtDateLabel(task.date);
+    setPanelDateRange(task);
+    setSelectedTask(taskId);
     fieldPerson.style.display = 'none';
     fieldLOE.style.display    = 'none';
     taskLabel.textContent     = lbl + ' Name';
@@ -2024,6 +2237,9 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
 function closePanel() {
   document.getElementById('taskPanel').classList.remove('open');
   panelContext = null;
+  setSelectedTask(null);
+  const dr = document.getElementById('panelDateRange');
+  if (dr) dr.style.display = 'none';
 }
 
 function getPanelPerson() {
@@ -2135,7 +2351,7 @@ function openContextMenu(e, projectId) {
         { label: 'Rename',         action: 'rename' },
         { label: 'Duplicate',      action: 'duplicate' },
         { label: 'Add Subproject', action: 'addSub' },
-        { label: proj && proj.ghost ? '👁 Show in Ops' : '👻 Ghost (hide from Ops)', action: 'ghost' },
+        { label: proj.ghost ? '👁 Show in Ops' : '👻 Ghost (hide from Ops)', action: 'ghost' },
         { label: '✓ Complete',     action: 'complete' },
         { label: 'Delete',         action: 'delete', danger: true }
       ];
@@ -2309,7 +2525,7 @@ function buildHTMLExport() {
   const proj = getProject(activeProjectId);
   if (!proj) return { html: '', plain: '' };
   const dueTasks = exportOptDueDate
-    ? [...proj.tasks].filter(t => t.isDueDate).sort((a, b) => a.date.localeCompare(b.date))
+    ? [...proj.tasks].filter(t => t.isDueDate && (exportOptPTO || t.milestoneType !== 'pto')).sort((a, b) => a.date.localeCompare(b.date))
     : [];
   const sorted = [...proj.tasks].filter(t => !t.isDueDate).sort((a, b) => a.date.localeCompare(b.date));
   if (!sorted.length && !dueTasks.length) return { html: '<em>(No tasks scheduled)</em>', plain: '(No tasks scheduled)' };
@@ -2791,6 +3007,7 @@ function renderExportPanel() {
     mkOpt('Include roles',    exportOptRoles,      v => { exportOptRoles      = v; });
     mkOpt('Align tasks',      exportOptAlign,      v => { exportOptAlign      = v; });
     mkOpt('Show due date',    exportOptDueDate,    v => { exportOptDueDate    = v; });
+    mkOpt('Show PTO',         exportOptPTO,        v => { exportOptPTO        = v; });
     mkOpt('Show attendees',   exportOptAttendees,  v => { exportOptAttendees  = v; });
 
     const actions = document.createElement('div');
@@ -2825,6 +3042,7 @@ function renderExportPanel() {
     };
     mkPNGOpt('Include roles',    exportPNGRoles,     v => { exportPNGRoles     = v; });
     mkPNGOpt('Show attendees',   exportPNGAttendees, v => { exportPNGAttendees = v; });
+    mkPNGOpt('Show PTO',         exportPNGPTO,       v => { exportPNGPTO       = v; });
 
     const actions = document.createElement('div');
     actions.className = 'export-actions';
@@ -3137,23 +3355,28 @@ function canvasRoundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-function getContLabel(task) {
-  if (task.person && task.taskName) return task.person + ' \u00b7 ' + task.taskName;
-  return task.person || task.taskName || task.reviewLabel || task.role || '';
-}
-
 function exportPNG() {
   const proj = getProject(activeProjectId);
   if (!proj) return;
 
   // ── date range ──
   const todayD = new Date(); todayD.setHours(0,0,0,0);
-  // snap to Monday
-  const startD = new Date(todayD);
-  startD.setDate(startD.getDate() - ((startD.getDay() + 6) % 7));
 
+  // Start from the Monday of the week containing the first task
+  let startD;
+  if (proj.tasks.length) {
+    const minStr = proj.tasks.reduce((m, t) => t.date < m ? t.date : m, proj.tasks[0].date);
+    const minD = new Date(minStr + 'T00:00:00');
+    startD = new Date(minD);
+    startD.setDate(minD.getDate() - ((minD.getDay() + 6) % 7)); // snap to Monday
+  } else {
+    startD = new Date(todayD);
+    startD.setDate(todayD.getDate() - ((todayD.getDay() + 6) % 7));
+  }
+
+  // End at the week containing the last task
   let endD = new Date(startD);
-  endD.setDate(startD.getDate() + 27); // 4 weeks
+  endD.setDate(startD.getDate() + 27); // at least 4 weeks
 
   if (proj.tasks.length) {
     const maxStr = proj.tasks.reduce((m, t) => { const d = t.endDate || t.date; return d > m ? d : m; }, '');
@@ -3180,7 +3403,7 @@ function exportPNG() {
   const COLS   = showWeekends ? 7 : 5;
   const SC     = 2;                        // retina scale
   const CW     = 155 * SC;
-  const CH     = 110 * SC;
+  const CH     = 150 * SC;
   const HDR_H  = 28 * SC;
   const TTL_H  = 46 * SC;
   const ROWS   = Math.ceil(days.length / COLS);
@@ -3263,7 +3486,7 @@ function exportPNG() {
     // tasks — split milestones (isDueDate) out so they render in their own section
     const allTasks   = getTasksForDate(activeProjectId, dateStr);
     const tasks      = allTasks.filter(t => !t.isDueDate);
-    const milestones = allTasks.filter(t => t.isDueDate);
+    const milestones = allTasks.filter(t => t.isDueDate && (exportPNGPTO || t.milestoneType !== 'pto'));
     let ty = cy + 28*SC;
 
     tasks.forEach(task => {
@@ -3271,8 +3494,8 @@ function exportPNG() {
       const isStart  = task.date === dateStr;
       const isEnd    = endDate === dateStr;
       const pad      = 4 * SC;
-      // Reviews grow taller to fit attendee rows
-      const attCount = exportPNGAttendees && task.isReview && task.attendees ? task.attendees.length : 0;
+      // Reviews grow taller to fit attendee rows — only on the start cell
+      const attCount = isStart && exportPNGAttendees && task.isReview && task.attendees ? task.attendees.length : 0;
       const chipH    = (14 + attCount * 10) * SC;
 
       if (ty + chipH > cy + CH - 4*SC) return; // no room
@@ -3413,25 +3636,32 @@ function init() {
   loadState();
   loadNameHistory();
   const roots = getRootProjects();
-  // Restore last-open project; fall back to first root if it no longer exists
   const savedId = localStorage.getItem('prepro_active_project');
   if (savedId && getProject(savedId)) {
     activeProjectId = savedId;
   } else if (roots.length) {
     activeProjectId = roots[0].id;
   }
-
   viewStart = getWeekStart();
-
   renderPalette();
   renderSidebar();
   renderCalendar();
-
-  // Open panel on load
   exportOpen = true;
   document.getElementById('exportChevron').style.transform = '';
   document.getElementById('exportBody').classList.add('visible');
   renderExportPanel();
+  setupInitListeners();
+}
+
+function setupInitListeners() {
+  // Guard: only wire up once
+  if (window._listenersReady) return;
+  window._listenersReady = true;
+
+  // Export panel starts closed
+  exportOpen = false;
+  document.getElementById('exportChevron').style.transform = 'rotate(180deg)';
+  document.getElementById('exportBody').classList.remove('visible');
 
   // New project
   document.getElementById('btnNewProject').addEventListener('click', () => {
@@ -3444,7 +3674,7 @@ function init() {
       renderCalendar();
       // Switch to Role Assignees tab for new projects so team can be set up immediately
       exportTabActive = 'roster';
-      localStorage.setItem('prepro_export_tab', exportTabActive);
+      try { localStorage.setItem('prepro_export_tab', exportTabActive); } catch(_) {}
       document.querySelectorAll('.export-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'roster'));
       renderExportPanel();
     }
@@ -3497,10 +3727,43 @@ function init() {
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') { closePanel(); closeContextMenu(); }
     if (e.key === 'Enter' && panelContext && e.target.tagName === 'INPUT') { e.preventDefault(); savePanel(); }
-    if ((e.key === 'Delete' || e.key === 'Backspace') && panelContext && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'SELECT') {
-      const btn = document.getElementById('panelDelete');
-      if (btn && !btn.classList.contains('hidden')) { e.preventDefault(); deleteFromPanel(); }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'SELECT') {
+      // If panel is open with a delete button, use that
+      if (panelContext) {
+        const btn = document.getElementById('panelDelete');
+        if (btn && !btn.classList.contains('hidden')) { e.preventDefault(); deleteFromPanel(); return; }
+      }
+      // Otherwise delete the selected chip directly
+      if (selectedTaskId) {
+        const proj = getProject(activeProjectId);
+        if (proj) {
+          const task = proj.tasks.find(t => t.id === selectedTaskId);
+          if (task && confirm('Delete "' + (task.taskName || task.reviewLabel || task.role || 'this task') + '"?')) {
+            proj.tasks = proj.tasks.filter(t => t.id !== selectedTaskId);
+            selectedTaskId = null;
+            closePanel();
+            saveState();
+            renderCalendar();
+            if (exportOpen) renderExportPanel();
+          }
+        }
+      }
     }
+  });
+
+  // ── HOVER HIGHLIGHT for multi-day task segments ──
+  const calGrid = document.getElementById('calGrid');
+  calGrid.addEventListener('mouseover', e => {
+    const el = e.target.closest('[data-task-id]');
+    if (!el) return;
+    const tid = el.dataset.taskId;
+    document.querySelectorAll(`[data-task-id="${tid}"]`).forEach(x => x.classList.add('task-hover'));
+  });
+  calGrid.addEventListener('mouseout', e => {
+    const el = e.target.closest('[data-task-id]');
+    if (!el) return;
+    const tid = el.dataset.taskId;
+    document.querySelectorAll(`[data-task-id="${tid}"]`).forEach(x => x.classList.remove('task-hover'));
   });
 
   // ── DATA MIGRATION ──
@@ -3508,8 +3771,8 @@ function init() {
     const payload = {
       version: 1,
       exported: new Date().toISOString(),
-      prepro_data: localStorage.getItem('prepro_data') || '{}',
-      prepro_name_history: localStorage.getItem('prepro_name_history') || '{}'
+      prepro_data: JSON.stringify(state),
+      prepro_name_history: JSON.stringify(nameHistory)
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url  = URL.createObjectURL(blob);
@@ -3541,33 +3804,28 @@ function init() {
         if (!Array.isArray(incoming.projects)) { alert('No projects found in file.'); return; }
 
         // Merge: incoming projects overwrite by id, new ones are appended
-        const existing = JSON.parse(localStorage.getItem('prepro_data') || '{"projects":[]}');
-        const idMap = new Map((existing.projects || []).map(p => [p.id, p]));
+        const idMap = new Map((state.projects || []).map(p => [p.id, p]));
         incoming.projects.forEach(p => idMap.set(p.id, p));
-        existing.projects = [...idMap.values()];
-        localStorage.setItem('prepro_data', JSON.stringify(existing));
+        state.projects = [...idMap.values()];
+        saveState();
 
         // Merge name history
         if (rawHistory) {
           try {
             const inHist = JSON.parse(rawHistory);
-            const exHist = JSON.parse(localStorage.getItem('prepro_name_history') || '{}');
             Object.entries(inHist).forEach(([role, names]) => {
-              if (!exHist[role]) exHist[role] = [];
-              names.forEach(n => { if (!exHist[role].includes(n)) exHist[role].push(n); });
+              if (!nameHistory[role]) nameHistory[role] = [];
+              names.forEach(n => { if (!nameHistory[role].includes(n)) nameHistory[role].push(n); });
             });
-            localStorage.setItem('prepro_name_history', JSON.stringify(exHist));
+            saveNameHistory();
           } catch(_) {}
         }
 
-        // Reload app state
-        loadState();
-        loadNameHistory();
         renderSidebar();
         renderCalendar();
         renderPalette();
         if (exportOpen) renderExportPanel();
-        alert('Import complete — ' + incoming.projects.length + ' project(s) merged.');
+        alert('Import complete — ' + incoming.projects.length + ' project(s) merged successfully.');
       } catch(err) {
         alert('Failed to read file: ' + err.message);
       }
@@ -3602,12 +3860,44 @@ function init() {
     else tab.classList.remove('active');
     tab.addEventListener('click', () => {
       exportTabActive = tab.dataset.tab;
-      localStorage.setItem('prepro_export_tab', exportTabActive);
+      try { localStorage.setItem('prepro_export_tab', exportTabActive); } catch(_) {}
       document.querySelectorAll('.export-tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
       if (exportOpen) renderExportPanel();
     });
   });
+
+  // ── SIDEBAR RESIZE ──
+  {
+    const handle  = document.getElementById('sidebarResizeHandle');
+    const appRow  = document.querySelector('.app-row');
+    let resizing = false, startX = 0, startW = 0;
+
+    // Restore saved width
+    const savedW = localStorage.getItem('prepro_sidebar_width');
+    if (savedW) appRow.style.gridTemplateColumns = savedW + 'px 4px 1fr';
+
+    handle.addEventListener('mousedown', e => {
+      resizing = true;
+      startX   = e.clientX;
+      startW   = document.querySelector('.sidebar').offsetWidth;
+      handle.classList.add('active');
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', e => {
+      if (!resizing) return;
+      const w = Math.max(150, Math.min(480, startW + e.clientX - startX));
+      appRow.style.gridTemplateColumns = w + 'px 4px 1fr';
+    });
+    document.addEventListener('mouseup', () => {
+      if (!resizing) return;
+      resizing = false;
+      handle.classList.remove('active');
+      const cols = appRow.style.gridTemplateColumns;
+      const w = parseInt(cols);
+      if (!isNaN(w)) localStorage.setItem('prepro_sidebar_width', w);
+    });
+  }
 }
 
 init();
