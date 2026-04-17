@@ -129,6 +129,36 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .ops-filter-action-btn { font-size: 10px; font-weight: 700; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; cursor: pointer; transition: all .15s; }
 .ops-filter-action-btn:hover { color: var(--text); border-color: var(--dim); }
 
+/* ── HEADS UP VIEW ── */
+.headsup-view { flex: 1; overflow-y: auto; padding: 20px 24px; display: none; }
+.headsup-view.visible { display: block; }
+.hu-section { margin-bottom: 24px; }
+.hu-section-title { font-size: 10px; font-weight: 700; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 10px; }
+.hu-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; display: flex; gap: 12px; align-items: flex-start; }
+.hu-icon { font-size: 16px; flex-shrink: 0; margin-top: 2px; }
+.hu-body { flex: 1; min-width: 0; }
+.hu-title { font-size: 13px; font-weight: 700; }
+.hu-title a { color: var(--text); text-decoration: none; }
+.hu-title a:hover { color: #6c63ff; text-decoration: underline; }
+.hu-meta { font-size: 10px; color: var(--dim); margin-top: 2px; }
+.hu-person { font-size: 11px; color: var(--text); margin-top: 2px; }
+.hu-prompt { font-size: 11px; color: var(--dim); font-style: italic; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--border); cursor: pointer; }
+.hu-prompt:hover { color: var(--text); }
+.hu-tasks { margin-top: 4px; }
+.hu-task-item { font-size: 11px; color: var(--text); padding: 2px 0; display: flex; align-items: center; gap: 6px; }
+.hu-task-item + .hu-task-item { border-top: 1px solid var(--border); }
+.hu-empty { color: var(--dim); font-size: 13px; font-style: italic; padding: 20px 0; }
+.hu-card.pto { border-color: rgba(255,180,50,.25); }
+.hu-card.review { border-color: rgba(192,57,79,.3); }
+.hu-card.shoot { border-color: rgba(192,57,79,.4); }
+.hu-card.milestone { border-color: rgba(108,99,255,.3); }
+.hu-status-badge { font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 8px; white-space: nowrap; }
+
+/* ── STUDIO VIEW ── */
+.studio-view { display: none; }
+.studio-view.visible { display: block; }
+.studio-producer { font-size: 10px; color: var(--dim); margin-top: 2px; }
+
 /* ── TIMELINE (PERSON) VIEW ── */
 .person-view { flex: 1; min-height: 0; display: none; flex-direction: column; overflow: hidden; }
 .person-view.visible { display: flex; }
@@ -198,9 +228,10 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
   <span class="ops-header-title">Ops</span>
   <span class="ops-header-sub">Internal team workload view</span>
   <div class="ops-header-spacer"></div>
-  <div class="toggle-group" id="viewToggle" title="Switch calendar / person view">
-    <button class="toggle-btn" data-view="calendar">Calendar</button>
-    <button class="toggle-btn active" data-view="person">By Person</button>
+  <div class="toggle-group" id="viewToggle" title="Switch view">
+    <button class="toggle-btn active" data-view="headsup">Heads Up</button>
+    <button class="toggle-btn" data-view="person">By Person</button>
+    <button class="toggle-btn" data-view="studio">Studio</button>
   </div>
   <div class="toggle-group" id="chipDisplayToggle" title="Chip label: category abbreviation or task name">
     <button class="toggle-btn active" data-disp="categories">Categories</button>
@@ -242,6 +273,9 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
     </div>
   </div>
 </div>
+
+<div class="headsup-view" id="headsupView"></div>
+<div class="studio-view" id="studioView"></div>
 
 <div class="ops-bottom">
   <div class="ops-workload">
@@ -304,7 +338,7 @@ let calLatestDate   = null;
 let calObserver     = null;
 let chipDisplay = 'categories'; // 'categories' | 'tasks'
 let personOrder = JSON.parse(localStorage.getItem('ops_person_order') || '[]'); // persisted row order
-let viewMode    = 'person';     // 'calendar' | 'person'
+let viewMode    = 'headsup';    // 'headsup' | 'person' | 'studio'
 
 // Timeline-specific state
 let tlStart    = '';
@@ -331,6 +365,8 @@ function reloadState(newState) {
   renderFilterChips();
   renderWorkload();
   if (viewMode === 'person') renderTimeline();
+  else if (viewMode === 'headsup') renderHeadsUp();
+  else if (viewMode === 'studio') renderStudio();
   else renderCalendar();
 }
 
@@ -592,6 +628,8 @@ function renderFilterChips() {
       renderFilterChips();
       renderWorkload();
       if (viewMode === 'person') renderTimeline();
+      else if (viewMode === 'studio') renderStudio();
+      else if (viewMode === 'headsup') renderHeadsUp();
       else renderCalendar();
     });
     container.appendChild(chip);
@@ -605,6 +643,7 @@ function buildOpsChip(entry) {
   const chip = document.createElement('div');
   chip.className = 'ops-chip' + (hiddenPeople.has(entry.person) ? ' dimmed' : '');
   chip.style.background = entry.color;
+  chip.dataset.taskId = entry.taskId;
   chip.title = `${entry.person} · ${entry.cat} · ${entry.taskName} (${entry.projectName})`;
 
   if (chipDisplay === 'categories') {
@@ -1134,28 +1173,431 @@ function setupTlObserver() {
 
 // ── VIEW SWITCHER ──
 function applyViewMode() {
-  const calScroll  = document.getElementById('calScroll');
-  const personView = document.getElementById('personView');
-  const calNav     = document.querySelector('.cal-nav');
-  const calDow     = document.getElementById('calDowRow');
+  const calScroll   = document.getElementById('calScroll');
+  const personView  = document.getElementById('personView');
+  const headsupView = document.getElementById('headsupView');
+  const studioView  = document.getElementById('studioView');
+  const calNav      = document.querySelector('.cal-nav');
+  const calDow      = document.getElementById('calDowRow');
 
-  if (viewMode === 'person') {
+  // Show/hide controls based on view mode
+  const chipToggle = document.getElementById('chipDisplayToggle');
+  const zoomGroup = document.querySelector('.ops-zoom');
+  const wkndBtn = document.getElementById('wkndBtn');
+  const isTimeline = viewMode === 'person';
+  const isStudio = viewMode === 'studio';
+  chipToggle.style.display = isTimeline ? '' : 'none';
+  zoomGroup.style.display = isTimeline ? '' : 'none';
+  wkndBtn.style.display = (isTimeline || isStudio) ? '' : 'none';
+
+  if (viewMode === 'headsup') {
+    if (tlObserver) { tlObserver.disconnect(); tlObserver = null; }
     calScroll.style.display = 'none';
     calNav.style.display    = 'none';
     calDow.style.display    = 'none';
+    personView.classList.remove('visible');
+    studioView.classList.remove('visible');
+    headsupView.classList.add('visible');
+    renderHeadsUp();
+  } else if (viewMode === 'person') {
+    calScroll.style.display = 'none';
+    calNav.style.display    = 'none';
+    calDow.style.display    = 'none';
+    headsupView.classList.remove('visible');
+    studioView.classList.remove('visible');
     personView.classList.add('visible');
     if (!tlStart) resetTlRange();
     renderTimeline();
     setTimeout(() => { scrollTlToToday(); setupTlObserver(); }, 30);
-  } else {
+  } else if (viewMode === 'studio') {
     if (tlObserver) { tlObserver.disconnect(); tlObserver = null; }
+    personView.classList.remove('visible');
+    headsupView.classList.remove('visible');
+    studioView.classList.add('visible');
     calScroll.style.display = '';
     calNav.style.display    = '';
     calDow.style.display    = '';
-    personView.classList.remove('visible');
-    renderCalendar();
+    renderStudio();
     scrollToToday();
   }
+}
+
+// ── UTILITY HELPERS ──
+function fmtDateShort(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function getNextBusinessDays(startDate, count) {
+  const days = [];
+  let cursor = addDays(startDate, 1);
+  while (days.length < count) {
+    const day = new Date(cursor + 'T00:00:00').getDay();
+    if (day !== 0 && day !== 6) days.push(cursor);
+    cursor = addDays(cursor, 1);
+  }
+  return days;
+}
+
+function esc(str) {
+  const div = document.createElement('div');
+  div.textContent = str || '';
+  return div.innerHTML;
+}
+
+// ── HEADS UP VIEW ──
+function getTeamHeadsUp() {
+  const items = [];
+  const today = todayStr();
+  const bizDays = getNextBusinessDays(today, 5);
+  const cutoff = bizDays[bizDays.length - 1];
+
+  const INTERNAL_ROLES = new Set(['Producer', 'Editor', 'Animator']);
+
+  // Build a map of all internal people and their projects
+  const peopleProjects = new Map(); // person -> Set of projectIds
+  (state.projects || []).filter(p => !p.completed && !p.ghost).forEach(proj => {
+    const roster = proj.roster || {};
+    for (const [role, names] of Object.entries(roster)) {
+      if (!INTERNAL_ROLES.has(role)) continue;
+      (names || []).forEach(name => {
+        if (!peopleProjects.has(name)) peopleProjects.set(name, new Set());
+        peopleProjects.get(name).add(proj.id);
+      });
+    }
+    (proj.tasks || []).forEach(t => {
+      if (t.person && INTERNAL_ROLES.has(t.role)) {
+        if (!peopleProjects.has(t.person)) peopleProjects.set(t.person, new Set());
+        peopleProjects.get(t.person).add(proj.id);
+      }
+    });
+  });
+
+  (state.projects || []).filter(p => !p.completed && !p.ghost).forEach(proj => {
+    (proj.tasks || []).forEach(task => {
+      const start = task.date;
+      const end = task.endDate || task.date;
+      if (!start || end <= today || start > cutoff) return;
+
+      // Reviews & shoots
+      if (task.isReview) {
+        const isShoot = (task.reviewLabel || '').includes('Shoot');
+        const attendeeNames = (task.attendees || []).filter(a => a.person).map(a => a.person);
+        items.push({
+          type: isShoot ? 'shoot' : 'review',
+          icon: isShoot ? '🎬' : '📋',
+          title: task.taskName || task.reviewLabel || 'Review',
+          project: proj.name,
+          projectId: proj.id,
+          date: start,
+          endDate: end !== start ? end : null,
+          people: attendeeNames,
+          taskId: task.id
+        });
+      }
+
+      // Milestones with action keywords
+      if (task.isDueDate && task.milestoneType !== 'pto') {
+        const tn = (task.taskName || '').toLowerCase();
+        const actionKW = ['kick-off','kick off','kickoff','delivery','deliverable','deliver','handoff','hand-off','hand off','launch','go live','go-live','golive','final','finalize','lock','approval','sign-off','sign off','signoff','presentation','present','pitch','onboard','on-board','onboarding','start','begins','begin','deadline'];
+        if (actionKW.some(kw => tn.includes(kw))) {
+          items.push({
+            type: 'milestone',
+            icon: '🎯',
+            title: task.taskName || 'Milestone',
+            project: proj.name,
+            projectId: proj.id,
+            date: start,
+            endDate: end !== start ? end : null,
+            people: [],
+            taskId: task.id
+          });
+        }
+      }
+
+      // PTO
+      if (task.isDueDate && task.milestoneType === 'pto') {
+        (task.attendees || []).forEach(a => {
+          if (!a.person) return;
+          // Find which projects this person is on
+          const theirProjects = peopleProjects.get(a.person);
+          if (!theirProjects || !theirProjects.size) return;
+
+          // Calculate their workload before PTO
+          let totalPts = 0;
+          (state.projects || []).filter(p => theirProjects.has(p.id) && !p.completed && !p.ghost).forEach(p => {
+            (p.tasks || []).forEach(t => {
+              if (t.isDueDate || t.person !== a.person) return;
+              const tEnd = t.endDate || t.date;
+              if (t.date <= cutoff && tEnd >= today) totalPts += loePts(t.loe);
+            });
+          });
+
+          const role = a.role || '';
+          items.push({
+            type: 'pto',
+            icon: '🏖',
+            title: a.person + ' — PTO',
+            project: proj.name,
+            projectId: proj.id,
+            date: start,
+            endDate: end !== start ? end : null,
+            people: [a.person],
+            teammateName: a.person,
+            teammateRole: role,
+            workloadPts: totalPts
+          });
+        });
+      }
+    });
+  });
+
+  // Deduplicate
+  const seen = new Set();
+  const deduped = items.filter(item => {
+    const key = item.type + '|' + item.title + '|' + item.date;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  // Sort: shoots first, then reviews, then milestones, then PTO. Within each, by date.
+  const typePriority = { shoot: 0, review: 1, milestone: 2, pto: 3 };
+  return deduped.sort((a, b) => {
+    const pa = typePriority[a.type] ?? 9;
+    const pb = typePriority[b.type] ?? 9;
+    if (pa !== pb) return pa - pb;
+    return a.date.localeCompare(b.date);
+  });
+}
+
+function getOpsHeadsUpPrompt(item) {
+  const today = todayStr();
+  const bizDays = getNextBusinessDays(today, 5);
+  const windowEnd = bizDays[bizDays.length - 1];
+
+  if (item.type === 'pto') {
+    const name = item.teammateName;
+    const role = (item.teammateRole || '').toLowerCase();
+    const heavy = item.workloadPts >= 4;
+
+    if (role === 'stakeholder' || role === 'designer' || role === 'copywriter') {
+      return { text: `Does the team need sign-off from ${name} before they leave?`, tasks: [] };
+    }
+    if (role === 'editor' || role === 'animator') {
+      if (heavy) return { text: `${name} has a heavy workload (${item.workloadPts} pts) before PTO — is their work on track?`, tasks: [] };
+      return { text: `Is ${name}'s work on track to finish before PTO?`, tasks: [] };
+    }
+    if (role === 'producer') {
+      return { text: `Who's covering for ${name} while they're out?`, tasks: [] };
+    }
+    if (heavy) return { text: `${name} has a heavy workload (${item.workloadPts} pts) before PTO — have they handed off?`, tasks: [] };
+    return { text: `Has ${name} handed off their work?`, tasks: [] };
+  }
+
+  if (item.type === 'review' || item.type === 'shoot' || item.type === 'milestone') {
+    const proj = (state.projects || []).find(p => p.id === item.projectId);
+    if (!proj) return { text: 'Is everything ready?', tasks: [] };
+    const eventName = (item.title || '').toLowerCase();
+
+    const leadingTasks = (proj.tasks || []).filter(t => {
+      if (t.isDueDate || t.isReview) return false;
+      const end = t.endDate || t.date;
+      return end >= today && t.date < item.date;
+    });
+
+    const stopWords = new Set(['the','and','for','with','this','that','from','into','kick','off','final','date','due']);
+    const eventWords = eventName.split(/[\s·\-—:,]+/).filter(w => w.length > 2 && !stopWords.has(w)).map(w => w.toLowerCase());
+    const matched = leadingTasks.filter(t => {
+      const tn = (t.taskName || '').toLowerCase();
+      return eventWords.some(w => tn.includes(w));
+    });
+
+    if (matched.length === 1) return { text: `Will "${matched[0].taskName || '(untitled)'}" be ready?`, tasks: leadingTasks };
+    if (matched.length > 1) return { text: `${matched.length} related tasks need to land before this — on track?`, tasks: leadingTasks };
+    if (leadingTasks.length) return { text: `${leadingTasks.length} task${leadingTasks.length > 1 ? 's' : ''} due before this — everything on track?`, tasks: leadingTasks };
+    if (item.type === 'shoot') return { text: 'Is everything prepped for the shoot?', tasks: [] };
+    if (item.type === 'milestone') return { text: 'Is everything ready for this?', tasks: [] };
+    return { text: 'Is everything ready for review?', tasks: [] };
+  }
+
+  return null;
+}
+
+function renderHeadsUp() {
+  const container = document.getElementById('headsupView');
+  container.innerHTML = '';
+
+  const items = getTeamHeadsUp();
+
+  if (!items.length) {
+    container.innerHTML = '<div class="hu-empty">Nothing flagged for the next 5 business days</div>';
+    return;
+  }
+
+  // Group by type
+  const groups = { shoot: [], review: [], milestone: [], pto: [] };
+  items.forEach(item => { if (groups[item.type]) groups[item.type].push(item); });
+
+  const sectionOrder = [
+    { key: 'shoot', label: 'Upcoming Shoots' },
+    { key: 'review', label: 'Upcoming Reviews' },
+    { key: 'milestone', label: 'Milestones' },
+    { key: 'pto', label: 'Team PTO' }
+  ];
+
+  const LOE_EMOJI = { low: '🟢', medium: '🟡', high: '🔴' };
+
+  sectionOrder.forEach(({ key, label }) => {
+    const groupItems = groups[key];
+    if (!groupItems || !groupItems.length) return;
+
+    const section = document.createElement('div');
+    section.className = 'hu-section';
+
+    const title = document.createElement('div');
+    title.className = 'hu-section-title';
+    title.textContent = label;
+    section.appendChild(title);
+
+    groupItems.forEach(item => {
+      const card = document.createElement('div');
+      card.className = 'hu-card ' + item.type;
+
+      const icon = document.createElement('span');
+      icon.className = 'hu-icon';
+      icon.textContent = item.icon;
+      card.appendChild(icon);
+
+      const body = document.createElement('div');
+      body.className = 'hu-body';
+
+      // Title (linked to project)
+      const titleDiv = document.createElement('div');
+      titleDiv.className = 'hu-title';
+      const link = document.createElement('a');
+      link.href = 'team.html#project=' + encodeURIComponent(item.projectId);
+      link.target = '_blank';
+      link.textContent = item.title;
+      titleDiv.appendChild(link);
+      body.appendChild(titleDiv);
+
+      // Date + project
+      let dateText = fmtDateShort(item.date);
+      if (item.endDate) dateText += ' – ' + fmtDateShort(item.endDate);
+      const meta = document.createElement('div');
+      meta.className = 'hu-meta';
+      meta.textContent = dateText + ' · ' + item.project;
+      body.appendChild(meta);
+
+      // People involved
+      if (item.people && item.people.length && item.type !== 'pto') {
+        const personDiv = document.createElement('div');
+        personDiv.className = 'hu-person';
+        personDiv.textContent = item.people.join(', ');
+        body.appendChild(personDiv);
+      }
+
+      // Prompt
+      const promptData = getOpsHeadsUpPrompt(item);
+      if (promptData) {
+        const promptDiv = document.createElement('div');
+        promptDiv.className = 'hu-prompt';
+        promptDiv.textContent = promptData.text;
+
+        if (promptData.tasks.length) {
+          let expanded = false;
+          const tasksDiv = document.createElement('div');
+          tasksDiv.className = 'hu-tasks';
+          tasksDiv.style.display = 'none';
+
+          promptData.tasks.forEach(t => {
+            const ti = document.createElement('div');
+            ti.className = 'hu-task-item';
+            const loe = t.loe ? (LOE_EMOJI[t.loe] || '') + ' ' : '';
+            ti.innerHTML = '<span style="flex:1">' + loe + esc(t.taskName || '(untitled)') + '</span><span style="font-size:9px;color:#8080a0">' + esc(t.person || '') + '</span>';
+            tasksDiv.appendChild(ti);
+          });
+
+          promptDiv.addEventListener('click', () => {
+            expanded = !expanded;
+            tasksDiv.style.display = expanded ? '' : 'none';
+          });
+
+          body.appendChild(promptDiv);
+          body.appendChild(tasksDiv);
+        } else {
+          body.appendChild(promptDiv);
+        }
+      }
+
+      card.appendChild(body);
+      section.appendChild(card);
+    });
+
+    container.appendChild(section);
+  });
+}
+
+// ── STUDIO VIEW ──
+function getStudioShoots() {
+  const shoots = [];
+  (state.projects || []).filter(p => !p.completed && !p.ghost).forEach(proj => {
+    (proj.tasks || []).forEach(task => {
+      if (!task.isReview) return;
+      if (!(task.reviewLabel || '').includes('Studio Shoot')) return;
+
+      // Find most-used producer for this project
+      const producerCounts = {};
+      (proj.tasks || []).forEach(t => {
+        if (t.role === 'Producer' && t.person) {
+          producerCounts[t.person] = (producerCounts[t.person] || 0) + 1;
+        }
+      });
+      // Also check roster
+      ((proj.roster || {})['Producer'] || []).forEach(name => {
+        producerCounts[name] = (producerCounts[name] || 0) + 100; // roster weight
+      });
+      const topProducer = Object.entries(producerCounts).sort((a, b) => b[1] - a[1])[0];
+
+      shoots.push({
+        ...task,
+        projectName: proj.name,
+        projectId: proj.id,
+        producer: topProducer ? topProducer[0] : null
+      });
+    });
+  });
+  return shoots;
+}
+
+function renderStudio() {
+  // Reuse the calendar rendering but filtered to studio shoots only
+  renderCalendar(); // renders the full calendar
+
+  // Now overlay producer labels on studio shoot cells
+  const shoots = getStudioShoots();
+
+  // Remove non-shoot chips from calendar
+  document.querySelectorAll('#calGrid .ops-chip').forEach(chip => {
+    const taskId = chip.dataset.taskId;
+    const isShoot = shoots.some(s => s.id === taskId);
+    if (!isShoot) chip.style.display = 'none';
+  });
+
+  // Add producer labels to shoot chips that are visible
+  shoots.forEach(shoot => {
+    if (!shoot.producer) return;
+    const chips = document.querySelectorAll(`#calGrid .ops-chip[data-task-id="${shoot.id}"]`);
+    chips.forEach((chip, i) => {
+      if (i === 0) { // Only on the first/start chip
+        const pLabel = document.createElement('div');
+        pLabel.className = 'studio-producer';
+        pLabel.textContent = '🎬 ' + shoot.producer;
+        chip.parentElement.appendChild(pLabel);
+      }
+    });
+  });
 }
 
 // ── CALENDAR ──
@@ -1316,7 +1758,7 @@ function setupCalObserver() {
 
 // ── INIT ──
 function init() {
-  // Start in person (timeline) view
+  // Start in heads up view
   resetCalRange();
   resetTlRange();
   renderFilterChips();
@@ -1329,11 +1771,16 @@ function init() {
     window._titleRaf = setTimeout(updateCalTitle, 80);
   });
 
-  // Today button: works for both views
+  // Today button: works for all views
   document.getElementById('btnToday').addEventListener('click', () => {
     if (viewMode === 'person') {
       scrollTlToToday();
-    } else {
+    } else if (viewMode === 'studio') {
+      const todayCell = document.getElementById('calScroll').querySelector('.cal-day.today');
+      if (!todayCell) { resetCalRange(); renderStudio(); setTimeout(scrollToToday, 50); }
+      else scrollToToday();
+    } else if (viewMode === 'calendar') {
+      // kept for safety but calendar mode is removed
       const todayCell = document.getElementById('calScroll').querySelector('.cal-day.today');
       if (!todayCell) { resetCalRange(); renderCalendar(); setTimeout(scrollToToday, 50); }
       else scrollToToday();
@@ -1347,7 +1794,11 @@ function init() {
   document.getElementById('wkndBtn').addEventListener('click', () => {
     showWeekends = !showWeekends;
     document.getElementById('wkndBtn').classList.toggle('on', showWeekends);
-    if (viewMode === 'calendar') { renderCalendar(); return; }
+    if (viewMode === 'calendar' || viewMode === 'studio') {
+      if (viewMode === 'studio') renderStudio();
+      else renderCalendar();
+      return;
+    }
     // Capture the date at the centre of the viewport before columns change
     const sc = document.getElementById('tlScroll');
     const centrePixel = sc.scrollLeft - TL_NAME_W + (sc.clientWidth - TL_NAME_W) / 2;
@@ -1399,6 +1850,7 @@ function init() {
     chipDisplay = btn.dataset.disp;
     document.querySelectorAll('#chipDisplayToggle .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.disp === chipDisplay));
     if (viewMode === 'person') renderTimeline();
+    else if (viewMode === 'studio') renderStudio();
     else renderCalendar();
   });
 
@@ -1408,6 +1860,8 @@ function init() {
     renderFilterChips();
     renderWorkload();
     if (viewMode === 'person') renderTimeline();
+    else if (viewMode === 'studio') renderStudio();
+    else if (viewMode === 'headsup') renderHeadsUp();
     else renderCalendar();
   });
 
@@ -1416,6 +1870,8 @@ function init() {
     renderFilterChips();
     renderWorkload();
     if (viewMode === 'person') renderTimeline();
+    else if (viewMode === 'studio') renderStudio();
+    else if (viewMode === 'headsup') renderHeadsUp();
     else renderCalendar();
   });
 }
