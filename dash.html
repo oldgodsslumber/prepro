@@ -124,7 +124,8 @@ body { display: flex; flex-direction: column; }
 .today-date-heading { font-size: 22px; font-weight: 800; color: var(--text); margin-bottom: 16px; letter-spacing: -.02em; }
 .today-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 10px; }
 .today-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
-.today-card-project { font-size: 14px; font-weight: 700; }
+.today-card-project { font-size: 14px; font-weight: 700; color: var(--text); text-decoration: none; }
+a.today-card-project:hover { color: var(--accent); }
 .role-tag { font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 10px; color: #fff; white-space: nowrap; }
 .today-task-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px; }
 .today-task-block + .today-task-block { border-top: 1px solid var(--border); }
@@ -170,7 +171,16 @@ body { display: flex; flex-direction: column; }
 .headsup-item.review { border-color: rgba(192,57,79,.3); }
 .headsup-item.shoot { border-color: rgba(192,57,79,.4); }
 .headsup-item.milestone { border-color: rgba(108,99,255,.3); }
+.headsup-title a { color: var(--text); text-decoration: none; }
+.headsup-title a:hover { color: var(--accent); text-decoration: underline; }
 .headsup-prompt { font-size: 11px; color: var(--dim); font-style: italic; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--border); }
+.headsup-prompt-clickable { cursor: pointer; }
+.headsup-prompt-clickable:hover { color: var(--text); }
+.headsup-tasks { margin-top: 4px; padding: 4px 0 0; font-style: normal; }
+.headsup-task-item { font-size: 11px; color: var(--text); padding: 2px 0; display: flex; align-items: center; gap: 6px; }
+.headsup-task-item + .headsup-task-item { border-top: 1px solid var(--border); }
+.headsup-task-person { font-size: 9px; color: var(--dim); }
+.headsup-task-loe { flex-shrink: 0; }
 
 /* ── COMING UP CARDS ── */
 .coming-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
@@ -691,7 +701,7 @@ function renderTodaySection() {
 
     const header = document.createElement('div');
     header.className = 'today-card-header';
-    header.innerHTML = `<span class="today-card-project">${esc(name)}</span>` +
+    header.innerHTML = `<a class="today-card-project" href="team.html#project=${encodeURIComponent(projectId)}" target="_blank">${esc(name)}</a>` +
       roles.map(r => `<span class="role-tag" style="background:${getRoleColor(r)}">${esc(r)}</span>`).join('');
     header.appendChild(buildStatusSeg(projectId));
     card.appendChild(header);
@@ -998,9 +1008,13 @@ function getHeadsUpItems(personName, afterDate) {
   return deduped.sort((a, b) => a.date.localeCompare(b.date));
 }
 
+// Returns { text, tasks[] } — tasks is the expandable list (may be empty)
 function getHeadsUpPrompt(item, personName, afterDate) {
   const bizDays = getNextBusinessDays(afterDate, 5);
   const windowEnd = bizDays[bizDays.length - 1];
+  const status = item.projectId ? getStatus(personName, item.projectId) : 'on-schedule';
+  const isBehind = status === 'behind';
+  const isAhead = status === 'ahead';
 
   if (item.type === 'pto' && item.teammateName && item.projectId) {
     const proj = (state.projects || []).find(p => p.id === item.projectId);
@@ -1017,6 +1031,11 @@ function getHeadsUpPrompt(item, personName, afterDate) {
       return t.date <= windowEnd && end >= afterDate;
     });
 
+    // Calculate their workload weight
+    let totalPts = 0;
+    theirTasks.forEach(t => { totalPts += loePts(t.loe); });
+    const heavy = totalPts >= 4;
+
     // Check if they're an attendee on any reviews in the window
     const theirReviews = (proj.tasks || []).filter(t => {
       if (!t.isReview) return false;
@@ -1025,21 +1044,28 @@ function getHeadsUpPrompt(item, personName, afterDate) {
       return (t.attendees || []).some(a => a.person === name);
     });
 
+    // Status modifier
+    const behindNote = isBehind ? ' This project is marked behind.' : '';
+    const aheadNote = isAhead ? ` You\u2019re ahead on this project \u2014 good time to get ahead of it.` : '';
+    const statusNote = behindNote || aheadNote;
+
     if (roleLower === 'stakeholder' || roleLower === 'designer' || roleLower === 'copywriter') {
-      if (theirReviews.length) return `Do you need sign-off from ${name} before they leave?`;
-      if (theirTasks.length) return `Does ${name} need to deliver anything before PTO?`;
-      return `Need anything from ${name} before they\u2019re out?`;
+      if (theirReviews.length) return { text: `Do you need sign-off from ${name} before they leave?${statusNote}`, tasks: theirTasks };
+      if (theirTasks.length) return { text: `Does ${name} need to deliver anything before PTO?${statusNote}`, tasks: theirTasks };
+      return { text: `Need anything from ${name} before they\u2019re out?${statusNote}`, tasks: [] };
     }
     if (roleLower === 'editor' || roleLower === 'animator') {
-      if (theirTasks.length) return `Is ${name}\u2019s work on track to finish before PTO?`;
-      return `Has ${name} handed off their work?`;
+      if (heavy) return { text: `${name} has a heavy workload (${totalPts} pts) before PTO \u2014 is their work on track?${statusNote}`, tasks: theirTasks };
+      if (theirTasks.length) return { text: `Is ${name}\u2019s work on track to finish before PTO?${statusNote}`, tasks: theirTasks };
+      return { text: `Has ${name} handed off their work?${statusNote}`, tasks: [] };
     }
     if (roleLower === 'producer') {
-      return `Who\u2019s covering for ${name} while they\u2019re out?`;
+      return { text: `Who\u2019s covering for ${name} while they\u2019re out?${statusNote}`, tasks: theirTasks };
     }
     // Generic
-    if (theirTasks.length) return `Has ${name} handed off their ${theirTasks.length} task${theirTasks.length > 1 ? 's' : ''}?`;
-    return `Need anything from ${name} before they\u2019re out?`;
+    if (heavy) return { text: `${name} has a heavy workload (${totalPts} pts) before PTO \u2014 have they handed off?${statusNote}`, tasks: theirTasks };
+    if (theirTasks.length) return { text: `Has ${name} handed off their ${theirTasks.length} task${theirTasks.length > 1 ? 's' : ''}?${statusNote}`, tasks: theirTasks };
+    return { text: `Need anything from ${name} before they\u2019re out?${statusNote}`, tasks: [] };
   }
 
   if (item.type === 'review' || item.type === 'shoot' || item.type === 'milestone') {
@@ -1054,8 +1080,12 @@ function getHeadsUpPrompt(item, personName, afterDate) {
       return end >= afterDate && t.date < item.date;
     });
 
-    // Try keyword matching: look for overlapping words between task names and event name
-    // Filter out common stop words so "Animation Kick-Off" matches an "Animation" task
+    // Status modifier
+    const behindNote = isBehind ? ' You\u2019ve marked this project behind \u2014 flag early if anything\u2019s at risk.' : '';
+    const aheadNote = isAhead ? ' You\u2019re ahead on this one.' : '';
+    const statusNote = behindNote || aheadNote;
+
+    // Try keyword matching
     const stopWords = new Set(['the','and','for','with','this','that','from','into','kick','off','final','date','due']);
     const eventWords = eventName.split(/[\s·\-—:,]+/).filter(w => w.length > 2 && !stopWords.has(w)).map(w => w.toLowerCase());
     const matched = leadingTasks.filter(t => {
@@ -1066,16 +1096,16 @@ function getHeadsUpPrompt(item, personName, afterDate) {
     if (matched.length) {
       if (matched.length === 1) {
         const taskName = matched[0].taskName || '(untitled)';
-        return `Will \u201c${taskName}\u201d be ready for this?`;
+        return { text: `Will \u201c${taskName}\u201d be ready for this?${statusNote}`, tasks: leadingTasks };
       }
-      return `${matched.length} related tasks need to land before this \u2014 on track?`;
+      return { text: `${matched.length} related tasks need to land before this \u2014 on track?${statusNote}`, tasks: leadingTasks };
     }
     if (leadingTasks.length) {
-      return `${leadingTasks.length} task${leadingTasks.length > 1 ? 's' : ''} due before this \u2014 everything on track?`;
+      return { text: `${leadingTasks.length} task${leadingTasks.length > 1 ? 's' : ''} due before this \u2014 everything on track?${statusNote}`, tasks: leadingTasks };
     }
-    if (item.type === 'shoot') return 'Is everything prepped for the shoot?';
-    if (item.type === 'milestone') return 'Is everything ready for this?';
-    return 'Is everything ready for review?';
+    if (item.type === 'shoot') return { text: `Is everything prepped for the shoot?${statusNote}`, tasks: [] };
+    if (item.type === 'milestone') return { text: `Is everything ready for this?${statusNote}`, tasks: [] };
+    return { text: `Is everything ready for review?${statusNote}`, tasks: [] };
   }
 
   return null;
@@ -1109,14 +1139,66 @@ function renderHeadsUpSection() {
     body.className = 'headsup-body';
     let dateText = fmtDateShort(item.date);
     if (item.endDate) dateText += ' \u2013 ' + fmtDateShort(item.endDate);
-    let bodyHtml = `<div class="headsup-title">${esc(item.title)}</div><div class="headsup-date">${esc(dateText)}</div><div class="headsup-meta">${esc(item.project)}</div>`;
 
-    const prompt = getHeadsUpPrompt(item, selectedPerson, selectedDate);
-    if (prompt) bodyHtml += `<div class="headsup-prompt">${esc(prompt)}</div>`;
+    // Title — clickable to open project in team.html
+    const titleDiv = document.createElement('div');
+    titleDiv.className = 'headsup-title';
+    if (item.projectId) {
+      const link = document.createElement('a');
+      link.href = 'team.html#project=' + encodeURIComponent(item.projectId);
+      link.target = '_blank';
+      link.textContent = item.title;
+      titleDiv.appendChild(link);
+    } else {
+      titleDiv.textContent = item.title;
+    }
+    body.appendChild(titleDiv);
 
-    body.innerHTML = bodyHtml;
+    const dateDiv = document.createElement('div');
+    dateDiv.className = 'headsup-date';
+    dateDiv.textContent = dateText;
+    body.appendChild(dateDiv);
+
+    const metaDiv = document.createElement('div');
+    metaDiv.className = 'headsup-meta';
+    metaDiv.textContent = item.project;
+    body.appendChild(metaDiv);
+
+    // Prompt — clickable to expand task list
+    const promptData = getHeadsUpPrompt(item, selectedPerson, selectedDate);
+    if (promptData) {
+      const promptDiv = document.createElement('div');
+      promptDiv.className = 'headsup-prompt' + (promptData.tasks.length ? ' headsup-prompt-clickable' : '');
+      promptDiv.textContent = promptData.text;
+
+      if (promptData.tasks.length) {
+        let expanded = false;
+        const tasksDiv = document.createElement('div');
+        tasksDiv.className = 'headsup-tasks';
+        tasksDiv.style.display = 'none';
+
+        promptData.tasks.forEach(t => {
+          const ti = document.createElement('div');
+          ti.className = 'headsup-task-item';
+          const loe = t.loe ? (LOE_EMOJI[t.loe] || '') + ' ' : '';
+          const person = t.person ? ` \u00b7 ${esc(t.person)}` : '';
+          ti.innerHTML = `<span style="flex:1">${loe}${esc(t.taskName || '(untitled)')}</span><span class="headsup-task-person">${esc(t.person || '')}</span>`;
+          tasksDiv.appendChild(ti);
+        });
+
+        promptDiv.addEventListener('click', () => {
+          expanded = !expanded;
+          tasksDiv.style.display = expanded ? '' : 'none';
+        });
+
+        body.appendChild(promptDiv);
+        body.appendChild(tasksDiv);
+      } else {
+        body.appendChild(promptDiv);
+      }
+    }
+
     row.appendChild(body);
-
     list.appendChild(row);
   });
 
