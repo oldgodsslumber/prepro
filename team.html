@@ -379,6 +379,33 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
+/* ── NOTES ── */
+.notes-feed { flex: 1; overflow-y: auto; padding: 8px 0; }
+.note-card { display: flex; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); align-items: flex-start; }
+.note-card:last-child { border-bottom: none; }
+.note-card .note-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+.note-card .note-body { flex: 1; min-width: 0; }
+.note-card .note-type { font-size: 9px; font-weight: 700; color: var(--dim); letter-spacing: .06em; text-transform: uppercase; }
+.note-card .note-text { font-size: 12px; color: var(--text); margin-top: 2px; white-space: pre-wrap; line-height: 1.5; }
+.note-card .note-meta { font-size: 9px; color: var(--dim); margin-top: 3px; }
+.note-card.system { opacity: .55; }
+.note-card.delay .note-type { color: #e07b39; }
+.note-card.blocker .note-type { color: #e05555; }
+.note-card.direction .note-type { color: #6c63ff; }
+.note-card.decision .note-type { color: #4cba6a; }
+.notes-add-bar { display: flex; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; }
+.notes-type-btn { font-size: 10px; font-weight: 600; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 5px; padding: 3px 8px; cursor: pointer; transition: all .15s; display: inline-flex; align-items: center; gap: 4px; }
+.notes-type-btn:hover { color: var(--text); border-color: var(--accent); }
+.notes-compose { padding: 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; display: flex; flex-direction: column; gap: 6px; }
+.notes-compose textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; color: var(--text); padding: 6px 8px; font: inherit; font-size: 12px; resize: vertical; min-height: 60px; outline: none; }
+.notes-compose textarea:focus { border-color: var(--accent); }
+.notes-compose-actions { display: flex; gap: 6px; align-items: center; }
+.notes-compose-type { font-size: 11px; color: var(--dim); display: flex; align-items: center; gap: 4px; }
+.notes-empty { color: var(--dim); font-size: 12px; font-style: italic; padding: 20px 10px; }
+.note-delete { font-size: 10px; color: var(--dim); cursor: pointer; opacity: 0; transition: opacity .15s; flex-shrink: 0; padding: 0 2px; }
+.note-card:hover .note-delete { opacity: 1; }
+.note-delete:hover { color: var(--danger); }
+
 /* ── UTIL ── */
 .hidden { display: none !important; }
 </style>
@@ -512,6 +539,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
             <div class="export-tab" data-tab="roster">Role Assignees</div>
             <div class="export-tab" data-tab="invites">📅 Invites</div>
             <div class="export-tab" data-tab="invites-web">🌐 Invite Web</div>
+            <div class="export-tab" data-tab="notes">📝 Notes</div>
           </div>
           <div class="export-content" id="exportContent"></div>
         </div>
@@ -539,6 +567,16 @@ const ROLE_CATS = [
 const REVIEW_COLOR = '#c0394f';
 const LOE_EMOJI    = { low: '🟢', medium: '🟡', high: '🔴' };
 const ROLE_ABBR    = { 'Producer': 'PRD', 'Editor': 'EDT', 'Animator': 'ANM', 'Copywriter': 'CPY', 'Designer': 'DSN', 'Stakeholder': 'STK', 'External Vendor': 'VND', 'Other': 'OTH' };
+const NOTE_TYPES = [
+  { key: 'update',    label: 'Project Update',      emoji: '📋', desc: 'General status update' },
+  { key: 'delay',     label: 'Project Delay',        emoji: '⏳', desc: 'Something is behind schedule' },
+  { key: 'direction', label: 'Change in Direction',   emoji: '🔀', desc: 'Scope, creative, or strategy shift' },
+  { key: 'feedback',  label: 'Stakeholder Feedback',   emoji: '💬', desc: 'Feedback from a stakeholder or client' },
+  { key: 'blocker',   label: 'Blocker',               emoji: '🚧', desc: 'Something is blocking progress' },
+  { key: 'decision',  label: 'Decision Made',         emoji: '✅', desc: 'Key decision logged for the record' },
+  { key: 'team',      label: 'Team Change',           emoji: '👥', desc: 'Staffing, reassignment, availability' },
+  { key: 'system',    label: 'System',                emoji: '⚙️', desc: 'Auto-generated event' }
+];
 const MONTHS   = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DOW_ALL  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const DOW_WD   = ['Mon','Tue','Wed','Thu','Fri'];
@@ -673,8 +711,10 @@ function getDescendantIds(id) {
   return ids;
 }
 function addProject(name, parentId) {
-  const p = { id: genId(), name, parentId: parentId || null, tasks: [], roster: {}, dueDate: null };
-  state.projects.push(p); saveState(); return p;
+  const p = { id: genId(), name, parentId: parentId || null, tasks: [], roster: {}, dueDate: null, notes: [] };
+  state.projects.push(p); saveState();
+  addSystemNote(p.id, 'Project created');
+  return p;
 }
 function duplicateProject(id) {
   const allIds = [id, ...getDescendantIds(id)];
@@ -723,6 +763,7 @@ function completeProject(id) {
   // Mark project + all descendants as completed
   const all = [id, ...getDescendantIds(id)];
   all.forEach(pid => { const p = getProject(pid); if (p) p.completed = true; });
+  addSystemNote(id, 'Project marked as complete');
   if (activeProjectId && all.includes(activeProjectId)) {
     const r = getActiveRootProjects();
     activeProjectId = r.length ? r[0].id : null;
@@ -740,8 +781,39 @@ function restoreProject(id) {
     if (cur && cur.completed) all.push(cur.id);
   }
   all.forEach(pid => { const p = getProject(pid); if (p) p.completed = false; });
+  addSystemNote(id, 'Project restored from completed');
   activeProjectId = id;
   saveState();
+}
+
+function addNote(projectId, type, body, person) {
+  const proj = getProject(projectId);
+  if (!proj) return;
+  if (!proj.notes) proj.notes = [];
+  const now = new Date();
+  const noteType = NOTE_TYPES.find(t => t.key === type) || NOTE_TYPES[0];
+  proj.notes.push({
+    id: genId(),
+    type: noteType.key,
+    emoji: noteType.emoji,
+    body: body,
+    person: person || 'System',
+    date: fmtDate(now.getFullYear(), now.getMonth() + 1, now.getDate()),
+    time: String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0')
+  });
+  saveState();
+}
+
+function addSystemNote(projectId, body) {
+  addNote(projectId, 'system', body, 'System');
+}
+
+function deleteNote(projectId, noteId) {
+  const proj = getProject(projectId);
+  if (!proj || !proj.notes) return;
+  proj.notes = proj.notes.filter(n => n.id !== noteId);
+  saveState();
+  if (exportOpen) renderExportPanel();
 }
 
 let completedOpen = false;
@@ -3032,6 +3104,118 @@ function renderInvitesPanel() {
   content.appendChild(list);
 }
 
+function renderNotesTab(container) {
+  const proj = getProject(activeProjectId);
+  if (!proj) return;
+  if (!proj.notes) proj.notes = [];
+
+  // Compose bar — type buttons
+  const addBar = document.createElement('div');
+  addBar.className = 'notes-add-bar';
+
+  NOTE_TYPES.filter(t => t.key !== 'system').forEach(nt => {
+    const btn = document.createElement('button');
+    btn.className = 'notes-type-btn';
+    btn.innerHTML = nt.emoji + ' ' + nt.label;
+    btn.title = nt.desc;
+    btn.addEventListener('click', () => showNoteCompose(container, nt, addBar));
+    addBar.appendChild(btn);
+  });
+  container.appendChild(addBar);
+
+  // Feed — newest first
+  const feed = document.createElement('div');
+  feed.className = 'notes-feed';
+  feed.id = 'notesFeed';
+
+  if (!proj.notes.length) {
+    feed.innerHTML = '<div class="notes-empty">No notes yet. Add one above.</div>';
+  } else {
+    [...proj.notes].reverse().forEach(note => {
+      const card = document.createElement('div');
+      card.className = 'note-card ' + note.type;
+
+      const icon = document.createElement('span');
+      icon.className = 'note-icon';
+      icon.textContent = note.emoji;
+      card.appendChild(icon);
+
+      const body = document.createElement('div');
+      body.className = 'note-body';
+
+      const typeLabel = NOTE_TYPES.find(t => t.key === note.type);
+      body.innerHTML = '<div class="note-type">' + (typeLabel ? typeLabel.label : note.type) + '</div>'
+        + '<div class="note-text">' + escHtml(note.body) + '</div>'
+        + '<div class="note-meta">' + escHtml(note.person) + ' · ' + note.date + (note.time ? ' ' + note.time : '') + '</div>';
+      card.appendChild(body);
+
+      // Delete button (not for system notes)
+      if (note.type !== 'system') {
+        const del = document.createElement('button');
+        del.className = 'note-delete';
+        del.textContent = '×';
+        del.title = 'Delete note';
+        del.addEventListener('click', () => {
+          if (confirm('Delete this note?')) { deleteNote(activeProjectId, note.id); }
+        });
+        card.appendChild(del);
+      }
+
+      feed.appendChild(card);
+    });
+  }
+
+  container.appendChild(feed);
+}
+
+function showNoteCompose(container, noteType, addBar) {
+  // Remove any existing compose
+  const existing = container.querySelector('.notes-compose');
+  if (existing) existing.remove();
+
+  const compose = document.createElement('div');
+  compose.className = 'notes-compose';
+
+  const typeLabel = document.createElement('div');
+  typeLabel.className = 'notes-compose-type';
+  typeLabel.textContent = noteType.emoji + ' ' + noteType.label;
+  compose.appendChild(typeLabel);
+
+  const textarea = document.createElement('textarea');
+  textarea.placeholder = noteType.desc + '...';
+  textarea.rows = 3;
+  compose.appendChild(textarea);
+
+  const actions = document.createElement('div');
+  actions.className = 'notes-compose-actions';
+
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'btn btn-primary';
+  saveBtn.textContent = 'Save';
+  saveBtn.style.fontSize = '11px';
+  saveBtn.addEventListener('click', () => {
+    if (!textarea.value.trim()) return;
+    // Use the selected person from dashboard localStorage, or 'Team'
+    const person = localStorage.getItem('dash_selected_person') || 'Team';
+    addNote(activeProjectId, noteType.key, textarea.value.trim(), person);
+    renderExportPanel();
+  });
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'btn btn-ghost';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.style.fontSize = '11px';
+  cancelBtn.addEventListener('click', () => { compose.remove(); });
+
+  actions.appendChild(saveBtn);
+  actions.appendChild(cancelBtn);
+  compose.appendChild(actions);
+
+  // Insert compose area after the add bar
+  addBar.after(compose);
+  textarea.focus();
+}
+
 function renderExportPanel() {
   const content = document.getElementById('exportContent');
   content.innerHTML = '';
@@ -3150,6 +3334,10 @@ function renderExportPanel() {
 
   } else if (exportTabActive === 'invites-web') {
     renderInvitesWebPanel();
+    return;
+
+  } else if (exportTabActive === 'notes') {
+    renderNotesTab(content);
     return;
 
   } else {
@@ -3685,6 +3873,7 @@ function normalizeState(s) {
     // Firebase strips null values and empty arrays — restore safe defaults
     if (p.parentId === undefined) p.parentId = null;
     if (!Array.isArray(p.tasks))  p.tasks  = [];
+    if (!Array.isArray(p.notes))  p.notes  = [];
     if (!p.roster || typeof p.roster !== 'object') p.roster = {};
     // Normalize tasks
     p.tasks.forEach(t => {
