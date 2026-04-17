@@ -157,7 +157,14 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 /* ── STUDIO VIEW ── */
 .studio-view { display: none; }
 .studio-view.visible { display: block; }
-.studio-producer { font-size: 10px; color: var(--dim); margin-top: 2px; }
+.studio-info { font-size: 10px; margin-top: 3px; line-height: 1.5; }
+.studio-info .studio-project { font-weight: 700; color: var(--text); }
+.studio-info .studio-producer { color: var(--dim); }
+.studio-info .studio-crew { color: var(--dim); font-size: 9px; }
+.studio-info .studio-countdown { font-size: 9px; font-weight: 600; }
+.studio-info .studio-countdown.soon { color: #e07b39; }
+.studio-info .studio-countdown.imminent { color: #e05555; }
+.studio-info .studio-countdown.past { color: var(--dim); opacity: .5; }
 
 /* ── TIMELINE (PERSON) VIEW ── */
 .person-view { flex: 1; min-height: 0; display: none; flex-direction: column; overflow: hidden; }
@@ -1542,10 +1549,11 @@ function renderHeadsUp() {
 // ── STUDIO VIEW ──
 function getStudioShoots() {
   const shoots = [];
+  const today = todayStr();
   (state.projects || []).filter(p => !p.completed && !p.ghost).forEach(proj => {
     (proj.tasks || []).forEach(task => {
       if (!task.isReview) return;
-      if (!(task.reviewLabel || '').includes('Studio Shoot')) return;
+      if (!(task.reviewLabel || '').includes('Shoot')) return;
 
       // Find most-used producer for this project
       const producerCounts = {};
@@ -1554,28 +1562,40 @@ function getStudioShoots() {
           producerCounts[t.person] = (producerCounts[t.person] || 0) + 1;
         }
       });
-      // Also check roster
       ((proj.roster || {})['Producer'] || []).forEach(name => {
-        producerCounts[name] = (producerCounts[name] || 0) + 100; // roster weight
+        producerCounts[name] = (producerCounts[name] || 0) + 100;
       });
       const topProducer = Object.entries(producerCounts).sort((a, b) => b[1] - a[1])[0];
+
+      // Attendee names
+      const crew = (task.attendees || []).filter(a => a.person).map(a => a.person);
+
+      // Days until shoot
+      const shootDate = new Date(task.date + 'T00:00:00');
+      const todayDate = new Date(today + 'T00:00:00');
+      const daysUntil = Math.round((shootDate - todayDate) / 86400000);
+
+      // Duration
+      const endDate = task.endDate || task.date;
+      const duration = Math.round((new Date(endDate + 'T00:00:00') - shootDate) / 86400000) + 1;
 
       shoots.push({
         ...task,
         projectName: proj.name,
         projectId: proj.id,
-        producer: topProducer ? topProducer[0] : null
+        producer: topProducer ? topProducer[0] : null,
+        crew,
+        daysUntil,
+        duration,
+        shootLabel: task.reviewLabel || 'Shoot'
       });
     });
   });
-  return shoots;
+  return shoots.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 function renderStudio() {
-  // Reuse the calendar rendering but filtered to studio shoots only
-  renderCalendar(); // renders the full calendar
-
-  // Now overlay producer labels on studio shoot cells
+  renderCalendar();
   const shoots = getStudioShoots();
 
   // Remove non-shoot chips from calendar
@@ -1585,17 +1605,50 @@ function renderStudio() {
     if (!isShoot) chip.style.display = 'none';
   });
 
-  // Add producer labels to shoot chips that are visible
+  // Add info cards to shoot chips
   shoots.forEach(shoot => {
-    if (!shoot.producer) return;
     const chips = document.querySelectorAll(`#calGrid .ops-chip[data-task-id="${shoot.id}"]`);
     chips.forEach((chip, i) => {
-      if (i === 0) { // Only on the first/start chip
-        const pLabel = document.createElement('div');
-        pLabel.className = 'studio-producer';
-        pLabel.textContent = '🎬 ' + shoot.producer;
-        chip.parentElement.appendChild(pLabel);
+      if (i !== 0) return; // only on the start chip
+
+      const info = document.createElement('div');
+      info.className = 'studio-info';
+
+      // Project name
+      info.innerHTML = `<div class="studio-project">${esc(shoot.projectName)}</div>`;
+
+      // Producer
+      if (shoot.producer) {
+        info.innerHTML += `<div class="studio-producer">\u{1F3AC} ${esc(shoot.producer)}</div>`;
       }
+
+      // Crew
+      if (shoot.crew.length) {
+        info.innerHTML += `<div class="studio-crew">\u{1F465} ${esc(shoot.crew.join(', '))}</div>`;
+      }
+
+      // Duration + countdown
+      let countdownCls = '';
+      let countdownText = '';
+      if (shoot.daysUntil < 0) {
+        countdownCls = 'past';
+        countdownText = Math.abs(shoot.daysUntil) + 'd ago';
+      } else if (shoot.daysUntil === 0) {
+        countdownCls = 'imminent';
+        countdownText = 'Today';
+      } else if (shoot.daysUntil <= 3) {
+        countdownCls = 'imminent';
+        countdownText = shoot.daysUntil + 'd away';
+      } else if (shoot.daysUntil <= 7) {
+        countdownCls = 'soon';
+        countdownText = shoot.daysUntil + 'd away';
+      } else {
+        countdownText = shoot.daysUntil + 'd away';
+      }
+      const durText = shoot.duration > 1 ? shoot.duration + '-day shoot' : '1-day shoot';
+      info.innerHTML += `<div class="studio-countdown ${countdownCls}">${durText} \u00b7 ${countdownText}</div>`;
+
+      chip.parentElement.appendChild(info);
     });
   });
 }
