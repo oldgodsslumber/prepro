@@ -3917,9 +3917,13 @@ function initFirebase() {
       // First load: boot the UI
       if (!window._fbInitDone) {
         window._fbInitDone = true;
+        // Check URL hash for deep link (e.g. #project=abc123)
+        const hashMatch = location.hash.match(/project=([^&]+)/);
+        const hashId = hashMatch ? decodeURIComponent(hashMatch[1]) : null;
         const savedId = localStorage.getItem('prepro_active_project');
         const roots = getRootProjects();
-        if (savedId && getProject(savedId)) activeProjectId = savedId;
+        if (hashId && getProject(hashId)) activeProjectId = hashId;
+        else if (savedId && getProject(savedId)) activeProjectId = savedId;
         else if (roots.length) activeProjectId = roots[0].id;
         viewStart = getWeekStart();
         renderPalette();

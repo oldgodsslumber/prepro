@@ -1114,7 +1114,37 @@ function getHeadsUpItems(personName, afterDate) {
     return true;
   });
 
-  return deduped.sort((a, b) => a.date.localeCompare(b.date));
+  // Consolidate already-started PTO into a single "Currently Out" card.
+  // Upcoming PTO stays as individual items so the coaching prompts still fire.
+  const startedPto = deduped.filter(i => i.type === 'pto' && i.date <= afterDate);
+  const other = deduped.filter(i => !(i.type === 'pto' && i.date <= afterDate));
+
+  if (startedPto.length) {
+    // Collapse to unique teammates with their earliest-end
+    const byPerson = new Map();
+    startedPto.forEach(i => {
+      const name = i.teammateName || i.title.replace(/ — PTO$/, '');
+      if (!byPerson.has(name)) byPerson.set(name, { name, endDate: i.endDate || i.date });
+      else {
+        const existing = byPerson.get(name);
+        const end = i.endDate || i.date;
+        if (end > existing.endDate) existing.endDate = end;
+      }
+    });
+    const people = [...byPerson.values()];
+    other.push({
+      type: 'pto',
+      icon: '\u{1F3D6}',
+      title: 'Currently Out (' + people.length + ')',
+      project: '',
+      date: afterDate,
+      endDate: null,
+      consolidated: true,
+      outPeople: people
+    });
+  }
+
+  return other.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 // Returns { text, tasks[] } — tasks is the expandable list (may be empty)
@@ -1246,6 +1276,29 @@ function renderHeadsUpSection() {
 
     const body = document.createElement('div');
     body.className = 'headsup-body';
+
+    // Consolidated "Currently Out" card — renders people list, no prompt
+    if (item.consolidated && item.outPeople) {
+      const titleDiv = document.createElement('div');
+      titleDiv.className = 'headsup-title';
+      titleDiv.textContent = item.title;
+      body.appendChild(titleDiv);
+
+      const peopleList = document.createElement('div');
+      peopleList.className = 'headsup-meta';
+      peopleList.style.marginTop = '4px';
+      peopleList.style.lineHeight = '1.6';
+      peopleList.innerHTML = item.outPeople.map(p => {
+        const back = fmtDateShort(addDays(p.endDate, 1));
+        return `<div>\u{1F3D6} <strong style="color:var(--text)">${esc(p.name)}</strong> \u00b7 back ${esc(back)}</div>`;
+      }).join('');
+      body.appendChild(peopleList);
+
+      row.appendChild(body);
+      list.appendChild(row);
+      return; // skip the rest of this iteration
+    }
+
     let dateText = fmtDateShort(item.date);
     if (item.endDate) dateText += ' \u2013 ' + fmtDateShort(item.endDate);
 

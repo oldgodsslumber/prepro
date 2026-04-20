@@ -1368,9 +1368,38 @@ function getTeamHeadsUp() {
     return true;
   });
 
+  // Consolidate already-started PTO into a single "Currently Out" card
+  const startedPto = deduped.filter(i => i.type === 'pto' && i.date <= today);
+  const other = deduped.filter(i => !(i.type === 'pto' && i.date <= today));
+  if (startedPto.length) {
+    const byPerson = new Map();
+    startedPto.forEach(i => {
+      const name = i.teammateName || i.title.replace(/ — PTO$/, '');
+      if (!byPerson.has(name)) byPerson.set(name, { name, endDate: i.endDate || i.date });
+      else {
+        const existing = byPerson.get(name);
+        const end = i.endDate || i.date;
+        if (end > existing.endDate) existing.endDate = end;
+      }
+    });
+    const people = [...byPerson.values()].sort((a, b) => a.name.localeCompare(b.name));
+    other.push({
+      type: 'pto',
+      icon: '🏖',
+      title: 'Currently Out (' + people.length + ')',
+      project: '',
+      projectId: null,
+      date: today,
+      endDate: null,
+      consolidated: true,
+      outPeople: people,
+      people: people.map(p => p.name)
+    });
+  }
+
   // Sort: shoots first, then reviews, then milestones, then PTO. Within each, by date.
   const typePriority = { shoot: 0, review: 1, milestone: 2, pto: 3 };
-  return deduped.sort((a, b) => {
+  return other.sort((a, b) => {
     const pa = typePriority[a.type] ?? 9;
     const pb = typePriority[b.type] ?? 9;
     if (pa !== pb) return pa - pb;
@@ -1478,6 +1507,28 @@ function renderHeadsUp() {
 
       const body = document.createElement('div');
       body.className = 'hu-body';
+
+      // Consolidated "Currently Out" card
+      if (item.consolidated && item.outPeople) {
+        const titleDiv = document.createElement('div');
+        titleDiv.className = 'hu-title';
+        titleDiv.textContent = item.title;
+        body.appendChild(titleDiv);
+
+        const peopleList = document.createElement('div');
+        peopleList.className = 'hu-meta';
+        peopleList.style.marginTop = '4px';
+        peopleList.style.lineHeight = '1.7';
+        peopleList.innerHTML = item.outPeople.map(p => {
+          const back = fmtDateShort(addDays(p.endDate, 1));
+          return '<div>🏖 <strong style="color:var(--text)">' + esc(p.name) + '</strong> · back ' + esc(back) + '</div>';
+        }).join('');
+        body.appendChild(peopleList);
+
+        card.appendChild(body);
+        section.appendChild(card);
+        return;
+      }
 
       // Title (linked to project)
       const titleDiv = document.createElement('div');

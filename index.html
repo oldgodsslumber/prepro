@@ -3829,8 +3829,11 @@ function init() {
   loadState();
   loadNameHistory();
   const roots = getRootProjects();
+  const hashMatch = location.hash.match(/project=([^&]+)/);
+  const hashId = hashMatch ? decodeURIComponent(hashMatch[1]) : null;
   const savedId = localStorage.getItem('prepro_active_project');
-  if (savedId && getProject(savedId)) { activeProjectId = savedId; }
+  if (hashId && getProject(hashId)) { activeProjectId = hashId; }
+  else if (savedId && getProject(savedId)) { activeProjectId = savedId; }
   else if (roots.length) { activeProjectId = roots[0].id; }
   viewStart = getWeekStart();
   renderPalette();
