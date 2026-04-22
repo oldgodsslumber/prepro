@@ -65,9 +65,9 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .ops-header-sub { font-size: 11px; color: var(--dim); }
 .ops-header-spacer { flex: 1; }
 
-/* ── LOWER-LEFT NAV ── */
-.ops-nav { position: fixed; left: 12px; bottom: 12px; z-index: 100; display: flex; gap: 6px; padding: 6px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
-.ops-nav .data-mig-btn { font-size: 10px; font-weight: 600; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; cursor: pointer; transition: color .15s, border-color .15s; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; }
+/* ── LOWER NAV (under workload panel) ── */
+.ops-nav { display: flex; gap: 6px; padding: 8px 14px; background: var(--panel); border-top: 1px solid var(--border); flex-shrink: 0; }
+.ops-nav .data-mig-btn { font-size: 10px; font-weight: 600; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px; cursor: pointer; transition: color .15s, border-color .15s; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; }
 .ops-nav .data-mig-btn:hover { color: var(--text); border-color: var(--accent); }
 .ops-wknd-btn { font-size: 11px; font-weight: 600; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 4px 12px; cursor: pointer; transition: all .15s; }
 .ops-wknd-btn.on { background: rgba(108,99,255,.18); color: var(--accent); border-color: var(--accent); }
@@ -304,14 +304,6 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
   <button class="ops-wknd-btn" id="refreshBtn" title="Reload latest data from the scheduler">↺ Refresh</button>
 </div>
 
-<!-- LOWER-LEFT NAV -->
-<div class="ops-nav">
-  <a href="guide.html" target="_blank" class="data-mig-btn" title="Open guide">❓ Help</a>
-  <a href="team.html" class="data-mig-btn" title="Projects & scheduler">📁 Projects</a>
-  <a href="dash.html" class="data-mig-btn" title="Personal dashboard view">📋 Dash</a>
-  <button class="data-mig-btn" id="btnSettings" title="Settings: import/export data, manage people">⚙ Settings</button>
-</div>
-
 <!-- SETTINGS MODAL -->
 <div class="settings-overlay" id="settingsOverlay" style="display:none;">
   <div class="settings-modal" id="settingsModal">
@@ -384,6 +376,14 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
     </div>
     <div class="ops-filter-chips" id="filterChips"></div>
   </div>
+</div>
+
+<!-- LOWER NAV (under workload panel) -->
+<div class="ops-nav">
+  <a href="guide.html" target="_blank" class="data-mig-btn" title="Open guide">❓ Help</a>
+  <a href="team.html" class="data-mig-btn" title="Projects & scheduler">📁 Projects</a>
+  <a href="dash.html" class="data-mig-btn" title="Personal dashboard view">📋 Dash</a>
+  <button class="data-mig-btn" id="btnSettings" title="Settings: import/export data, manage people">⚙ Settings</button>
 </div>
 
 <script>
