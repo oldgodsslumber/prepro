@@ -31,6 +31,16 @@ onValue(ref(db, 'prepro/dash'), snapshot => {
   const data = snapshot.val();
   if (data) { window._fbDashData = data; if (window._dashReloadDashData) window._dashReloadDashData(data); }
 }, err => console.error('dash meta firebase error:', err));
+
+onValue(ref(db, 'prepro/nameHistory'), snapshot => {
+  const data = snapshot.val();
+  if (data) { window._fbNameHistory = data; if (window._dashReloadNameHistory) window._dashReloadNameHistory(data); }
+}, err => console.error('dash nameHistory firebase error:', err));
+
+onValue(ref(db, 'prepro/peopleEmails'), snapshot => {
+  const data = snapshot.val();
+  if (data) { window._fbPeopleEmails = data; if (window._dashReloadPeopleEmails) window._dashReloadPeopleEmails(data); }
+}, err => console.error('dash peopleEmails firebase error:', err));
 </script>
 
 <style>
@@ -64,8 +74,6 @@ body { display: flex; flex-direction: column; }
 .dash-title { font-size: 13px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
 .dash-subtitle { font-size: 11px; color: var(--dim); }
 .dash-spacer { flex: 1; }
-.dash-back { font-size: 11px; font-weight: 600; color: var(--dim); text-decoration: none; background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 4px 12px; transition: color .15s, border-color .15s; }
-.dash-back:hover { color: var(--text); border-color: var(--dim); }
 
 /* ── DATE NAV ── */
 .date-nav { display: flex; align-items: center; gap: 6px; }
@@ -83,6 +91,9 @@ body { display: flex; flex-direction: column; }
 /* ── SIDEBAR ── */
 .dash-sidebar { background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
 .dash-sidebar-head { padding: 8px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.data-migration { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--border); flex-shrink: 0; }
+.data-mig-btn { flex: 1; font-size: 10px; font-weight: 600; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 5px 4px; cursor: pointer; transition: color .15s, border-color .15s; text-align: center; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+.data-mig-btn:hover { color: var(--text); border-color: var(--accent); }
 .dash-search { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; color: var(--text); padding: 5px 8px; font-size: 12px; outline: none; }
 .dash-search:focus { border-color: var(--accent); }
 .dash-search::placeholder { color: var(--dim); }
@@ -131,6 +142,8 @@ a.today-card-project:hover { color: var(--accent); }
 .today-task-block + .today-task-block { border-top: 1px solid var(--border); }
 .today-task-row.completed { opacity: .35; }
 .today-task-row.completed .task-name { text-decoration: line-through; }
+.task-suggestion { font-size: 11px; color: var(--accent); background: rgba(108,99,255,.08); border-left: 2px solid var(--accent); padding: 6px 10px 6px 8px; margin: 2px 0 4px 26px; border-radius: 0 6px 6px 0; line-height: 1.55; }
+.task-suggestion .ts-icon { margin-right: 4px; }
 .task-check { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--dim); background: none; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; color: transparent; transition: all .15s; padding: 0; }
 .task-check:hover { border-color: var(--accent); }
 .task-check.checked { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -213,6 +226,44 @@ a.today-card-project:hover { color: var(--accent); }
 .coming-card-task-row .task-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .coming-card-project { font-size: 9px; color: var(--dim); margin-top: 1px; }
 .coming-card-free { font-size: 12px; color: var(--dim); font-style: italic; }
+
+/* ── SETTINGS MODAL ── */
+.settings-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 9999; display: flex; align-items: center; justify-content: center; }
+.settings-modal { width: min(820px, 95vw); max-height: 85vh; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,.5); }
+.settings-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--card); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.settings-title { font-weight: 700; font-size: 14px; color: var(--text); }
+.settings-close { background: transparent; color: var(--dim); border: none; font-size: 16px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+.settings-close:hover { color: var(--text); background: rgba(255,255,255,.06); }
+.settings-body { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.settings-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--panel); }
+.settings-tab { padding: 9px 18px; font-size: 12px; font-weight: 600; color: var(--dim); cursor: pointer; border-bottom: 2px solid transparent; user-select: none; }
+.settings-tab:hover { color: var(--text); }
+.settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.settings-content { padding: 16px; overflow-y: auto; flex: 1; min-height: 240px; }
+.settings-btn { background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 7px 14px; cursor: pointer; font-size: 12px; font-weight: 600; margin-right: 8px; transition: border-color .15s, color .15s; }
+.settings-btn:hover { border-color: var(--accent); }
+.settings-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.settings-section-title { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .5px; margin: 0 0 10px; font-weight: 700; }
+.settings-hint { font-size: 11px; color: var(--dim); margin: 6px 0 14px; line-height: 1.5; }
+.people-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.people-row { display: grid; grid-template-columns: 140px 1fr 200px 28px; gap: 10px; align-items: center; padding: 7px 10px; border-bottom: 1px solid var(--border); background: var(--card); }
+.people-row:last-child { border-bottom: none; }
+.people-row .pname { font-weight: 600; color: var(--text); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.people-row input.pemail { background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 5px 8px; color: var(--text); font-size: 12px; outline: none; width: 100%; transition: border-color .15s; }
+.people-row input.pemail:focus { border-color: var(--accent); }
+.people-row .proles { font-size: 10px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.people-row .pdel { background: transparent; color: var(--dim); border: none; cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px; }
+.people-row .pdel:hover { color: #e07070; background: rgba(224,112,112,.08); }
+.people-empty { padding: 20px; color: var(--dim); text-align: center; font-size: 12px; background: var(--card); border-radius: 6px; border: 1px dashed var(--border); }
+.people-add { display: grid; grid-template-columns: 140px 1fr 160px auto; gap: 8px; margin-top: 14px; }
+.people-add input, .people-add select { background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 7px 10px; color: var(--text); font-size: 12px; outline: none; transition: border-color .15s; }
+.people-add input:focus, .people-add select:focus { border-color: var(--accent); }
+.people-merge { margin-top: 18px; padding: 12px 14px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; }
+.people-merge-title { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 10px; font-weight: 700; }
+.people-merge-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.people-merge select { background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 7px 10px; color: var(--text); font-size: 12px; outline: none; flex: 1; min-width: 120px; }
+.people-merge-arrow { color: var(--dim); font-size: 13px; }
+.data-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 </style>
 </head>
 
@@ -231,8 +282,25 @@ a.today-card-project:hover { color: var(--accent); }
     <input type="date" id="datePicker">
   </div>
   <div class="dash-spacer"></div>
-  <a href="team.html" class="dash-back">&#8592; Projects</a>
 </header>
+
+<!-- SETTINGS MODAL -->
+<div class="settings-overlay" id="settingsOverlay" style="display:none;">
+  <div class="settings-modal" id="settingsModal">
+    <div class="settings-header">
+      <span class="settings-title">⚙ Settings</span>
+      <button class="settings-close" id="settingsClose" title="Close">✕</button>
+    </div>
+    <div class="settings-body">
+      <div class="settings-tabs">
+        <div class="settings-tab active" data-settings-tab="data">Data</div>
+        <div class="settings-tab" data-settings-tab="people">People</div>
+      </div>
+      <div class="settings-content" id="settingsContent"></div>
+    </div>
+  </div>
+  <input type="file" id="importFileInput" accept=".json" style="display:none">
+</div>
 
 <!-- ── BODY ── -->
 <div class="dash-layout">
@@ -242,6 +310,12 @@ a.today-card-project:hover { color: var(--accent); }
       <input type="text" class="dash-search" id="personSearch" placeholder="Search people...">
     </div>
     <div class="dash-people" id="peopleList"></div>
+    <div class="data-migration">
+      <a href="guide.html" target="_blank" class="data-mig-btn" title="Open guide">❓ Help</a>
+      <a href="team.html" class="data-mig-btn" title="Projects & scheduler">📁 Projects</a>
+      <a href="ops.html" class="data-mig-btn" title="Ops mode — team workload view">📊 Ops</a>
+      <button class="data-mig-btn" id="btnSettings" title="Settings: import/export data, manage people">⚙ Settings</button>
+    </div>
   </aside>
   <!-- Main -->
   <main class="dash-main" id="dashMain">
@@ -290,6 +364,411 @@ function loadDashData() {
   if (!dashData.completions) dashData.completions = {};
   if (!dashData.subtasks) dashData.subtasks = {};
   if (!dashData.status) dashData.status = {};
+}
+
+// ── NAME HISTORY & PEOPLE EMAILS (synced via Firebase) ──
+let nameHistory = {};
+let peopleEmails = {};
+
+function saveNameHistory() {
+  if (!window._fb) return;
+  const { db, ref, set } = window._fb;
+  set(ref(db, 'prepro/nameHistory'), nameHistory).catch(err => console.error('saveNameHistory:', err));
+}
+function savePeopleEmails() {
+  if (!window._fb) return;
+  const { db, ref, set } = window._fb;
+  set(ref(db, 'prepro/peopleEmails'), peopleEmails).catch(err => console.error('savePeopleEmails:', err));
+}
+function setPersonEmail(name, email) {
+  const clean = (email || '').trim();
+  if (clean) peopleEmails[name] = clean;
+  else delete peopleEmails[name];
+  savePeopleEmails();
+}
+function getPersonEmail(name) { return peopleEmails[name] || ''; }
+
+window._dashReloadNameHistory = function(data) {
+  if (data && typeof data === 'object') nameHistory = data;
+  if (document.getElementById('settingsOverlay') && document.getElementById('settingsOverlay').style.display === 'flex') renderSettingsContent();
+};
+window._dashReloadPeopleEmails = function(data) {
+  if (data && typeof data === 'object') peopleEmails = data;
+  if (document.getElementById('settingsOverlay') && document.getElementById('settingsOverlay').style.display === 'flex') renderSettingsContent();
+};
+
+function collectAllPeople() {
+  const people = {};
+  const touch = (name, role) => {
+    if (!name) return;
+    if (!people[name]) people[name] = { name, email: peopleEmails[name] || '', roles: new Set() };
+    if (role) people[name].roles.add(role);
+  };
+  Object.entries(nameHistory || {}).forEach(([role, names]) => (names || []).forEach(n => touch(n, role)));
+  (state.projects || []).forEach(p => {
+    const roster = p.roster || {};
+    Object.entries(roster).forEach(([role, names]) => (names || []).forEach(n => touch(n, role)));
+  });
+  Object.keys(peopleEmails || {}).forEach(n => touch(n, null));
+  return Object.values(people).sort((a,b) => a.name.localeCompare(b.name));
+}
+
+function deletePersonEverywhere(name) {
+  Object.keys(nameHistory || {}).forEach(role => {
+    nameHistory[role] = (nameHistory[role] || []).filter(n => n !== name);
+  });
+  (state.projects || []).forEach(p => {
+    const roster = p.roster || {};
+    Object.keys(roster).forEach(role => {
+      roster[role] = (roster[role] || []).filter(n => n !== name);
+    });
+    (p.tasks || []).forEach(t => {
+      if (t.person === name) t.person = '';
+      if (Array.isArray(t.attendees)) t.attendees = t.attendees.filter(a => a.person !== name);
+    });
+  });
+  delete peopleEmails[name];
+  saveNameHistory();
+  savePeopleEmails();
+  saveState();
+}
+
+function mergePersonInto(from, into) {
+  if (!from || !into || from === into) return;
+  Object.keys(nameHistory || {}).forEach(role => {
+    const list = nameHistory[role] || [];
+    if (list.includes(from)) {
+      nameHistory[role] = list.filter(n => n !== from);
+      if (!nameHistory[role].includes(into)) nameHistory[role].push(into);
+    }
+  });
+  (state.projects || []).forEach(p => {
+    const roster = p.roster || {};
+    Object.keys(roster).forEach(role => {
+      const list = roster[role] || [];
+      if (list.includes(from)) {
+        roster[role] = list.filter(n => n !== from);
+        if (!roster[role].includes(into)) roster[role].push(into);
+      }
+    });
+    (p.tasks || []).forEach(t => {
+      if (t.person === from) t.person = into;
+      if (Array.isArray(t.attendees)) {
+        t.attendees.forEach(a => { if (a.person === from) a.person = into; });
+        const seen = new Set();
+        t.attendees = t.attendees.filter(a => {
+          const k = a.person + '|' + (a.role || '');
+          if (seen.has(k)) return false;
+          seen.add(k); return true;
+        });
+      }
+    });
+  });
+  if (!peopleEmails[into] && peopleEmails[from]) peopleEmails[into] = peopleEmails[from];
+  delete peopleEmails[from];
+  saveNameHistory();
+  savePeopleEmails();
+  saveState();
+}
+
+// ── SETTINGS MODAL ──
+let settingsActiveTab = 'data';
+
+function openSettings(tab) {
+  settingsActiveTab = tab || 'data';
+  document.querySelectorAll('.settings-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.settingsTab === settingsActiveTab);
+  });
+  document.getElementById('settingsOverlay').style.display = 'flex';
+  renderSettingsContent();
+}
+function closeSettings() {
+  document.getElementById('settingsOverlay').style.display = 'none';
+}
+
+function renderSettingsContent() {
+  const c = document.getElementById('settingsContent');
+  if (!c) return;
+  c.innerHTML = '';
+  if (settingsActiveTab === 'data') renderDataSettings(c);
+  else if (settingsActiveTab === 'people') renderPeopleSettings(c);
+}
+
+function renderDataSettings(c) {
+  const title = document.createElement('div');
+  title.className = 'settings-section-title';
+  title.textContent = 'Backup & Restore';
+  c.appendChild(title);
+
+  const actions = document.createElement('div');
+  actions.className = 'data-actions';
+  const expBtn = document.createElement('button');
+  expBtn.className = 'settings-btn primary';
+  expBtn.textContent = '⬇ Export Data';
+  expBtn.addEventListener('click', doExportData);
+  const impBtn = document.createElement('button');
+  impBtn.className = 'settings-btn';
+  impBtn.textContent = '⬆ Import Data';
+  impBtn.addEventListener('click', () => {
+    if (!confirm('Importing will merge projects from the file into your current data.\n\nProjects with the same ID will be overwritten. Continue?')) return;
+    document.getElementById('importFileInput').click();
+  });
+  actions.appendChild(expBtn);
+  actions.appendChild(impBtn);
+  c.appendChild(actions);
+
+  const hint = document.createElement('div');
+  hint.className = 'settings-hint';
+  hint.textContent = 'Export downloads a JSON backup of every project, name history, and saved emails. Import merges projects by ID (overwrites duplicates) and adds new names/emails.';
+  c.appendChild(hint);
+}
+
+function doExportData() {
+  const payload = {
+    version: 2,
+    exported: new Date().toISOString(),
+    prepro_data: JSON.stringify(state),
+    prepro_name_history: JSON.stringify(nameHistory),
+    prepro_people_emails: JSON.stringify(peopleEmails)
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'prepro-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function handleImportFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const payload = JSON.parse(e.target.result);
+      const rawData    = payload.prepro_data    || (payload.projects ? JSON.stringify(payload) : null);
+      const rawHistory = payload.prepro_name_history || null;
+      const rawEmails  = payload.prepro_people_emails || null;
+      if (!rawData) { alert('File doesn\'t look like a PRE-PRO backup.'); return; }
+
+      const incoming = JSON.parse(rawData);
+      if (!Array.isArray(incoming.projects)) { alert('No projects found in file.'); return; }
+
+      const idMap = new Map((state.projects || []).map(p => [p.id, p]));
+      incoming.projects.forEach(p => idMap.set(p.id, p));
+      state.projects = [...idMap.values()];
+      saveState();
+
+      if (rawHistory) {
+        try {
+          const inHist = JSON.parse(rawHistory);
+          Object.entries(inHist).forEach(([role, names]) => {
+            if (!nameHistory[role]) nameHistory[role] = [];
+            names.forEach(n => { if (!nameHistory[role].includes(n)) nameHistory[role].push(n); });
+          });
+          saveNameHistory();
+        } catch(_) {}
+      }
+      if (rawEmails) {
+        try {
+          const inEmails = JSON.parse(rawEmails);
+          Object.entries(inEmails).forEach(([name, email]) => {
+            if (!peopleEmails[name]) peopleEmails[name] = email;
+          });
+          savePeopleEmails();
+        } catch(_) {}
+      }
+
+      renderAll();
+      renderSettingsContent();
+      alert('Import complete — ' + incoming.projects.length + ' project(s) merged successfully.');
+    } catch(err) {
+      alert('Failed to read file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function renderPeopleSettings(c) {
+  const title = document.createElement('div');
+  title.className = 'settings-section-title';
+  title.textContent = 'People & Emails';
+  c.appendChild(title);
+
+  const hint = document.createElement('div');
+  hint.className = 'settings-hint';
+  hint.textContent = 'Add an email to any person to auto-fill the To: line when exporting meetings to Outlook. Deleting a person removes them from every project roster and unassigns their tasks. Merging moves all roles, rosters, and assignments from one person to another.';
+  c.appendChild(hint);
+
+  const people = collectAllPeople();
+  if (!people.length) {
+    const empty = document.createElement('div');
+    empty.className = 'people-empty';
+    empty.textContent = 'No people yet. Add one below.';
+    c.appendChild(empty);
+  } else {
+    const list = document.createElement('div');
+    list.className = 'people-list';
+    people.forEach(p => {
+      const row = document.createElement('div');
+      row.className = 'people-row';
+
+      const nm = document.createElement('div');
+      nm.className = 'pname';
+      nm.textContent = p.name;
+      nm.title = p.name;
+      row.appendChild(nm);
+
+      const emailInput = document.createElement('input');
+      emailInput.className = 'pemail';
+      emailInput.type = 'email';
+      emailInput.placeholder = 'email@example.com';
+      emailInput.value = p.email;
+      emailInput.addEventListener('blur', () => setPersonEmail(p.name, emailInput.value));
+      emailInput.addEventListener('keydown', e => { if (e.key === 'Enter') emailInput.blur(); });
+      row.appendChild(emailInput);
+
+      const rolesEl = document.createElement('div');
+      rolesEl.className = 'proles';
+      const rolesArr = Array.from(p.roles);
+      rolesEl.textContent = rolesArr.length ? rolesArr.join(', ') : '—';
+      rolesEl.title = rolesEl.textContent;
+      row.appendChild(rolesEl);
+
+      const del = document.createElement('button');
+      del.className = 'pdel';
+      del.textContent = '✕';
+      del.title = 'Delete ' + p.name + ' everywhere';
+      del.addEventListener('click', () => {
+        if (!confirm('Delete "' + p.name + '" from every project roster, unassign their tasks, and remove their email?\n\nThis cannot be undone.')) return;
+        deletePersonEverywhere(p.name);
+        renderSettingsContent();
+        renderAll();
+      });
+      row.appendChild(del);
+
+      list.appendChild(row);
+    });
+    c.appendChild(list);
+  }
+
+  const addTitle = document.createElement('div');
+  addTitle.className = 'settings-section-title';
+  addTitle.style.marginTop = '18px';
+  addTitle.textContent = 'Add Person';
+  c.appendChild(addTitle);
+
+  const addRow = document.createElement('div');
+  addRow.className = 'people-add';
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.placeholder = 'Name';
+  const emailInput = document.createElement('input');
+  emailInput.type = 'email';
+  emailInput.placeholder = 'email@example.com (optional)';
+  const roleSel = document.createElement('select');
+  const defaultOpt = document.createElement('option');
+  defaultOpt.value = ''; defaultOpt.textContent = 'Role (optional)';
+  roleSel.appendChild(defaultOpt);
+  ROLE_CATS.flatMap(cat => cat.roles).filter(r => r !== 'Other').forEach(r => {
+    const o = document.createElement('option');
+    o.value = r; o.textContent = r;
+    roleSel.appendChild(o);
+  });
+  const addBtn = document.createElement('button');
+  addBtn.className = 'settings-btn primary';
+  addBtn.textContent = '+ Add';
+  addBtn.addEventListener('click', () => {
+    const n = nameInput.value.trim();
+    if (!n) { nameInput.focus(); return; }
+    const role = roleSel.value;
+    const targetRole = role || ROLE_CATS[0].roles[0];
+    if (!nameHistory[targetRole]) nameHistory[targetRole] = [];
+    if (!nameHistory[targetRole].includes(n)) nameHistory[targetRole].push(n);
+    saveNameHistory();
+    const em = emailInput.value.trim();
+    if (em) { peopleEmails[n] = em; savePeopleEmails(); }
+    nameInput.value = ''; emailInput.value = ''; roleSel.value = '';
+    renderSettingsContent();
+  });
+  nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') addBtn.click(); });
+  emailInput.addEventListener('keydown', e => { if (e.key === 'Enter') addBtn.click(); });
+  addRow.appendChild(nameInput);
+  addRow.appendChild(emailInput);
+  addRow.appendChild(roleSel);
+  addRow.appendChild(addBtn);
+  c.appendChild(addRow);
+
+  if (people.length >= 2) {
+    const merge = document.createElement('div');
+    merge.className = 'people-merge';
+    const mt = document.createElement('div');
+    mt.className = 'people-merge-title';
+    mt.textContent = 'Merge Duplicates';
+    merge.appendChild(mt);
+    const mrow = document.createElement('div');
+    mrow.className = 'people-merge-row';
+    const fromSel = document.createElement('select');
+    const intoSel = document.createElement('select');
+    [fromSel, intoSel].forEach((sel, i) => {
+      const def = document.createElement('option');
+      def.value = ''; def.textContent = i === 0 ? 'Merge…' : 'into…';
+      sel.appendChild(def);
+      people.forEach(p => {
+        const o = document.createElement('option');
+        o.value = p.name; o.textContent = p.name;
+        sel.appendChild(o);
+      });
+    });
+    const arrow = document.createElement('span');
+    arrow.className = 'people-merge-arrow';
+    arrow.textContent = '→';
+    const mbtn = document.createElement('button');
+    mbtn.className = 'settings-btn';
+    mbtn.textContent = 'Merge';
+    mbtn.addEventListener('click', () => {
+      const from = fromSel.value, into = intoSel.value;
+      if (!from || !into) { alert('Choose both a source and a target person.'); return; }
+      if (from === into) { alert('Source and target must be different.'); return; }
+      if (!confirm('Merge "' + from + '" into "' + into + '"?\n\nAll roles, roster memberships, tasks, and attendee entries for "' + from + '" will be reassigned to "' + into + '".')) return;
+      mergePersonInto(from, into);
+      renderSettingsContent();
+      renderAll();
+    });
+    mrow.appendChild(fromSel);
+    mrow.appendChild(arrow);
+    mrow.appendChild(intoSel);
+    mrow.appendChild(mbtn);
+    merge.appendChild(mrow);
+    c.appendChild(merge);
+  }
+}
+
+function wireSettingsModal() {
+  const btn = document.getElementById('btnSettings');
+  if (btn) btn.addEventListener('click', () => openSettings('data'));
+  const closeBtn = document.getElementById('settingsClose');
+  if (closeBtn) closeBtn.addEventListener('click', closeSettings);
+  const overlay = document.getElementById('settingsOverlay');
+  if (overlay) overlay.addEventListener('click', e => { if (e.target === overlay) closeSettings(); });
+  document.querySelectorAll('.settings-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      settingsActiveTab = tab.dataset.settingsTab;
+      document.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('active', t === tab));
+      renderSettingsContent();
+    });
+  });
+  const fileInput = document.getElementById('importFileInput');
+  if (fileInput) {
+    fileInput.addEventListener('change', function() {
+      const file = this.files[0];
+      if (!file) return;
+      handleImportFile(file);
+      this.value = '';
+    });
+  }
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.getElementById('settingsOverlay').style.display === 'flex') closeSettings();
+  });
 }
 
 window._dashReloadState = function(data) {
@@ -461,6 +940,9 @@ loadState();
 loadDashData();
 if (window._fbState) window._dashReloadState(window._fbState);
 if (window._fbDashData) window._dashReloadDashData(window._fbDashData);
+if (window._fbNameHistory) window._dashReloadNameHistory(window._fbNameHistory);
+if (window._fbPeopleEmails) window._dashReloadPeopleEmails(window._fbPeopleEmails);
+wireSettingsModal();
 
 // ── DATE UTILITIES ──
 function fmtDate(y, m, d) {
@@ -767,6 +1249,180 @@ function renderEffortBar() {
 }
 
 // ── TODAY SECTION ──
+// ── SEQUENCE-AWARE SUGGESTIONS ──
+// For a given task today, detect a concrete "what's next" pattern and emit
+// a one-sentence question. Always a question (not instruction) to keep
+// confidence low and trust high. Silent rather than generic.
+function daysBetween(dateA, dateB) {
+  if (!dateA || !dateB) return null;
+  const a = new Date(dateA + 'T00:00:00');
+  const b = new Date(dateB + 'T00:00:00');
+  return Math.round((b - a) / 86400000);
+}
+function fmtDayShort(dateStr, today) {
+  const n = daysBetween(today, dateStr);
+  if (n === 0) return 'today';
+  if (n === 1) return 'tomorrow';
+  if (n === -1) return 'yesterday';
+  if (n > 0 && n <= 7) return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' });
+  if (n < 0 && n >= -7) return 'last ' + new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' });
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function buildTaskContext(task, personName, dateStr, proj) {
+  const today = dateStr;
+  const lp = (personName || '').toLowerCase();
+  const isForPerson = t => t.person === personName
+    || (t.attendees || []).some(a => a.person === personName);
+  const isPTOForPerson = t => t.isDueDate && t.milestoneType === 'pto' && (
+    (t.attendees || []).some(a => a.person && a.person.toLowerCase() === lp)
+    || (t.taskName && t.taskName.toLowerCase().includes(lp))
+  );
+
+  const allTasks = (proj.tasks || []).filter(t => t.id !== task.id);
+  const past = allTasks.filter(t => t.date && t.date < today).sort((a,b) => b.date.localeCompare(a.date));
+  const future = allTasks.filter(t => t.date && t.date > today).sort((a,b) => a.date.localeCompare(b.date));
+
+  const prev = past.find(isForPerson);
+  const next = future.find(t => !t.isReview && !t.isDueDate);
+  const nextReview = future.find(t => t.isReview && daysBetween(today, t.date) <= 7);
+  const nextShoot = future.find(t => {
+    const lbl = (t.reviewLabel || '').toLowerCase();
+    return lbl.includes('shoot') && daysBetween(today, t.date) <= 7;
+  });
+  const nextKeyDate = future.find(t => {
+    if (!t.isDueDate || t.milestoneType === 'pto') return false;
+    return daysBetween(today, t.date) <= 7;
+  });
+  const personPTO = future.find(t => isPTOForPerson(t) && daysBetween(today, t.date) <= 5);
+
+  const recentNotes = (proj.notes || []).filter(n => {
+    if (!n || !n.date) return false;
+    if (!['delay','blocker','direction','feedback'].includes(n.type)) return false;
+    const d = daysBetween(n.date, today);
+    return d !== null && d >= 0 && d <= 7;
+  }).sort((a,b) => b.date.localeCompare(a.date));
+
+  const lastTouched = prev ? daysBetween(prev.date, today) : null;
+
+  const pastIncomplete = past.filter(t => isForPerson(t) && !isTaskDone(t.id) && !t.isDueDate).length;
+
+  return { prev, next, nextReview, nextShoot, nextKeyDate, personPTO, recentNotes, lastTouched, pastIncomplete };
+}
+
+function findHeavyReviewer(reviewTask) {
+  const attendees = reviewTask.attendees || [];
+  for (const a of attendees) {
+    if (!a.person) continue;
+    const pts = getDayWorkload(a.person, reviewTask.date);
+    if (pts >= 4) return a.person;
+  }
+  return null;
+}
+
+function patternPTOHandoff(task, personName, dateStr, proj, ctx) {
+  if (!ctx.personPTO || !ctx.next) return null;
+  if (daysBetween(dateStr, ctx.personPTO.date) > 3) return null;
+  if (!ctx.next.person || ctx.next.person === personName) return null;
+  if (ctx.next.date < ctx.personPTO.date) return null;
+  const ptoDay = fmtDayShort(ctx.personPTO.date, dateStr);
+  const nextDay = fmtDayShort(ctx.next.date, dateStr);
+  const nextName = ctx.next.taskName || ctx.next.role || 'the next task';
+  return `You're out ${ptoDay}. ${ctx.next.person} picks up ${nextName} ${nextDay} — drop them a note before you sign off?`;
+}
+
+function patternShootApproaching(task, personName, dateStr, proj, ctx) {
+  if (!ctx.nextShoot) return null;
+  const n = daysBetween(dateStr, ctx.nextShoot.date);
+  if (n > 3) return null;
+  const lbl = (ctx.nextShoot.reviewLabel || '').toLowerCase();
+  const shootType = lbl.includes('on-location') ? 'On-location shoot' : 'Studio shoot';
+  const day = fmtDayShort(ctx.nextShoot.date, dateStr);
+  return `${shootType} ${day} — has the shotlist and call sheet gone out to the crew?`;
+}
+
+function patternKeyDateApproaching(task, personName, dateStr, proj, ctx) {
+  if (!ctx.nextKeyDate) return null;
+  if (daysBetween(dateStr, ctx.nextKeyDate.date) > 3) return null;
+  const type = ctx.nextKeyDate.milestoneType;
+  const label = type === 'delivery' ? 'Delivery' : type === 'due-date' ? 'Project due' : 'Milestone';
+  const day = fmtDayShort(ctx.nextKeyDate.date, dateStr);
+  return `${label} lands ${day} — is today's work on the critical path?`;
+}
+
+function patternReviewApproaching(task, personName, dateStr, proj, ctx) {
+  if (!ctx.nextReview) return null;
+  if (daysBetween(dateStr, ctx.nextReview.date) > 3) return null;
+  const day = fmtDayShort(ctx.nextReview.date, dateStr);
+  const reviewLabel = ctx.nextReview.reviewLabel || 'Review';
+  const heavy = findHeavyReviewer(ctx.nextReview);
+  if (heavy && heavy !== personName) {
+    return `${reviewLabel} ${day}. ${heavy} has a heavy load that day — send early if you can?`;
+  }
+  return `${reviewLabel} ${day} — is today's draft the version you want stakeholders seeing?`;
+}
+
+function patternHandoffToNext(task, personName, dateStr, proj, ctx) {
+  if (!ctx.next) return null;
+  if (!ctx.next.person || ctx.next.person === personName) return null;
+  const taskEnd = task.endDate || task.date;
+  const gap = daysBetween(taskEnd, ctx.next.date);
+  if (gap === null || gap > 2) return null;
+  const day = fmtDayShort(ctx.next.date, dateStr);
+  const nextName = ctx.next.taskName || ctx.next.role || 'their work';
+  return `${ctx.next.person} starts ${nextName} ${day} — anything they should know before diving in?`;
+}
+
+function patternRecentNote(task, personName, dateStr, proj, ctx) {
+  if (!ctx.recentNotes.length) return null;
+  const note = ctx.recentNotes[0];
+  const daysAgo = daysBetween(note.date, dateStr);
+  if (daysAgo > 3) return null;
+  const typeLabel = { delay: 'delay', blocker: 'blocker', direction: 'scope change', feedback: 'feedback' }[note.type] || note.type;
+  const emoji = note.emoji || '📋';
+  const author = note.person || 'Someone';
+  const when = daysAgo === 0 ? 'today' : daysAgo === 1 ? 'yesterday' : `${daysAgo} days ago`;
+  return `${emoji} ${author} flagged a ${typeLabel} ${when} — does today's task still fit?`;
+}
+
+function patternDrought(task, personName, dateStr, proj, ctx) {
+  if (ctx.lastTouched == null) return null;
+  if (ctx.lastTouched <= 14) return null;
+  const weeks = Math.round(ctx.lastTouched / 7);
+  return `First time back on ${proj.name} in ${weeks} week${weeks === 1 ? '' : 's'} — worth a quick resync with the producer before starting?`;
+}
+
+function patternStalledCluster(task, personName, dateStr, proj, ctx) {
+  if (ctx.pastIncomplete < 3) return null;
+  return `${ctx.pastIncomplete} tasks on ${proj.name} are past their scheduled date — re-scope any today?`;
+}
+
+function getTaskSuggestion(task, personName, dateStr) {
+  if (!task || !personName || !dateStr) return null;
+  if (task.isDueDate) return null; // don't suggest on PTO/milestones/due dates themselves
+  if (isTaskDone(task.id)) return null;
+  const proj = (state.projects || []).find(p => p.id === task.projectId);
+  if (!proj) return null;
+
+  const ctx = buildTaskContext(task, personName, dateStr, proj);
+
+  const patterns = [
+    patternPTOHandoff,
+    patternShootApproaching,
+    patternKeyDateApproaching,
+    patternReviewApproaching,
+    patternHandoffToNext,
+    patternRecentNote,
+    patternDrought,
+    patternStalledCluster,
+  ];
+  for (const p of patterns) {
+    const text = p(task, personName, dateStr, proj, ctx);
+    if (text) return text;
+  }
+  return null;
+}
+
 function renderTodaySection() {
   const section = document.createElement('div');
   section.className = 'today-hero';
@@ -874,6 +1530,15 @@ function renderTodaySection() {
       row.appendChild(noteBtn);
 
       block.appendChild(row);
+
+      // Sequence-aware suggestion — one per task, question-framed
+      const suggestion = getTaskSuggestion(task, selectedPerson, selectedDate);
+      if (suggestion) {
+        const sugRow = document.createElement('div');
+        sugRow.className = 'task-suggestion';
+        sugRow.innerHTML = `<span class="ts-icon">💡</span>${esc(suggestion)}`;
+        block.appendChild(sugRow);
+      }
 
       // Subtasks area
       const subArea = document.createElement('div');

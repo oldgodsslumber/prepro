@@ -389,6 +389,12 @@
     <h2>How it works</h2>
     <div class="diagram">
       <div class="dia-box">
+        <div class="dia-icon">⚙</div>
+        <div class="dia-label">Add People</div>
+        <div class="dia-sub">Settings → People</div>
+      </div>
+      <div class="dia-arrow">→</div>
+      <div class="dia-box">
         <div class="dia-icon">📁</div>
         <div class="dia-label">Create a Project</div>
         <div class="dia-sub">One per video</div>
@@ -396,7 +402,7 @@
       <div class="dia-arrow">→</div>
       <div class="dia-box">
         <div class="dia-icon">👥</div>
-        <div class="dia-label">Add Your Team</div>
+        <div class="dia-label">Assign Roster</div>
         <div class="dia-sub">Role Assignees tab</div>
       </div>
       <div class="dia-arrow">→</div>
@@ -408,16 +414,17 @@
       <div class="dia-arrow">→</div>
       <div class="dia-box">
         <div class="dia-icon">📊</div>
-        <div class="dia-label">Review in Ops</div>
-        <div class="dia-sub">Gantt + workload</div>
+        <div class="dia-label">Review</div>
+        <div class="dia-sub">Ops & Dashboard</div>
       </div>
       <div class="dia-arrow">→</div>
       <div class="dia-box">
         <div class="dia-icon">📤</div>
         <div class="dia-label">Export</div>
-        <div class="dia-sub">Text, Excel, PNG…</div>
+        <div class="dia-sub">Text · PNG · Invites</div>
       </div>
     </div>
+    <p style="margin-top:22px;">Every page — Projects, Ops, Dashboard — has a <strong>⚙ Settings</strong> button in the lower-left, plus quick links to jump between views.</p>
   </div>
 
   <!-- 3. NEW PROJECT -->
@@ -450,31 +457,68 @@
     </div>
   </div>
 
-  <!-- 4. ROLE ASSIGNEES -->
+  <!-- 4. PEOPLE DIRECTORY -->
   <div class="slide">
     <div class="slide-label">Step 2</div>
-    <h2>Set Up Role Assignees</h2>
-    <p>Open the <strong>Export Schedule</strong> panel at the bottom, then click the <strong>Role Assignees</strong> tab. Each project gets its own team.</p>
+    <h2>Add People in Settings</h2>
+    <p>All team members live in one global directory. Open <strong>⚙ Settings</strong> (lower-left on every page) and switch to the <strong>People</strong> tab.</p>
     <div class="steps">
       <div class="step">
-        <div class="step-num">1</div>
+        <div class="step-num">➕</div>
         <div class="step-body">
-          <div class="step-title">Click a suggested name</div>
-          <div class="step-desc">Dashed chips show everyone who's ever been on a project. Click to add them to this one instantly.</div>
+          <div class="step-title">Add a person</div>
+          <div class="step-desc">Type a name, optionally an email and role, then click <strong>+ Add</strong>. They're now available for every project.</div>
         </div>
       </div>
       <div class="step">
-        <div class="step-num">2</div>
+        <div class="step-num">✉</div>
         <div class="step-body">
-          <div class="step-title">Or type a new name</div>
-          <div class="step-desc">Type in the "Add name…" box and press Enter. Focus stays so you can keep adding quickly.</div>
+          <div class="step-title">Connect an email</div>
+          <div class="step-desc">Edit the email field on any person row. When you export a meeting to Outlook, anyone with an email is added automatically to the <strong>To:</strong> line.</div>
         </div>
       </div>
       <div class="step">
-        <div class="step-num">3</div>
+        <div class="step-num">🔀</div>
         <div class="step-body">
-          <div class="step-title">Names become draggable chips</div>
-          <div class="step-desc">Anyone added to a role appears as a <strong>People chip</strong> in the palette — drag them straight onto a calendar day to skip typing their name.</div>
+          <div class="step-title">Merge duplicates</div>
+          <div class="step-desc">Use the <strong>Merge Duplicates</strong> picker to fold one name into another. Every roster, task, and attendee entry is reassigned automatically.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">🗑</div>
+        <div class="step-body">
+          <div class="step-title">Delete a person</div>
+          <div class="step-desc">The ✕ on a person row removes them from every project roster, unassigns their tasks, and clears their email. Irreversible.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. ROLE ASSIGNEES -->
+  <div class="slide">
+    <div class="slide-label">Step 3</div>
+    <h2>Assign a Roster to the Project</h2>
+    <p>Open the <strong>Schedule Tools</strong> panel at the bottom, then click the <strong>Role Assignees</strong> tab. Each project picks its team from the global directory.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">➕</div>
+        <div class="step-body">
+          <div class="step-title">Click a suggestion to assign</div>
+          <div class="step-desc">Dashed "+ Name" chips list everyone available for each role. Click to add them to this project.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">✕</div>
+        <div class="step-body">
+          <div class="step-title">Click an assigned chip to unassign</div>
+          <div class="step-desc">Solid chips are on the project. Click to remove them from this project's roster (they stay in the directory).</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">⚙</div>
+        <div class="step-body">
+          <div class="step-title">Manage People shortcut</div>
+          <div class="step-desc">The <strong>⚙ Manage People</strong> button at the top of the panel jumps straight into Settings → People if you need to add, edit, or merge someone globally.</div>
         </div>
       </div>
     </div>
@@ -615,7 +659,7 @@
         <div class="dia-sub">Heavy lift</div>
       </div>
     </div>
-    <p style="margin-top: 18px;">Effort shows as a dot on the task chip and feeds into the Planyway export.</p>
+    <p style="margin-top: 18px;">Effort shows as a dot on the task chip and feeds into the Trello export.</p>
   </div>
 
   <!-- 10. NAVIGATION -->
@@ -651,42 +695,70 @@
   <div class="slide">
     <div class="slide-label">Ops Mode</div>
     <h2>The Ops Page</h2>
-    <p>Click <strong>Ops</strong> in the bottom-left of the scheduler to open the team operations view. Ops gives you a birds-eye view of workload across all projects.</p>
+    <p>Click <strong>📊 Ops</strong> in the lower-left nav to open the team operations view. Ops has three view modes — switch with the tabs in the header.</p>
     <div class="diagram">
       <div class="dia-box">
-        <div class="dia-icon">📊</div>
-        <div class="dia-label">Workload Table</div>
-        <div class="dia-sub">Tasks per role, per project</div>
+        <div class="dia-icon">👀</div>
+        <div class="dia-label">Heads Up</div>
+        <div class="dia-sub">Next 5 business days</div>
       </div>
-      <div class="dia-arrow">→</div>
+      <div class="dia-arrow">·</div>
       <div class="dia-box">
         <div class="dia-icon">🗓</div>
-        <div class="dia-label">Gantt Timeline</div>
-        <div class="dia-sub">By Person, horizontally</div>
+        <div class="dia-label">By Person</div>
+        <div class="dia-sub">Gantt swim lanes</div>
+      </div>
+      <div class="dia-arrow">·</div>
+      <div class="dia-box">
+        <div class="dia-icon">🎬</div>
+        <div class="dia-label">Studio</div>
+        <div class="dia-sub">Shoot schedule</div>
       </div>
     </div>
-    <div class="steps" style="margin-top: 16px;">
+    <p style="margin-top:22px;">The <strong>Team Workload</strong> panel at the bottom is always visible. It summarises who's doing what, and you can switch it between role <strong>Categories</strong> and individual <strong>Tasks</strong>.</p>
+  </div>
+
+  <!-- 12. HEADS UP VIEW -->
+  <div class="slide">
+    <div class="slide-label">Ops Mode</div>
+    <h2>Heads Up — Next 5 Business Days</h2>
+    <p>A single-scroll briefing of everything the team needs to know about the week ahead. Grouped by urgency.</p>
+    <div class="steps">
       <div class="step">
-        <div class="step-num">🔍</div>
+        <div class="step-num">🎬</div>
         <div class="step-body">
-          <div class="step-title">Filter by project and team member</div>
-          <div class="step-desc">Use the filter chips at the top to focus on specific projects or people. <strong>All / None</strong> buttons let you toggle everything at once.</div>
+          <div class="step-title">Upcoming Shoots</div>
+          <div class="step-desc">Studio & on-location shoots on the horizon, with the producer and crew attached.</div>
         </div>
       </div>
       <div class="step">
-        <div class="step-num">🏷</div>
+        <div class="step-num">📝</div>
         <div class="step-body">
-          <div class="step-title">Categories vs. Tasks toggle</div>
-          <div class="step-desc">Switch between a summary view (role <strong>Categories</strong>) and the full task list (<strong>Tasks</strong>) in the workload table.</div>
+          <div class="step-title">Upcoming Reviews</div>
+          <div class="step-desc">Every scheduled review, the project it belongs to, and who's expected on the call.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">🎯</div>
+        <div class="step-body">
+          <div class="step-title">Milestones &amp; Deliveries</div>
+          <div class="step-desc">Project due dates, milestones, and delivery hand-offs coming up this week.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">🏖</div>
+        <div class="step-body">
+          <div class="step-title">Team PTO</div>
+          <div class="step-desc">Who's out, and when they're back — consolidated into a single card so nothing gets missed.</div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- 12. GANTT TIMELINE -->
+  <!-- 13. BY PERSON (GANTT) -->
   <div class="slide">
     <div class="slide-label">Ops Mode</div>
-    <h2>The Gantt Timeline</h2>
+    <h2>By Person — Gantt Timeline</h2>
     <p>The timeline shows <strong>each person as a swim lane</strong>, with task bars stretching across the days they're working. Scroll left and right to move through time.</p>
     <!-- Mini Gantt mockup -->
     <div class="gantt-mock">
@@ -727,33 +799,96 @@
     </div>
     <div class="steps" style="margin-top: 14px;">
       <div class="step">
+        <div class="step-num">🏷</div>
+        <div class="step-body">
+          <div class="step-title">Categories vs Tasks</div>
+          <div class="step-desc">Flip bar labels between role <strong>Categories</strong> (abbreviated) and full <strong>Task</strong> names.</div>
+        </div>
+      </div>
+      <div class="step">
         <div class="step-num">±</div>
         <div class="step-body">
           <div class="step-title">Zoom in / out</div>
-          <div class="step-desc">Use the <strong>− / +</strong> buttons to change how wide each day column is. Six zoom levels from very compressed to fully expanded.</div>
+          <div class="step-desc">Six zoom levels change how wide each day column is — compress to see months, expand to see the detail.</div>
         </div>
       </div>
       <div class="step">
         <div class="step-num">Sa</div>
         <div class="step-body">
           <div class="step-title">Weekend toggle</div>
-          <div class="step-desc">Show or hide weekend columns. The timeline recentres on the same date automatically — your position is preserved.</div>
+          <div class="step-desc">Show or hide weekend columns. The timeline recentres on the same date — your position is preserved.</div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- 13. EXPORTING -->
+  <!-- 14. STUDIO VIEW -->
+  <div class="slide">
+    <div class="slide-label">Ops Mode</div>
+    <h2>Studio View — Shoot Schedule</h2>
+    <p>A calendar filtered to <strong>studio &amp; on-location shoots only</strong>, each shoot card showing the full crew attached to it.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">🎬</div>
+        <div class="step-body">
+          <div class="step-title">Producer + Crew at a glance</div>
+          <div class="step-desc">Every shoot shows the project, producer, and attached crew. Useful for studio booking and gear prep.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">⏱</div>
+        <div class="step-body">
+          <div class="step-title">Countdown + duration</div>
+          <div class="step-desc">Shoots display how many days out they are and how long they run — so the closest ones stand out.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 15. DASHBOARD -->
+  <div class="slide">
+    <div class="slide-label">Dashboard</div>
+    <h2>The Personal Dashboard</h2>
+    <p>Click <strong>📋 Dash</strong> in the lower-left nav. Select a person on the left, and their day is laid out on the right — tailored for the individual.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">📅</div>
+        <div class="step-body">
+          <div class="step-title">Today &amp; Coming Up</div>
+          <div class="step-desc">What's on this person's plate today, plus a rolling look at the next few days. Click any project title to jump back into the schedule.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">🚦</div>
+        <div class="step-body">
+          <div class="step-title">Per-project status</div>
+          <div class="step-desc">Behind / On track / Ahead segments let the person self-report where each project stands. Updates sync across the team.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">🔎</div>
+        <div class="step-body">
+          <div class="step-title">Date picker + search</div>
+          <div class="step-desc">Jump to any date with the header picker, or filter the sidebar with the search box to find a teammate quickly.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 16. SCHEDULE TOOLS -->
   <div class="slide">
     <div class="slide-label">Step 4</div>
-    <h2>Exporting Your Schedule</h2>
-    <p>The <strong>Export Schedule</strong> panel at the bottom has five tabs. Your last-used tab is remembered between sessions.</p>
+    <h2>Schedule Tools Panel</h2>
+    <p>The <strong>Schedule Tools</strong> panel at the bottom has tabs for every way you'll share the schedule. Your last-used tab is remembered between sessions.</p>
     <div class="mock-tabs">
       <div class="mock-tab on">Text</div>
       <div class="mock-tab">Table / Excel</div>
       <div class="mock-tab">PNG</div>
       <div class="mock-tab">Trello Export</div>
       <div class="mock-tab">Role Assignees</div>
+      <div class="mock-tab">📅 Invites</div>
+      <div class="mock-tab">🌐 Invite Web</div>
+      <div class="mock-tab">📝 Notes</div>
     </div>
     <div class="mock-tab-body">
       <strong style="color:var(--text);">Text</strong> — Formatted schedule ready to paste into email, Slack, or Word.<br>
@@ -761,7 +896,7 @@
     </div>
   </div>
 
-  <!-- 14. EXPORT TABS -->
+  <!-- 17. EXPORT TABS -->
   <div class="slide">
     <div class="slide-label">Step 4 continued</div>
     <h2>Export Tab Details</h2>
@@ -797,31 +932,116 @@
     </div>
   </div>
 
-  <!-- 15. ROLE ASSIGNEES TAB -->
+  <!-- 18. INVITES / OUTLOOK -->
   <div class="slide">
     <div class="slide-label">Step 4 continued</div>
-    <h2>Role Assignees Tab</h2>
-    <p>The <strong>Role Assignees</strong> tab in the Export panel is where you build the team for each project. It's separate from the export tools — think of it as project setup.</p>
+    <h2>Outlook Invites</h2>
+    <p>Send a real Outlook meeting with the full roster in the To: line. Every review, shoot, kickoff, and key date shows up here automatically.</p>
     <div class="steps">
       <div class="step">
-        <div class="step-num">👤</div>
+        <div class="step-num">🌐</div>
         <div class="step-body">
-          <div class="step-title">Add people per role</div>
-          <div class="step-desc">Each role (Producer, Editor, etc.) has its own input. Type a name and press Enter — they're added to this project's roster immediately.</div>
+          <div class="step-title">Invite Web — open in Outlook Web</div>
+          <div class="step-desc">Click <strong>🌐 Open</strong> next to any meeting. A new tab pre-fills the subject, time, location (project name), and <strong>To:</strong> line with every attendee who has an email on file.</div>
         </div>
       </div>
       <div class="step">
-        <div class="step-num">⚡</div>
+        <div class="step-num">📅</div>
         <div class="step-body">
-          <div class="step-title">Suggested names</div>
-          <div class="step-desc">Dashed chip buttons show names from previous projects. Click any suggestion to add them instantly — no typing needed.</div>
+          <div class="step-title">Invites — download .ics</div>
+          <div class="step-desc">Download a single .ics file or <strong>all</strong> of them at once. Each event includes ATTENDEE entries for people with emails, so Outlook adds them as proper invitees on import.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">✉</div>
+        <div class="step-body">
+          <div class="step-title">Missing someone on the To: line?</div>
+          <div class="step-desc">Open <strong>⚙ Settings → People</strong> and add their email. Next export picks it up automatically.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 19. NOTES -->
+  <div class="slide">
+    <div class="slide-label">Step 4 continued</div>
+    <h2>Project Notes</h2>
+    <p>The <strong>📝 Notes</strong> tab is a timeline of important things that happened on the project — shared with the whole team.</p>
+    <div class="chips" style="margin-top: 14px; gap: 6px;">
+      <div class="chip gray">📋 Update</div>
+      <div class="chip orange">⏳ Delay</div>
+      <div class="chip purple">🔀 Change in Direction</div>
+      <div class="chip blue">💬 Feedback</div>
+      <div class="chip red">🚧 Blocker</div>
+      <div class="chip green">✅ Decision</div>
+      <div class="chip gray">👥 Team Change</div>
+    </div>
+    <div class="steps" style="margin-top: 18px;">
+      <div class="step">
+        <div class="step-num">✍</div>
+        <div class="step-body">
+          <div class="step-title">Post anything the team should know</div>
+          <div class="step-desc">Pick a note type, type what happened, and post. Newest notes show at the top of the feed.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">📡</div>
+        <div class="step-body">
+          <div class="step-title">Synced across the team</div>
+          <div class="step-desc">Notes live with the project and are visible to anyone with access. Auto-generated system events also appear here for context.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 20. ROLE ASSIGNEES TAB -->
+  <div class="slide">
+    <div class="slide-label">Step 4 continued</div>
+    <h2>Role Assignees Tab</h2>
+    <p>The <strong>Role Assignees</strong> tab is where you pick this project's team from the global directory. It's project setup, not export.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">➕</div>
+        <div class="step-body">
+          <div class="step-title">Click a "+ Name" chip to assign</div>
+          <div class="step-desc">Dashed chips list everyone available for each role. One click adds them to this project.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">✕</div>
+        <div class="step-body">
+          <div class="step-title">Click an assigned chip to remove</div>
+          <div class="step-desc">Removes them from this project's roster only — their directory entry and other projects are untouched.</div>
         </div>
       </div>
       <div class="step">
         <div class="step-num">🎯</div>
         <div class="step-body">
           <div class="step-title">Roster drives the palette</div>
-          <div class="step-desc">Names you add here become <strong>People chips</strong> in the palette. Drag a chip onto any task to assign that person in one move.</div>
+          <div class="step-desc">Anyone on the roster appears as a <strong>People chip</strong> in the palette — drag a chip onto any day to assign them to a task in one move.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 21. SETTINGS MENU -->
+  <div class="slide">
+    <div class="slide-label">Settings</div>
+    <h2>The Settings Menu</h2>
+    <p>The <strong>⚙ Settings</strong> button sits in the lower-left on every page. It has two tabs.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">💾</div>
+        <div class="step-body">
+          <div class="step-title">Data — Backup &amp; Restore</div>
+          <div class="step-desc"><strong>Export Data</strong> downloads a JSON snapshot of every project, name history, and saved emails. <strong>Import Data</strong> merges a snapshot back in (projects with matching IDs are overwritten).</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">👥</div>
+        <div class="step-body">
+          <div class="step-title">People — Directory</div>
+          <div class="step-desc">One row per person, showing their name, email, and the roles they've been used in. Add, edit emails inline, delete globally, or merge duplicates into a single entry.</div>
         </div>
       </div>
     </div>
@@ -856,15 +1076,15 @@
     </div>
   </div>
 
-  <!-- 17. DONE -->
+  <!-- 23. DONE -->
   <div class="slide">
     <div class="slide-label">You're ready</div>
     <h1>That's it.</h1>
     <div class="hero-rule"></div>
-    <p>Create project → Add team → Drag tasks → Review in Ops → Export.</p>
-    <p style="margin-top:10px;">Questions? Ask your producer or right-click anything on the calendar for quick options.</p>
+    <p>Add people → Create project → Assign roster → Drag tasks → Review in Ops/Dash → Export &amp; send invites.</p>
+    <p style="margin-top:10px;">Questions? Ask your producer, or right-click anything on the calendar for quick options.</p>
     <div style="margin-top: 32px;">
-      <a href="index.html" class="go-btn">Go to the PRE-PRO Scheduler →</a>
+      <a href="team.html" class="go-btn">Go to the PRE-PRO Scheduler →</a>
     </div>
   </div>
 

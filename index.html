@@ -59,6 +59,46 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .data-migration { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--border); flex-shrink: 0; }
 .data-mig-btn { flex: 1; font-size: 10px; font-weight: 600; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 5px 4px; cursor: pointer; transition: color .15s, border-color .15s; text-align: center; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
 .data-mig-btn:hover { color: var(--text); border-color: var(--accent); }
+
+/* ── SETTINGS MODAL ── */
+.settings-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 9999; display: flex; align-items: center; justify-content: center; }
+.settings-modal { width: min(820px, 95vw); max-height: 85vh; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,.5); }
+.settings-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--card); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.settings-title { font-weight: 700; font-size: 14px; color: var(--text); }
+.settings-close { background: transparent; color: var(--dim); border: none; font-size: 16px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+.settings-close:hover { color: var(--text); background: rgba(255,255,255,.06); }
+.settings-body { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.settings-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--panel); }
+.settings-tab { padding: 9px 18px; font-size: 12px; font-weight: 600; color: var(--dim); cursor: pointer; border-bottom: 2px solid transparent; user-select: none; }
+.settings-tab:hover { color: var(--text); }
+.settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.settings-content { padding: 16px; overflow-y: auto; flex: 1; min-height: 240px; }
+.settings-btn { background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 7px 14px; cursor: pointer; font-size: 12px; font-weight: 600; margin-right: 8px; transition: border-color .15s, color .15s; }
+.settings-btn:hover { border-color: var(--accent); }
+.settings-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.settings-btn.danger { color: #e07070; }
+.settings-btn.danger:hover { border-color: #e07070; }
+.settings-section-title { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .5px; margin: 0 0 10px; font-weight: 700; }
+.settings-hint { font-size: 11px; color: var(--dim); margin: 6px 0 14px; line-height: 1.5; }
+.people-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.people-row { display: grid; grid-template-columns: 140px 1fr 200px 28px; gap: 10px; align-items: center; padding: 7px 10px; border-bottom: 1px solid var(--border); background: var(--card); }
+.people-row:last-child { border-bottom: none; }
+.people-row .pname { font-weight: 600; color: var(--text); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.people-row input.pemail { background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 5px 8px; color: var(--text); font-size: 12px; outline: none; width: 100%; transition: border-color .15s; }
+.people-row input.pemail:focus { border-color: var(--accent); }
+.people-row .proles { font-size: 10px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.people-row .pdel { background: transparent; color: var(--dim); border: none; cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px; }
+.people-row .pdel:hover { color: #e07070; background: rgba(224,112,112,.08); }
+.people-empty { padding: 20px; color: var(--dim); text-align: center; font-size: 12px; background: var(--card); border-radius: 6px; border: 1px dashed var(--border); }
+.people-add { display: grid; grid-template-columns: 140px 1fr 160px auto; gap: 8px; margin-top: 14px; }
+.people-add input, .people-add select { background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 7px 10px; color: var(--text); font-size: 12px; outline: none; transition: border-color .15s; }
+.people-add input:focus, .people-add select:focus { border-color: var(--accent); }
+.people-merge { margin-top: 18px; padding: 12px 14px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; }
+.people-merge-title { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 10px; font-weight: 700; }
+.people-merge-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.people-merge select { background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 7px 10px; color: var(--text); font-size: 12px; outline: none; flex: 1; min-width: 120px; }
+.people-merge-arrow { color: var(--dim); font-size: 13px; }
+.data-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 .sidebar-tree { flex: 1; overflow-y: auto; padding: 6px 0; }
 
 .tree-node { display: flex; align-items: center; gap: 4px; padding: 5px 8px 5px 0; cursor: pointer; border-radius: 5px; margin: 1px 6px; user-select: none; position: relative; }
@@ -414,9 +454,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
     </div>
     <div class="data-migration">
       <a href="guide.html" target="_blank" class="data-mig-btn" title="Open guide">❓ Help</a>
-      <a href="dash.html" target="_blank" class="data-mig-btn" title="Personal dashboard view">📋 Dash</a>
-      <button class="data-mig-btn" id="btnExportData" title="Download all projects as a JSON backup file">⬇ Export Data</button>
-      <button class="data-mig-btn" id="btnImportData" title="Load projects from a JSON backup file">⬆ Import Data</button>
+      <button class="data-mig-btn" id="btnSettings" title="Settings: import/export data, manage people">⚙ Settings</button>
       <input type="file" id="importFileInput" accept=".json" style="display:none">
     </div>
   </div>
@@ -527,6 +565,23 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 <!-- CONTEXT MENU -->
 <div class="ctx-menu hidden" id="ctxMenu"></div>
 <div class="type-switcher hidden" id="typeSwitcher"></div>
+
+<!-- SETTINGS MODAL -->
+<div class="settings-overlay" id="settingsOverlay" style="display:none;">
+  <div class="settings-modal" id="settingsModal">
+    <div class="settings-header">
+      <span class="settings-title">⚙ Settings</span>
+      <button class="settings-close" id="settingsClose" title="Close">✕</button>
+    </div>
+    <div class="settings-body">
+      <div class="settings-tabs">
+        <div class="settings-tab active" data-settings-tab="data">Data</div>
+        <div class="settings-tab" data-settings-tab="people">People</div>
+      </div>
+      <div class="settings-content" id="settingsContent"></div>
+    </div>
+  </div>
+</div>
 
 <script>
 'use strict';
@@ -644,6 +699,419 @@ function removeFromHistory(role, name) {
   if (!nameHistory[role]) return;
   nameHistory[role] = nameHistory[role].filter(n => n !== name);
   saveNameHistory();
+}
+
+// ── PEOPLE EMAILS (name → email, global across projects) ──
+let peopleEmails = {};
+function loadPeopleEmails() {
+  try { const r = localStorage.getItem('prepro_people_emails'); if (r) peopleEmails = JSON.parse(r); } catch(e) {}
+  if (!peopleEmails || typeof peopleEmails !== 'object') peopleEmails = {};
+}
+function savePeopleEmails() {
+  localStorage.setItem('prepro_people_emails', JSON.stringify(peopleEmails));
+}
+function setPersonEmail(name, email) {
+  const clean = (email || '').trim();
+  if (clean) peopleEmails[name] = clean;
+  else delete peopleEmails[name];
+  savePeopleEmails();
+}
+function getPersonEmail(name) { return peopleEmails[name] || ''; }
+
+// Build union of every person known to the system with their role set
+function collectAllPeople() {
+  const people = {}; // name → { name, email, roles: Set }
+  const touch = (name, role) => {
+    if (!name) return;
+    if (!people[name]) people[name] = { name, email: peopleEmails[name] || '', roles: new Set() };
+    if (role) people[name].roles.add(role);
+  };
+  Object.entries(nameHistory || {}).forEach(([role, names]) => (names || []).forEach(n => touch(n, role)));
+  (state.projects || []).forEach(p => {
+    const roster = p.roster || {};
+    Object.entries(roster).forEach(([role, names]) => (names || []).forEach(n => touch(n, role)));
+  });
+  Object.keys(peopleEmails || {}).forEach(n => touch(n, null));
+  return Object.values(people).sort((a,b) => a.name.localeCompare(b.name));
+}
+
+// Remove a person everywhere: name history, every project roster, email map, and remap tasks
+function deletePersonEverywhere(name) {
+  Object.keys(nameHistory || {}).forEach(role => {
+    nameHistory[role] = (nameHistory[role] || []).filter(n => n !== name);
+  });
+  (state.projects || []).forEach(p => {
+    const roster = p.roster || {};
+    Object.keys(roster).forEach(role => {
+      roster[role] = (roster[role] || []).filter(n => n !== name);
+    });
+    (p.tasks || []).forEach(t => {
+      if (t.person === name) t.person = '';
+      if (Array.isArray(t.attendees)) t.attendees = t.attendees.filter(a => a.person !== name);
+    });
+  });
+  delete peopleEmails[name];
+  saveNameHistory();
+  savePeopleEmails();
+  saveState();
+}
+
+// Merge person `from` into `into`: all roles/roster/tasks referencing `from` now point to `into`
+function mergePersonInto(from, into) {
+  if (!from || !into || from === into) return;
+  Object.keys(nameHistory || {}).forEach(role => {
+    const list = nameHistory[role] || [];
+    if (list.includes(from)) {
+      nameHistory[role] = list.filter(n => n !== from);
+      if (!nameHistory[role].includes(into)) nameHistory[role].push(into);
+    }
+  });
+  (state.projects || []).forEach(p => {
+    const roster = p.roster || {};
+    Object.keys(roster).forEach(role => {
+      const list = roster[role] || [];
+      if (list.includes(from)) {
+        roster[role] = list.filter(n => n !== from);
+        if (!roster[role].includes(into)) roster[role].push(into);
+      }
+    });
+    (p.tasks || []).forEach(t => {
+      if (t.person === from) t.person = into;
+      if (Array.isArray(t.attendees)) {
+        t.attendees.forEach(a => { if (a.person === from) a.person = into; });
+        const seen = new Set();
+        t.attendees = t.attendees.filter(a => {
+          const k = a.person + '|' + (a.role || '');
+          if (seen.has(k)) return false;
+          seen.add(k); return true;
+        });
+      }
+    });
+  });
+  // If target has no email but source did, carry email forward
+  if (!peopleEmails[into] && peopleEmails[from]) peopleEmails[into] = peopleEmails[from];
+  delete peopleEmails[from];
+  saveNameHistory();
+  savePeopleEmails();
+  saveState();
+}
+
+// ── SETTINGS MODAL ──
+let settingsActiveTab = 'data';
+
+function openSettings(tab) {
+  settingsActiveTab = tab || 'data';
+  document.querySelectorAll('.settings-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.settingsTab === settingsActiveTab);
+  });
+  document.getElementById('settingsOverlay').style.display = 'flex';
+  renderSettingsContent();
+}
+function closeSettings() {
+  document.getElementById('settingsOverlay').style.display = 'none';
+}
+
+function renderSettingsContent() {
+  const c = document.getElementById('settingsContent');
+  if (!c) return;
+  c.innerHTML = '';
+  if (settingsActiveTab === 'data') renderDataSettings(c);
+  else if (settingsActiveTab === 'people') renderPeopleSettings(c);
+}
+
+function renderDataSettings(c) {
+  const title = document.createElement('div');
+  title.className = 'settings-section-title';
+  title.textContent = 'Backup & Restore';
+  c.appendChild(title);
+
+  const actions = document.createElement('div');
+  actions.className = 'data-actions';
+  const expBtn = document.createElement('button');
+  expBtn.className = 'settings-btn primary';
+  expBtn.textContent = '⬇ Export Data';
+  expBtn.addEventListener('click', doExportData);
+  const impBtn = document.createElement('button');
+  impBtn.className = 'settings-btn';
+  impBtn.textContent = '⬆ Import Data';
+  impBtn.addEventListener('click', () => {
+    if (!confirm('Importing will merge projects from the file into your current data.\n\nProjects with the same ID will be overwritten. Continue?')) return;
+    document.getElementById('importFileInput').click();
+  });
+  actions.appendChild(expBtn);
+  actions.appendChild(impBtn);
+  c.appendChild(actions);
+
+  const hint = document.createElement('div');
+  hint.className = 'settings-hint';
+  hint.textContent = 'Export downloads a JSON backup of every project, name history, and saved emails. Import merges projects by ID (overwrites duplicates) and adds new names/emails.';
+  c.appendChild(hint);
+}
+
+function doExportData() {
+  const payload = {
+    version: 2,
+    exported: new Date().toISOString(),
+    prepro_data: JSON.stringify(state),
+    prepro_name_history: JSON.stringify(nameHistory),
+    prepro_people_emails: JSON.stringify(peopleEmails)
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'prepro-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function handleImportFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const payload = JSON.parse(e.target.result);
+      const rawData    = payload.prepro_data    || (payload.projects ? JSON.stringify(payload) : null);
+      const rawHistory = payload.prepro_name_history || null;
+      const rawEmails  = payload.prepro_people_emails || null;
+      if (!rawData) { alert('File doesn\'t look like a PRE-PRO backup.'); return; }
+
+      const incoming = JSON.parse(rawData);
+      if (!Array.isArray(incoming.projects)) { alert('No projects found in file.'); return; }
+
+      const idMap = new Map((state.projects || []).map(p => [p.id, p]));
+      incoming.projects.forEach(p => idMap.set(p.id, p));
+      state.projects = [...idMap.values()];
+      saveState();
+
+      if (rawHistory) {
+        try {
+          const inHist = JSON.parse(rawHistory);
+          Object.entries(inHist).forEach(([role, names]) => {
+            if (!nameHistory[role]) nameHistory[role] = [];
+            names.forEach(n => { if (!nameHistory[role].includes(n)) nameHistory[role].push(n); });
+          });
+          saveNameHistory();
+        } catch(_) {}
+      }
+      if (rawEmails) {
+        try {
+          const inEmails = JSON.parse(rawEmails);
+          Object.entries(inEmails).forEach(([name, email]) => {
+            if (!peopleEmails[name]) peopleEmails[name] = email;
+          });
+          savePeopleEmails();
+        } catch(_) {}
+      }
+
+      renderSidebar();
+      renderCalendar();
+      renderPalette();
+      if (exportOpen) renderExportPanel();
+      if (document.getElementById('settingsOverlay').style.display === 'flex') renderSettingsContent();
+      alert('Import complete — ' + incoming.projects.length + ' project(s) merged successfully.');
+    } catch(err) {
+      alert('Failed to read file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function renderPeopleSettings(c) {
+  const title = document.createElement('div');
+  title.className = 'settings-section-title';
+  title.textContent = 'People & Emails';
+  c.appendChild(title);
+
+  const hint = document.createElement('div');
+  hint.className = 'settings-hint';
+  hint.textContent = 'Add an email to any person to auto-fill the To: line when exporting meetings to Outlook. Deleting a person removes them from every project roster and unassigns their tasks. Merging moves all roles, rosters, and assignments from one person to another.';
+  c.appendChild(hint);
+
+  const people = collectAllPeople();
+  if (!people.length) {
+    const empty = document.createElement('div');
+    empty.className = 'people-empty';
+    empty.textContent = 'No people yet. Add one below.';
+    c.appendChild(empty);
+  } else {
+    const list = document.createElement('div');
+    list.className = 'people-list';
+    people.forEach(p => {
+      const row = document.createElement('div');
+      row.className = 'people-row';
+
+      const nm = document.createElement('div');
+      nm.className = 'pname';
+      nm.textContent = p.name;
+      nm.title = p.name;
+      row.appendChild(nm);
+
+      const emailInput = document.createElement('input');
+      emailInput.className = 'pemail';
+      emailInput.type = 'email';
+      emailInput.placeholder = 'email@example.com';
+      emailInput.value = p.email;
+      emailInput.addEventListener('blur', () => setPersonEmail(p.name, emailInput.value));
+      emailInput.addEventListener('keydown', e => { if (e.key === 'Enter') emailInput.blur(); });
+      row.appendChild(emailInput);
+
+      const rolesEl = document.createElement('div');
+      rolesEl.className = 'proles';
+      const rolesArr = Array.from(p.roles);
+      rolesEl.textContent = rolesArr.length ? rolesArr.join(', ') : '—';
+      rolesEl.title = rolesEl.textContent;
+      row.appendChild(rolesEl);
+
+      const del = document.createElement('button');
+      del.className = 'pdel';
+      del.textContent = '✕';
+      del.title = 'Delete ' + p.name + ' everywhere';
+      del.addEventListener('click', () => {
+        if (!confirm('Delete "' + p.name + '" from every project roster, unassign their tasks, and remove their email?\n\nThis cannot be undone.')) return;
+        deletePersonEverywhere(p.name);
+        renderSettingsContent();
+        renderPalette();
+        renderCalendar();
+        if (exportOpen) renderExportPanel();
+      });
+      row.appendChild(del);
+
+      list.appendChild(row);
+    });
+    c.appendChild(list);
+  }
+
+  // Add person
+  const addTitle = document.createElement('div');
+  addTitle.className = 'settings-section-title';
+  addTitle.style.marginTop = '18px';
+  addTitle.textContent = 'Add Person';
+  c.appendChild(addTitle);
+
+  const addRow = document.createElement('div');
+  addRow.className = 'people-add';
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.placeholder = 'Name';
+  const emailInput = document.createElement('input');
+  emailInput.type = 'email';
+  emailInput.placeholder = 'email@example.com (optional)';
+  const roleSel = document.createElement('select');
+  const defaultOpt = document.createElement('option');
+  defaultOpt.value = ''; defaultOpt.textContent = 'Role (optional)';
+  roleSel.appendChild(defaultOpt);
+  ROLE_CATS.flatMap(cat => cat.roles).filter(r => r !== 'Other').forEach(r => {
+    const o = document.createElement('option');
+    o.value = r; o.textContent = r;
+    roleSel.appendChild(o);
+  });
+  const addBtn = document.createElement('button');
+  addBtn.className = 'settings-btn primary';
+  addBtn.textContent = '+ Add';
+  addBtn.addEventListener('click', () => {
+    const n = nameInput.value.trim();
+    if (!n) { nameInput.focus(); return; }
+    const role = roleSel.value;
+    if (role) {
+      if (!nameHistory[role]) nameHistory[role] = [];
+      if (!nameHistory[role].includes(n)) nameHistory[role].push(n);
+      saveNameHistory();
+    } else {
+      // Ensure the person exists somewhere by adding a placeholder entry in history under a neutral key
+      const firstRole = ROLE_CATS[0].roles[0];
+      if (!nameHistory[firstRole]) nameHistory[firstRole] = [];
+      if (!nameHistory[firstRole].includes(n)) nameHistory[firstRole].push(n);
+      saveNameHistory();
+    }
+    const em = emailInput.value.trim();
+    if (em) { peopleEmails[n] = em; savePeopleEmails(); }
+    nameInput.value = ''; emailInput.value = ''; roleSel.value = '';
+    renderSettingsContent();
+    renderPalette();
+    if (exportOpen) renderExportPanel();
+  });
+  nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') addBtn.click(); });
+  emailInput.addEventListener('keydown', e => { if (e.key === 'Enter') addBtn.click(); });
+  addRow.appendChild(nameInput);
+  addRow.appendChild(emailInput);
+  addRow.appendChild(roleSel);
+  addRow.appendChild(addBtn);
+  c.appendChild(addRow);
+
+  // Merge
+  if (people.length >= 2) {
+    const merge = document.createElement('div');
+    merge.className = 'people-merge';
+    const mt = document.createElement('div');
+    mt.className = 'people-merge-title';
+    mt.textContent = 'Merge Duplicates';
+    merge.appendChild(mt);
+    const mrow = document.createElement('div');
+    mrow.className = 'people-merge-row';
+    const fromSel = document.createElement('select');
+    const intoSel = document.createElement('select');
+    [fromSel, intoSel].forEach((sel, i) => {
+      const def = document.createElement('option');
+      def.value = ''; def.textContent = i === 0 ? 'Merge…' : 'into…';
+      sel.appendChild(def);
+      people.forEach(p => {
+        const o = document.createElement('option');
+        o.value = p.name; o.textContent = p.name;
+        sel.appendChild(o);
+      });
+    });
+    const arrow = document.createElement('span');
+    arrow.className = 'people-merge-arrow';
+    arrow.textContent = '→';
+    const mbtn = document.createElement('button');
+    mbtn.className = 'settings-btn';
+    mbtn.textContent = 'Merge';
+    mbtn.addEventListener('click', () => {
+      const from = fromSel.value, into = intoSel.value;
+      if (!from || !into) { alert('Choose both a source and a target person.'); return; }
+      if (from === into) { alert('Source and target must be different.'); return; }
+      if (!confirm('Merge "' + from + '" into "' + into + '"?\n\nAll roles, roster memberships, tasks, and attendee entries for "' + from + '" will be reassigned to "' + into + '".')) return;
+      mergePersonInto(from, into);
+      renderSettingsContent();
+      renderPalette();
+      renderCalendar();
+      if (exportOpen) renderExportPanel();
+    });
+    mrow.appendChild(fromSel);
+    mrow.appendChild(arrow);
+    mrow.appendChild(intoSel);
+    mrow.appendChild(mbtn);
+    merge.appendChild(mrow);
+    c.appendChild(merge);
+  }
+}
+
+function wireSettingsModal() {
+  const btn = document.getElementById('btnSettings');
+  if (btn) btn.addEventListener('click', () => openSettings('data'));
+  const closeBtn = document.getElementById('settingsClose');
+  if (closeBtn) closeBtn.addEventListener('click', closeSettings);
+  const overlay = document.getElementById('settingsOverlay');
+  if (overlay) overlay.addEventListener('click', e => { if (e.target === overlay) closeSettings(); });
+  document.querySelectorAll('.settings-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      settingsActiveTab = tab.dataset.settingsTab;
+      document.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('active', t === tab));
+      renderSettingsContent();
+    });
+  });
+  const fileInput = document.getElementById('importFileInput');
+  if (fileInput) {
+    fileInput.addEventListener('change', function() {
+      const file = this.files[0];
+      if (!file) return;
+      handleImportFile(file);
+      this.value = '';
+    });
+  }
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.getElementById('settingsOverlay').style.display === 'flex') closeSettings();
+  });
 }
 
 // ── PERSISTENCE (localStorage) ──
@@ -2740,6 +3208,21 @@ function renderRosterPanel() {
   wrap.className = 'roster-content';
   content.appendChild(wrap);
 
+  // Top-bar link to Settings → People
+  const topBar = document.createElement('div');
+  topBar.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; padding:0 2px;';
+  const topHint = document.createElement('span');
+  topHint.style.cssText = 'font-size:11px; color:var(--dim);';
+  topHint.textContent = 'Click a suggestion to assign them to this project. Click an assigned chip to unassign.';
+  topBar.appendChild(topHint);
+  const mgrBtn = document.createElement('button');
+  mgrBtn.className = 'btn btn-ghost';
+  mgrBtn.style.cssText = 'font-size:11px; padding:3px 8px;';
+  mgrBtn.textContent = '⚙ Manage People';
+  mgrBtn.addEventListener('click', () => openSettings('people'));
+  topBar.appendChild(mgrBtn);
+  wrap.appendChild(topBar);
+
   const roles = ROLE_CATS.flatMap(cat => cat.roles).filter(r => r !== 'Other');
 
   roles.forEach(role => {
@@ -2756,38 +3239,36 @@ function renderRosterPanel() {
     lbl.textContent = role;
     lbl.style.color = cat ? cat.color : 'var(--dim)';
     section.appendChild(lbl);
-    // Current project members
+    // Current project members — click to unassign from this project
     const nameList = document.createElement('div');
     nameList.className = 'roster-names';
     names.forEach(name => {
       const chip = document.createElement('div');
       chip.className = 'roster-name-chip';
+      chip.title = 'Click to unassign from this project';
+      chip.style.cursor = 'pointer';
       const nameSpan = document.createElement('span');
       nameSpan.textContent = name;
-      const removeBtn = document.createElement('span');
-      removeBtn.className = 'remove-x';
-      removeBtn.textContent = '✕';
-      removeBtn.addEventListener('click', e => {
+      chip.appendChild(nameSpan);
+      chip.addEventListener('click', e => {
         e.stopPropagation();
         removeFromRoster(role, name);
         renderRosterPanel();
         renderPalette();
         if (panelContext && panelContext.role === role) populatePersonDropdown(role);
       });
-      chip.appendChild(nameSpan);
-      chip.appendChild(removeBtn);
       nameList.appendChild(chip);
     });
     section.appendChild(nameList);
 
-    // Previous names as suggestion chips (not yet on this project)
+    // Available people — click to assign to this project
     if (suggestions.length) {
       const suggestRow = document.createElement('div');
       suggestRow.className = 'roster-suggestions';
       suggestions.forEach(name => {
         const chip = document.createElement('div');
         chip.className = 'roster-suggest-chip';
-        chip.title = 'Click to add to this project';
+        chip.title = 'Click to assign to this project';
         const addSpan = document.createElement('span');
         addSpan.textContent = '+ ' + name;
         addSpan.addEventListener('click', e => {
@@ -2797,49 +3278,12 @@ function renderRosterPanel() {
           renderPalette();
           if (panelContext && panelContext.role === role) populatePersonDropdown(role);
         });
-        const rmSpan = document.createElement('span');
-        rmSpan.className = 'roster-suggest-rm';
-        rmSpan.textContent = '×';
-        rmSpan.title = 'Remove from suggestions';
-        rmSpan.addEventListener('click', e => {
-          e.stopPropagation();
-          removeFromHistory(role, name);
-          renderRosterPanel();
-        });
         chip.appendChild(addSpan);
-        chip.appendChild(rmSpan);
         suggestRow.appendChild(chip);
       });
       section.appendChild(suggestRow);
     }
 
-    // Add name input — focus stays after adding
-    const addRow = document.createElement('div');
-    addRow.className = 'roster-add-row';
-    const input = document.createElement('input');
-    input.className = 'roster-add-input';
-    input.placeholder = 'Add name…';
-    input.type = 'text';
-    input.dataset.role = role;
-    const addBtn = document.createElement('button');
-    addBtn.className = 'roster-add-btn';
-    addBtn.textContent = '+';
-    const doAdd = () => {
-      const val = input.value.trim();
-      if (!val) return;
-      addToRoster(role, val);
-      renderRosterPanel();
-      renderPalette();
-      if (panelContext && panelContext.role === role) populatePersonDropdown(role);
-      // Re-focus the input for this role after re-render
-      const restored = document.querySelector(`.roster-add-input[data-role="${CSS.escape(role)}"]`);
-      if (restored) restored.focus();
-    };
-    addBtn.addEventListener('click', doAdd);
-    input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doAdd(); } });
-    addRow.appendChild(input);
-    addRow.appendChild(addBtn);
-    section.appendChild(addRow);
     wrap.appendChild(section);
   });
 }
@@ -2885,7 +3329,8 @@ function makeICS(tasks, proj) {
     const summary  = rawLabel && rawLabel !== rawName
       ? esc(rawLabel + (rawName ? ': ' + rawName : ''))
       : esc(rawName || 'Meeting');
-    const desc = (t.attendees || []).map(a => a.person + (a.role ? ' (' + a.role + ')' : '')).join(', ');
+    const attendees = (t.attendees || []);
+    const desc = attendees.map(a => a.person + (a.role ? ' (' + a.role + ')' : '')).join(', ');
     const lines = [
       'BEGIN:VEVENT',
       'UID:' + (t.id || genId()) + '@prepro',
@@ -2894,6 +3339,12 @@ function makeICS(tasks, proj) {
     ];
     if (desc)          lines.push('DESCRIPTION:' + esc(desc));
     if (proj && proj.name) lines.push('LOCATION:' + esc(proj.name));
+    attendees.forEach(a => {
+      const email = getPersonEmail(a.person);
+      if (!email) return;
+      const cn = esc(a.person || '');
+      lines.push('ATTENDEE;CN=' + cn + ';ROLE=REQ-PARTICIPANT;RSVP=TRUE:mailto:' + email);
+    });
     lines.push('END:VEVENT');
     return lines.join('\r\n');
   });
@@ -2941,11 +3392,14 @@ function makeOutlookURL(t, proj) {
   const subject  = rawLabel && rawLabel !== rawName
     ? rawLabel + (rawName ? ': ' + rawName : '')
     : (rawName || 'Meeting');
-  const body = (t.attendees || []).map(a => a.person + (a.role ? ' (' + a.role + ')' : '')).join(', ');
+  const attendees = (t.attendees || []);
+  const body = attendees.map(a => a.person + (a.role ? ' (' + a.role + ')' : '')).join(', ');
+  const emails = attendees.map(a => getPersonEmail(a.person)).filter(Boolean);
   const location = proj ? proj.name : '';
   const params = new URLSearchParams({ subject, startdt, enddt });
   if (body)     params.set('body', body);
   if (location) params.set('location', location);
+  if (emails.length) params.set('to', emails.join(','));
   return 'https://outlook.office.com/calendar/action/compose?' + params.toString();
 }
 
@@ -3828,6 +4282,7 @@ function exportPNG() {
 function init() {
   loadState();
   loadNameHistory();
+  loadPeopleEmails();
   const roots = getRootProjects();
   const hashMatch = location.hash.match(/project=([^&]+)/);
   const hashId = hashMatch ? decodeURIComponent(hashMatch[1]) : null;
@@ -3959,73 +4414,8 @@ function setupInitListeners() {
     document.querySelectorAll(`[data-task-id="${tid}"]`).forEach(x => x.classList.remove('task-hover'));
   });
 
-  // ── DATA MIGRATION ──
-  document.getElementById('btnExportData').addEventListener('click', () => {
-    const payload = {
-      version: 1,
-      exported: new Date().toISOString(),
-      prepro_data: JSON.stringify(state),
-      prepro_name_history: JSON.stringify(nameHistory)
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = 'prepro-backup-' + new Date().toISOString().slice(0, 10) + '.json';
-    a.click();
-    URL.revokeObjectURL(url);
-  });
-
-  document.getElementById('btnImportData').addEventListener('click', () => {
-    if (!confirm('Importing will merge projects from the file into your current data.\n\nProjects with the same ID will be overwritten. Continue?')) return;
-    document.getElementById('importFileInput').click();
-  });
-
-  document.getElementById('importFileInput').addEventListener('change', function() {
-    const file = this.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-      try {
-        const payload = JSON.parse(e.target.result);
-        // Support both wrapped format and raw state dump
-        const rawData    = payload.prepro_data    || (payload.projects ? JSON.stringify(payload) : null);
-        const rawHistory = payload.prepro_name_history || null;
-        if (!rawData) { alert('File doesn\'t look like a PRE-PRO backup.'); return; }
-
-        const incoming = JSON.parse(rawData);
-        if (!Array.isArray(incoming.projects)) { alert('No projects found in file.'); return; }
-
-        // Merge: incoming projects overwrite by id, new ones are appended
-        const idMap = new Map((state.projects || []).map(p => [p.id, p]));
-        incoming.projects.forEach(p => idMap.set(p.id, p));
-        state.projects = [...idMap.values()];
-        saveState();
-
-        // Merge name history
-        if (rawHistory) {
-          try {
-            const inHist = JSON.parse(rawHistory);
-            Object.entries(inHist).forEach(([role, names]) => {
-              if (!nameHistory[role]) nameHistory[role] = [];
-              names.forEach(n => { if (!nameHistory[role].includes(n)) nameHistory[role].push(n); });
-            });
-            saveNameHistory();
-          } catch(_) {}
-        }
-
-        renderSidebar();
-        renderCalendar();
-        renderPalette();
-        if (exportOpen) renderExportPanel();
-        alert('Import complete — ' + incoming.projects.length + ' project(s) merged successfully.');
-      } catch(err) {
-        alert('Failed to read file: ' + err.message);
-      }
-    };
-    reader.readAsText(file);
-    this.value = ''; // reset so same file can be re-imported
-  });
+  // ── SETTINGS MODAL ──
+  wireSettingsModal();
 
   // Completed section toggle
   document.getElementById('completedToggle').addEventListener('click', () => {
