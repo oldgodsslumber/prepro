@@ -331,7 +331,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .export-opt:hover { color: var(--text); }
 .export-opt input[type=checkbox] { accent-color: var(--accent); cursor: pointer; width: 12px; height: 12px; }
 .export-note    { font-size: 10px; color: var(--dim); }
-.export-text    { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 8px 10px; color: var(--text); font-family: 'Open Sans', system-ui, sans-serif; font-size: 11px; overflow-y: auto; white-space: pre; resize: none; outline: none; min-height: 0; cursor: text; user-select: text; }
+.export-text    { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 8px 10px; color: var(--text); font-family: 'Open Sans', system-ui, sans-serif; font-variant-numeric: tabular-nums; font-size: 11px; overflow-y: auto; white-space: pre; resize: none; outline: none; min-height: 0; cursor: text; user-select: text; }
 .export-text pre { margin: 0; font-family: inherit; font-size: inherit; white-space: pre-wrap; }
 .export-text strong { font-weight: 700; }
 .export-table-wrap { flex: 1; overflow: auto; border: 1px solid var(--border); border-radius: 5px; min-height: 0; }
@@ -3085,19 +3085,31 @@ function buildHTMLExport() {
   const allForDates = [...sorted, ...dueTasks].sort((a, b) => a.date.localeCompare(b.date));
   const rawDates = allForDates.map(t => fmtDateRange(t));
   const maxLen   = exportOptAlign && rawDates.length ? Math.max(...rawDates.map(s => s.length)) : 0;
+  const sep = '  \u2014  ';
 
+  // HTML alignment: wrap date in inline-block of fixed ch-width so the
+  // separator column lines up regardless of date string length (Open Sans
+  // is proportional, so space-padding alone won't align). tabular-nums on
+  // the container keeps digits uniform-width.
+  const dateColCh = maxLen;
+  const indentColCh = maxLen + sep.length;
   const fmtHtml = raw => {
-    const pad = exportOptAlign ? ' '.repeat(maxLen - raw.length) : '';
-    return exportOptBold
-      ? `<strong>${escHtml(raw)}</strong>${escHtml(pad)}`
-      : escHtml(raw + pad);
+    const inner = exportOptBold ? `<strong>${escHtml(raw)}</strong>` : escHtml(raw);
+    return exportOptAlign
+      ? `<span style="display:inline-block;min-width:${dateColCh}ch">${inner}</span>`
+      : inner;
   };
+  const htmlIndent = exportOptAlign
+    ? `<span style="display:inline-block;min-width:${indentColCh}ch"></span>`
+    : escHtml('    ');
+
+  // Plain-text alignment: best-effort space-padding. Only reliable in a
+  // monospace reader, but harmless elsewhere.
   const fmtPlain = raw => {
     const padded = exportOptAlign ? raw.padEnd(maxLen) : raw;
     return exportOptBold ? `**${raw}**${' '.repeat(Math.max(0, maxLen - raw.length))}` : padded;
   };
-
-  const sep = exportOptAlign ? '  \u2014  ' : '  \u2014  ';
+  const plainIndent = ' '.repeat(exportOptAlign ? maxLen + sep.length : 4);
 
   const hLines = [], pLines = [];
 
@@ -3116,11 +3128,10 @@ function buildHTMLExport() {
       hLines.push(`${fmtHtml(raw)}${escHtml(sep)}${escHtml(name)} [${escHtml(label.toUpperCase())}]`);
       pLines.push(`${fmtPlain(raw)}${sep}${name} [${label.toUpperCase()}]`);
       if (exportOptAttendees && t.attendees && t.attendees.length) {
-        const indent = ' '.repeat(exportOptAlign ? maxLen + sep.length : 4);
         t.attendees.forEach(a => {
           const role = exportOptRoles ? ` (${a.role})` : '';
-          hLines.push(`${escHtml(indent)}\u00b7 ${escHtml(a.person || '')}${escHtml(role)}`);
-          pLines.push(`${indent}\u00b7 ${a.person || ''}${role}`);
+          hLines.push(`${htmlIndent}\u00b7 ${escHtml(a.person || '')}${escHtml(role)}`);
+          pLines.push(`${plainIndent}\u00b7 ${a.person || ''}${role}`);
         });
       }
     } else {
@@ -3133,7 +3144,7 @@ function buildHTMLExport() {
     }
   });
 
-  const html = `<pre style="font-family:'Open Sans',system-ui,sans-serif;font-size:12px;line-height:1.7;margin:0">${hLines.join('\n')}</pre>`;
+  const html = `<pre style="font-family:'Open Sans',system-ui,sans-serif;font-variant-numeric:tabular-nums;font-size:12px;line-height:1.7;margin:0">${hLines.join('\n')}</pre>`;
   return { html, plain: pLines.join('\n') };
 }
 
