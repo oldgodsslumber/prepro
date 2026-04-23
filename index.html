@@ -3047,6 +3047,11 @@ function startRename(projectId) {
     renderSidebar();
   };
   input.addEventListener('blur', done);
+  // Clicks inside the rename input must not bubble to the tree-node click
+  // handler, which would re-render the sidebar and destroy the input.
+  input.addEventListener('mousedown', e => e.stopPropagation());
+  input.addEventListener('click', e => e.stopPropagation());
+  input.addEventListener('dblclick', e => e.stopPropagation());
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter')  { e.preventDefault(); input.blur(); }
     if (e.key === 'Escape') { input.value = proj.name; input.blur(); }
