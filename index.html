@@ -3326,14 +3326,12 @@ function makeICS(tasks, proj) {
     }
     const summary  = esc(t.taskName || t.reviewLabel || 'Meeting');
     const attendees = (t.attendees || []);
-    const desc = attendees.map(a => a.person + (a.role ? ' (' + a.role + ')' : '')).join(', ');
     const lines = [
       'BEGIN:VEVENT',
       'UID:' + (t.id || genId()) + '@prepro',
       dtstart, dtend,
       'SUMMARY:' + summary,
     ];
-    if (desc)          lines.push('DESCRIPTION:' + esc(desc));
     attendees.forEach(a => {
       const email = getPersonEmail(a.person);
       if (!email) return;
@@ -3384,12 +3382,10 @@ function makeOutlookURL(t, proj) {
   }
   const subject  = t.taskName || t.reviewLabel || 'Meeting';
   const attendees = (t.attendees || []);
-  const body = attendees.map(a => a.person + (a.role ? ' (' + a.role + ')' : '')).join(', ');
   const recipients = attendees
     .map(a => getPersonEmail(a.person) || a.person)
     .filter(Boolean);
   const params = new URLSearchParams({ subject, startdt, enddt });
-  if (body)     params.set('body', body);
   if (recipients.length) params.set('to', recipients.join(','));
   return 'https://outlook.office.com/calendar/action/compose?' + params.toString();
 }
