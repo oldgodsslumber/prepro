@@ -3362,11 +3362,7 @@ function makeICS(tasks, proj) {
       dtstart = 'DTSTART:' + fmtDT(t.date, 9, 0);
       dtend   = 'DTEND:'   + fmtDT(t.date, 9, 30);
     }
-    const rawLabel = t.reviewLabel || '';
-    const rawName  = t.taskName   || '';
-    const summary  = rawLabel && rawLabel !== rawName
-      ? esc(rawLabel + (rawName ? ': ' + rawName : ''))
-      : esc(rawName || 'Meeting');
+    const summary  = esc(t.taskName || t.reviewLabel || 'Meeting');
     const attendees = (t.attendees || []);
     const desc = attendees.map(a => a.person + (a.role ? ' (' + a.role + ')' : '')).join(', ');
     const lines = [
@@ -3425,19 +3421,17 @@ function makeOutlookURL(t, proj) {
     startdt = fmtDT(t.date, 9, 0);
     enddt   = fmtDT(t.date, 9, 30);
   }
-  const rawLabel = t.reviewLabel || '';
-  const rawName  = t.taskName   || '';
-  const subject  = rawLabel && rawLabel !== rawName
-    ? rawLabel + (rawName ? ': ' + rawName : '')
-    : (rawName || 'Meeting');
+  const subject  = t.taskName || t.reviewLabel || 'Meeting';
   const attendees = (t.attendees || []);
   const body = attendees.map(a => a.person + (a.role ? ' (' + a.role + ')' : '')).join(', ');
-  const emails = attendees.map(a => getPersonEmail(a.person)).filter(Boolean);
+  const recipients = attendees
+    .map(a => getPersonEmail(a.person) || a.person)
+    .filter(Boolean);
   const location = proj ? proj.name : '';
   const params = new URLSearchParams({ subject, startdt, enddt });
   if (body)     params.set('body', body);
   if (location) params.set('location', location);
-  if (emails.length) params.set('to', emails.join(','));
+  if (recipients.length) params.set('to', recipients.join(','));
   return 'https://outlook.office.com/calendar/action/compose?' + params.toString();
 }
 
