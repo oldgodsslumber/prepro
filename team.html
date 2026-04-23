@@ -3436,9 +3436,13 @@ function makeOutlookURL(t, proj) {
   }
   const subject  = t.taskName || t.reviewLabel || 'Meeting';
   const attendees = (t.attendees || []);
+  // Only pass real emails to Outlook. Bare names without an email get
+  // dropped into the compose body by some Outlook versions instead of
+  // landing in To:, so we skip them entirely. Add emails in Settings to
+  // include someone as a proper invitee.
   const recipients = attendees
-    .map(a => getPersonEmail(a.person) || a.person)
-    .filter(Boolean);
+    .map(a => getPersonEmail(a.person))
+    .filter(em => em && em.includes('@'));
   const params = new URLSearchParams({ subject, startdt, enddt });
   if (recipients.length) params.set('to', recipients.join(','));
   return 'https://outlook.office.com/calendar/action/compose?' + params.toString();
