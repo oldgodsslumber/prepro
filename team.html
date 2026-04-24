@@ -4134,8 +4134,22 @@ function exportPNG() {
     ctx.fillText(d.toUpperCase(), i * CW + CW / 2, TTL_H + 18*SC);
   });
 
+  // Lane layout — mirrors on-screen buildTaskLayout so multi-day cards keep
+  // consistent vertical lanes. Heights are pre-computed from each task's
+  // start-cell content and reused on every cell it spans, so a multi-day
+  // review renders as one tall card rather than a tall block + stub bars.
+  const layout = buildTaskLayout(days);
+  const taskHeights = new Map();
+  proj.tasks.forEach(task => {
+    const attC = (exportPNGAttendees && task.attendees) ? task.attendees.length : 0;
+    let h;
+    if (task.isDueDate)     h = (13 + attC * 10) * SC;
+    else if (task.isReview) h = (14 + attC * 10) * SC;
+    else                    h = 14 * SC;
+    taskHeights.set(task.id, h);
+  });
+
   // cells
-  const todayIdx = days.indexOf(todayStr);
   days.forEach((dateStr, idx) => {
     const col = idx % COLS;
     const row = Math.floor(idx / COLS);
@@ -4176,139 +4190,167 @@ function exportPNG() {
       ctx.fillText(d.toLocaleDateString('en-US',{month:'short'}), cx + 25*SC, cy + 18*SC);
     }
 
-    // tasks — split milestones (isDueDate) out so they render in their own section
-    const allTasks   = getTasksForDate(activeProjectId, dateStr);
-    const tasks      = allTasks.filter(t => !t.isDueDate);
-    const milestones = allTasks.filter(t => t.isDueDate && (exportPNGPTO || t.milestoneType !== 'pto'));
+    // Render per lane so multi-day cards align vertically across cells and
+    // use the same height on every segment (single tall card, not start-tall/
+    // continuation-short).
+    const laneArr = layout.get(dateStr) || [];
     let ty = cy + 28*SC;
 
-    tasks.forEach(task => {
-      const endDate  = task.endDate || task.date;
-      const isStart  = task.date === dateStr;
-      const isEnd    = endDate === dateStr;
-      const pad      = 4 * SC;
-      // Reviews grow taller to fit attendee rows — only on the start cell
-      const attCount = isStart && exportPNGAttendees && task.isReview && task.attendees ? task.attendees.length : 0;
-      const chipH    = (14 + attCount * 10) * SC;
+    laneArr.forEach(entry => {
+      if (!entry) return;
 
-      if (ty + chipH > cy + CH - 4*SC) return; // no room
-
-      const chipX = isStart ? cx + pad : cx;
-      const chipW = isEnd   ? CW - (isStart ? pad : 0) - pad : CW - (isStart ? pad : 0);
-
-      if (task.isReview) {
-        ctx.fillStyle = 'rgba(192,57,79,0.25)';
-        canvasRoundRect(ctx, chipX, ty, chipW, chipH, isStart ? 3*SC : isEnd ? 3*SC : 0);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(192,57,79,0.8)';
-        ctx.lineWidth = SC;
-        ctx.stroke();
-      } else {
-        ctx.fillStyle = task.color;
-        canvasRoundRect(ctx, chipX, ty, chipW, chipH,
-          isStart && isEnd ? 3*SC : isStart ? [3*SC,0,0,3*SC] : isEnd ? [0,3*SC,3*SC,0] : 0);
-        ctx.fill();
+      // Spacer: owning task doesn't occupy this cell but keeps this lane
+      // open so lower lanes stay aligned with neighbouring cells.
+      if (entry._spacerFor !== undefined) {
+        const owner = proj.tasks.find(t => t.id === entry._spacerFor);
+        if (!owner) return;
+        if (!exportPNGPTO && owner.isDueDate && owner.milestoneType === 'pto') return;
+        const h = taskHeights.get(entry._spacerFor) || 14*SC;
+        ty += h + 3*SC;
+        return;
       }
 
-      if (isStart) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(chipX + 3*SC, ty, chipW - 6*SC, chipH);
-        ctx.clip();
+      const task = entry;
+      if (!exportPNGPTO && task.isDueDate && task.milestoneType === 'pto') return;
 
-        // Title row
-        const loeStr = task.loe ? LOE_EMOJI[task.loe] + ' ' : '';
-        const roleStr = exportPNGRoles && !task.isReview && task.role ? ` (${task.role})` : '';
-        const title = task.isReview
-          ? (task.reviewLabel || 'REVIEW') + ': ' + (task.taskName || '')
-          : loeStr + ((task.person || '') + (task.person && task.taskName ? ' · ' : '') + (task.taskName || task.role)) + roleStr;
-        ctx.fillStyle = '#fff';
-        ctx.font = `${8*SC}px system-ui,sans-serif`;
-        ctx.textAlign = 'left';
-        ctx.fillText(title, chipX + 5*SC, ty + 10*SC);
+      const taskH = taskHeights.get(task.id) || 14*SC;
+      if (ty + taskH > cy + CH - 4*SC) return; // no room
 
-        // Attendee bullet rows (reviews / shoots only)
-        if (exportPNGAttendees && task.isReview && task.attendees) {
-          task.attendees.forEach((att, i) => {
-            const ay = ty + 18*SC + i * 10*SC;
-            // Coloured dot
-            ctx.fillStyle = att.color || REVIEW_COLOR;
-            ctx.beginPath();
-            ctx.arc(chipX + 9*SC, ay, 2.5*SC, 0, Math.PI * 2);
-            ctx.fill();
-            // Name
-            ctx.fillStyle = 'rgba(255,255,255,0.9)';
-            ctx.font = `${7*SC}px system-ui,sans-serif`;
-            ctx.fillText((att.person || att.role), chipX + 14*SC, ay + 4*SC);
-          });
-        }
+      const endDate = task.endDate || task.date;
+      const isStart = task.date === dateStr;
+      const isEnd   = endDate === dateStr;
+      const pad     = 4 * SC;
+      const chipX   = isStart ? cx + pad : cx;
+      const chipW   = isEnd   ? CW - (isStart ? pad : 0) - pad : CW - (isStart ? pad : 0);
+      const radius  = isStart && isEnd ? 3*SC
+                    : isStart ? [3*SC,0,0,3*SC]
+                    : isEnd   ? [0,3*SC,3*SC,0]
+                    : 0;
 
-        ctx.restore();
-      } else if (col === 0) {
-        // Continuation label — dimmed text on first column of a new row
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(chipX + 2*SC, ty, chipW - 4*SC, chipH);
-        ctx.clip();
-        const contLabel = getContLabel(task);
-        ctx.fillStyle = 'rgba(255,255,255,0.45)';
-        ctx.font = `${7*SC}px system-ui,sans-serif`;
-        ctx.textAlign = 'left';
-        ctx.fillText(contLabel, chipX + 5*SC, ty + 10*SC);
-        ctx.restore();
-      }
-
-      ty += chipH + 3*SC;
-    });
-
-    // ── Milestones section ──
-    if (milestones.length && ty + 8*SC < cy + CH - 4*SC) {
-      // Category label
-      ctx.fillStyle = '#606080';
-      ctx.font = `bold ${5.5*SC}px system-ui,sans-serif`;
-      ctx.textAlign = 'left';
-      ctx.fillText('KEY DATES', cx + 4*SC, ty + 6*SC);
-      ty += 9*SC;
-
-      milestones.forEach(m => {
-        const mAttCount = exportPNGAttendees && m.attendees ? m.attendees.length : 0;
-        const mH = (13 + mAttCount * 10) * SC;
-        if (ty + mH > cy + CH - 4*SC) return;
-        // White outline chip
+      if (task.isDueDate) {
         ctx.fillStyle = 'rgba(255,255,255,0.1)';
-        canvasRoundRect(ctx, cx + 4*SC, ty, CW - 8*SC, mH, 3*SC);
+        canvasRoundRect(ctx, chipX, ty, chipW, taskH, radius);
         ctx.fill();
         ctx.strokeStyle = 'rgba(255,255,255,0.5)';
         ctx.lineWidth = SC;
         ctx.stroke();
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(cx + 5*SC, ty, CW - 10*SC, mH);
-        ctx.clip();
-        // Flag label
-        ctx.fillStyle = '#fff';
-        ctx.font = `${7*SC}px system-ui,sans-serif`;
-        ctx.textAlign = 'left';
-        const mIcon = m.milestoneType === 'milestone' ? '🎯' : m.milestoneType === 'delivery' ? '📦' : '🏁';
-        const mDflt = m.milestoneType === 'milestone' ? 'Milestone' : m.milestoneType === 'delivery' ? 'Delivery' : 'Project Due Date';
-        ctx.fillText(mIcon + ' ' + (m.taskName || mDflt), cx + 7*SC, ty + 9*SC);
-        // Attendee bullet rows
-        if (exportPNGAttendees && m.attendees) {
-          m.attendees.forEach((att, i) => {
-            const ay = ty + 17*SC + i * 10*SC;
-            ctx.fillStyle = att.color || '#888';
-            ctx.beginPath();
-            ctx.arc(cx + 10*SC, ay, 2.5*SC, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = 'rgba(255,255,255,0.85)';
-            ctx.font = `${7*SC}px system-ui,sans-serif`;
-            ctx.fillText((att.person || att.role), cx + 15*SC, ay + 4*SC);
-          });
+
+        if (isStart) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(chipX + 3*SC, ty, chipW - 6*SC, taskH);
+          ctx.clip();
+          const mIcon = task.milestoneType === 'milestone' ? '🎯'
+                      : task.milestoneType === 'delivery'  ? '📦'
+                      : task.milestoneType === 'pto'       ? '🏖'
+                      : '🏁';
+          const mDflt = task.milestoneType === 'milestone' ? 'Milestone'
+                      : task.milestoneType === 'delivery'  ? 'Delivery'
+                      : task.milestoneType === 'pto'       ? 'PTO'
+                      : 'Project Due Date';
+          ctx.fillStyle = '#fff';
+          ctx.font = `${7*SC}px system-ui,sans-serif`;
+          ctx.textAlign = 'left';
+          ctx.fillText(mIcon + ' ' + (task.taskName || mDflt), chipX + 3*SC, ty + 9*SC);
+          if (exportPNGAttendees && task.attendees) {
+            task.attendees.forEach((att, i) => {
+              const ay = ty + 17*SC + i * 10*SC;
+              ctx.fillStyle = att.color || '#888';
+              ctx.beginPath();
+              ctx.arc(chipX + 6*SC, ay, 2.5*SC, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.fillStyle = 'rgba(255,255,255,0.85)';
+              ctx.font = `${7*SC}px system-ui,sans-serif`;
+              ctx.fillText((att.person || att.role), chipX + 11*SC, ay + 4*SC);
+            });
+          }
+          ctx.restore();
+        } else if (col === 0) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(chipX + 2*SC, ty, chipW - 4*SC, taskH);
+          ctx.clip();
+          ctx.fillStyle = 'rgba(255,255,255,0.45)';
+          ctx.font = `${7*SC}px system-ui,sans-serif`;
+          ctx.textAlign = 'left';
+          ctx.fillText(getContLabel(task), chipX + 5*SC, ty + 10*SC);
+          ctx.restore();
         }
-        ctx.restore();
-        ty += mH + 2*SC;
-      });
-    }
+      } else if (task.isReview) {
+        ctx.fillStyle = 'rgba(192,57,79,0.25)';
+        canvasRoundRect(ctx, chipX, ty, chipW, taskH, radius);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(192,57,79,0.8)';
+        ctx.lineWidth = SC;
+        ctx.stroke();
+
+        if (isStart) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(chipX + 3*SC, ty, chipW - 6*SC, taskH);
+          ctx.clip();
+          const title = (task.reviewLabel || 'REVIEW') + ': ' + (task.taskName || '');
+          ctx.fillStyle = '#fff';
+          ctx.font = `${8*SC}px system-ui,sans-serif`;
+          ctx.textAlign = 'left';
+          ctx.fillText(title, chipX + 5*SC, ty + 10*SC);
+          if (exportPNGAttendees && task.attendees) {
+            task.attendees.forEach((att, i) => {
+              const ay = ty + 18*SC + i * 10*SC;
+              ctx.fillStyle = att.color || REVIEW_COLOR;
+              ctx.beginPath();
+              ctx.arc(chipX + 9*SC, ay, 2.5*SC, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.fillStyle = 'rgba(255,255,255,0.9)';
+              ctx.font = `${7*SC}px system-ui,sans-serif`;
+              ctx.fillText((att.person || att.role), chipX + 14*SC, ay + 4*SC);
+            });
+          }
+          ctx.restore();
+        } else if (col === 0) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(chipX + 2*SC, ty, chipW - 4*SC, taskH);
+          ctx.clip();
+          ctx.fillStyle = 'rgba(255,255,255,0.55)';
+          ctx.font = `${7*SC}px system-ui,sans-serif`;
+          ctx.textAlign = 'left';
+          ctx.fillText(getContLabel(task), chipX + 5*SC, ty + 10*SC);
+          ctx.restore();
+        }
+      } else {
+        ctx.fillStyle = task.color;
+        canvasRoundRect(ctx, chipX, ty, chipW, taskH, radius);
+        ctx.fill();
+
+        if (isStart) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(chipX + 3*SC, ty, chipW - 6*SC, taskH);
+          ctx.clip();
+          const loeStr = task.loe ? LOE_EMOJI[task.loe] + ' ' : '';
+          const roleStr = exportPNGRoles && task.role ? ` (${task.role})` : '';
+          const title = loeStr + ((task.person || '') + (task.person && task.taskName ? ' · ' : '') + (task.taskName || task.role)) + roleStr;
+          ctx.fillStyle = '#fff';
+          ctx.font = `${8*SC}px system-ui,sans-serif`;
+          ctx.textAlign = 'left';
+          ctx.fillText(title, chipX + 5*SC, ty + 10*SC);
+          ctx.restore();
+        } else if (col === 0) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(chipX + 2*SC, ty, chipW - 4*SC, taskH);
+          ctx.clip();
+          ctx.fillStyle = 'rgba(255,255,255,0.45)';
+          ctx.font = `${7*SC}px system-ui,sans-serif`;
+          ctx.textAlign = 'left';
+          ctx.fillText(getContLabel(task), chipX + 5*SC, ty + 10*SC);
+          ctx.restore();
+        }
+      }
+
+      ty += taskH + 3*SC;
+    });
   });
 
   canvas.toBlob(blob => {
