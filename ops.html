@@ -1910,31 +1910,36 @@ function getTeamHeadsUp() {
 
 function getOpsHeadsUpPrompt(item) {
   const today = todayStr();
-  const bizDays = getNextBusinessDays(today, 5);
-  const windowEnd = bizDays[bizDays.length - 1];
 
   if (item.type === 'pto') {
+    if (item.consolidated) return null;
+
     const name = item.teammateName;
     const role = (item.teammateRole || '').toLowerCase();
     const heavy = item.workloadPts >= 4;
 
+    if (role === 'producer') {
+      const start = new Date(item.date + 'T00:00:00');
+      const end = new Date((item.endDate || item.date) + 'T00:00:00');
+      const days = Math.round((end - start) / 86400000) + 1;
+      if (days > 3) return { text: `${name}'s out ${days} days — coverage doc + backup lined up?`, tasks: [] };
+      if (days === 3) return { text: `${name}'s out 3 days — does this need a coverage doc?`, tasks: [] };
+      return { text: `Anyone covering for ${name}?`, tasks: [] };
+    }
     if (role === 'stakeholder' || role === 'designer' || role === 'copywriter') {
-      return { text: `Does the team need sign-off from ${name} before they leave?`, tasks: [] };
+      return { text: `Got sign-off from ${name} before PTO?`, tasks: [] };
     }
     if (role === 'editor' || role === 'animator') {
-      if (heavy) return { text: `${name} has a heavy workload (${item.workloadPts} pts) before PTO — is their work on track?`, tasks: [] };
-      return { text: `Is ${name}'s work on track to finish before PTO?`, tasks: [] };
+      if (heavy) return { text: `${name}'s got ${item.workloadPts} pts before PTO — work on track?`, tasks: [] };
+      return { text: `${name}'s work on track before PTO?`, tasks: [] };
     }
-    if (role === 'producer') {
-      return { text: `Who's covering for ${name} while they're out?`, tasks: [] };
-    }
-    if (heavy) return { text: `${name} has a heavy workload (${item.workloadPts} pts) before PTO — have they handed off?`, tasks: [] };
-    return { text: `Has ${name} handed off their work?`, tasks: [] };
+    if (heavy) return { text: `${name}'s got ${item.workloadPts} pts before PTO — handed off?`, tasks: [] };
+    return { text: `${name} handed off their tasks?`, tasks: [] };
   }
 
   if (item.type === 'review' || item.type === 'shoot' || item.type === 'milestone') {
     const proj = (state.projects || []).find(p => p.id === item.projectId);
-    if (!proj) return { text: 'Is everything ready?', tasks: [] };
+    if (!proj) return { text: 'Everything ready?', tasks: [] };
     const eventName = (item.title || '').toLowerCase();
 
     const leadingTasks = (proj.tasks || []).filter(t => {
@@ -1950,12 +1955,12 @@ function getOpsHeadsUpPrompt(item) {
       return eventWords.some(w => tn.includes(w));
     });
 
-    if (matched.length === 1) return { text: `Will "${matched[0].taskName || '(untitled)'}" be ready?`, tasks: leadingTasks };
-    if (matched.length > 1) return { text: `${matched.length} related tasks need to land before this — on track?`, tasks: leadingTasks };
-    if (leadingTasks.length) return { text: `${leadingTasks.length} task${leadingTasks.length > 1 ? 's' : ''} due before this — everything on track?`, tasks: leadingTasks };
-    if (item.type === 'shoot') return { text: 'Is everything prepped for the shoot?', tasks: [] };
-    if (item.type === 'milestone') return { text: 'Is everything ready for this?', tasks: [] };
-    return { text: 'Is everything ready for review?', tasks: [] };
+    if (matched.length === 1) return { text: `Will "${matched[0].taskName || '(untitled)'}" be ready in time?`, tasks: leadingTasks };
+    if (matched.length > 1) return { text: `${matched.length} related tasks need to land — all on track?`, tasks: leadingTasks };
+    if (leadingTasks.length) return { text: `${leadingTasks.length} task${leadingTasks.length > 1 ? 's' : ''} due before this — all on track?`, tasks: leadingTasks };
+    if (item.type === 'shoot') return { text: 'Shoot prepped?', tasks: [] };
+    if (item.type === 'milestone') return { text: 'Everything ready for this?', tasks: [] };
+    return { text: 'Review ready?', tasks: [] };
   }
 
   return null;
