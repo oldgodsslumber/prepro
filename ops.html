@@ -166,6 +166,56 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .hu-metric-value { font-size: 22px; font-weight: 700; color: var(--text); line-height: 1.1; }
 .hu-metric-label { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; margin-top: 6px; }
 .hu-metric-sub { font-size: 10px; color: var(--dim); margin-top: 2px; }
+
+/* ── METRICS VIEW ── */
+.metrics-view { flex: 1; overflow-y: auto; padding: 20px 24px; display: none; }
+.metrics-view.visible { display: block; }
+.m-section { margin-bottom: 28px; }
+.m-section-title { font-size: 11px; font-weight: 700; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 10px; }
+.m-empty { color: var(--dim); font-size: 12px; font-style: italic; }
+
+.m-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.m-tile { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+.m-tile-value { font-size: 22px; font-weight: 700; color: var(--text); line-height: 1.1; }
+.m-tile-label { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; margin-top: 6px; }
+.m-tile-sub { font-size: 10px; color: var(--dim); margin-top: 2px; }
+
+.m-heat { display: flex; flex-direction: column; gap: 2px; }
+.m-heat-row { display: grid; gap: 2px; align-items: center; }
+.m-heat-name { font-size: 11px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 4px; }
+.m-heat-cell { height: 20px; border-radius: 3px; font-size: 9px; color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+.m-heat-cell.empty { background: #222232; }
+.m-heat-cell.today-col { outline: 1px solid #6c63ff; outline-offset: -1px; }
+.m-heat-header { font-size: 9px; color: var(--dim); text-align: center; line-height: 14px; }
+.m-heat-header.today { color: #6c63ff; font-weight: 700; }
+.m-heat-header.month-start { color: var(--text); }
+
+.m-gantt { display: flex; flex-direction: column; gap: 4px; }
+.m-gantt-row { display: grid; grid-template-columns: 200px 1fr; gap: 8px; align-items: center; font-size: 11px; }
+.m-gantt-name { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-gantt-name a { color: var(--text); text-decoration: none; }
+.m-gantt-name a:hover { color: #6c63ff; text-decoration: underline; }
+.m-gantt-track { position: relative; height: 18px; background: #1a1a28; border-radius: 3px; overflow: hidden; }
+.m-gantt-bar { position: absolute; top: 0; height: 100%; border-radius: 3px; opacity: .85; }
+.m-gantt-bar:hover { opacity: 1; }
+.m-gantt-today { position: absolute; top: 0; bottom: 0; width: 1px; background: #6c63ff; pointer-events: none; }
+.m-gantt-axis { display: grid; grid-template-columns: 200px 1fr; gap: 8px; margin-top: 4px; }
+.m-gantt-axis-track { position: relative; height: 14px; font-size: 9px; color: var(--dim); }
+.m-gantt-axis-tick { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+
+.m-health-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.m-health-table th { font-size: 9px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.m-health-table td { padding: 8px; border-bottom: 1px solid var(--border); color: var(--text); }
+.m-health-table td.dim { color: var(--dim); }
+.m-health-table td a { color: var(--text); text-decoration: none; }
+.m-health-table td a:hover { color: #6c63ff; text-decoration: underline; }
+
+.m-cat-bar { display: flex; height: 24px; border-radius: 4px; overflow: hidden; margin-bottom: 10px; background: #1a1a28; }
+.m-cat-seg { height: 100%; }
+.m-cat-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 11px; color: var(--text); }
+.m-cat-legend-item { display: flex; align-items: center; gap: 6px; }
+.m-cat-swatch { width: 10px; height: 10px; border-radius: 2px; }
+.m-cat-pct { color: var(--dim); margin-left: 2px; }
 .hu-card.pto { border-color: rgba(255,180,50,.25); }
 .hu-card.review { border-color: rgba(192,57,79,.3); }
 .hu-card.shoot { border-color: rgba(192,57,79,.4); }
@@ -294,6 +344,7 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
     <button class="toggle-btn active" data-view="headsup">Ops Dashboard</button>
     <button class="toggle-btn" data-view="person">Gantt Chart</button>
     <button class="toggle-btn" data-view="studio">Studio Calendar</button>
+    <button class="toggle-btn" data-view="metrics">Metrics</button>
   </div>
   <div class="ops-header-spacer"></div>
   <div class="toggle-group" id="chipDisplayToggle" title="Chip label: category abbreviation or task name">
@@ -356,6 +407,7 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 
 <div class="headsup-view" id="headsupView"></div>
 <div class="studio-view" id="studioView"></div>
+<div class="metrics-view" id="metricsView"></div>
 
 <div class="ops-bottom">
   <div class="ops-workload">
@@ -426,7 +478,7 @@ let calLatestDate   = null;
 let calObserver     = null;
 let chipDisplay = 'categories'; // 'categories' | 'tasks'
 let personOrder = JSON.parse(localStorage.getItem('ops_person_order') || '[]'); // persisted row order
-let viewMode    = 'headsup';    // 'headsup' | 'person' | 'studio'
+let viewMode    = 'headsup';    // 'headsup' | 'person' | 'studio' | 'metrics'
 
 // Timeline-specific state
 let tlStart    = '';
@@ -455,6 +507,7 @@ function reloadState(newState) {
   if (viewMode === 'person') renderTimeline();
   else if (viewMode === 'headsup') renderHeadsUp();
   else if (viewMode === 'studio') renderStudio();
+  else if (viewMode === 'metrics') renderMetrics();
   else renderCalendar();
 }
 
@@ -587,6 +640,7 @@ function opsRerender() {
   if (viewMode === 'person') renderTimeline();
   else if (viewMode === 'headsup') renderHeadsUp();
   else if (viewMode === 'studio') renderStudio();
+  else if (viewMode === 'metrics') renderMetrics();
   else renderCalendar();
   renderFilterChips();
   renderWorkload();
@@ -1143,6 +1197,7 @@ function renderFilterChips() {
       if (viewMode === 'person') renderTimeline();
       else if (viewMode === 'studio') renderStudio();
       else if (viewMode === 'headsup') renderHeadsUp();
+      else if (viewMode === 'metrics') renderMetrics();
       else renderCalendar();
     });
     container.appendChild(chip);
@@ -1690,6 +1745,7 @@ function applyViewMode() {
   const personView  = document.getElementById('personView');
   const headsupView = document.getElementById('headsupView');
   const studioView  = document.getElementById('studioView');
+  const metricsView = document.getElementById('metricsView');
   const calNav      = document.querySelector('.cal-nav');
   const calDow      = document.getElementById('calDowRow');
 
@@ -1710,6 +1766,7 @@ function applyViewMode() {
     calDow.style.display    = 'none';
     personView.classList.remove('visible');
     studioView.classList.remove('visible');
+    metricsView.classList.remove('visible');
     headsupView.classList.add('visible');
     renderHeadsUp();
   } else if (viewMode === 'person') {
@@ -1718,6 +1775,7 @@ function applyViewMode() {
     calDow.style.display    = 'none';
     headsupView.classList.remove('visible');
     studioView.classList.remove('visible');
+    metricsView.classList.remove('visible');
     personView.classList.add('visible');
     if (!tlStart) resetTlRange();
     renderTimeline();
@@ -1726,12 +1784,23 @@ function applyViewMode() {
     if (tlObserver) { tlObserver.disconnect(); tlObserver = null; }
     personView.classList.remove('visible');
     headsupView.classList.remove('visible');
+    metricsView.classList.remove('visible');
     studioView.classList.add('visible');
     calScroll.style.display = '';
     calNav.style.display    = '';
     calDow.style.display    = '';
     renderStudio();
     scrollToToday();
+  } else if (viewMode === 'metrics') {
+    if (tlObserver) { tlObserver.disconnect(); tlObserver = null; }
+    calScroll.style.display = 'none';
+    calNav.style.display    = 'none';
+    calDow.style.display    = 'none';
+    personView.classList.remove('visible');
+    headsupView.classList.remove('visible');
+    studioView.classList.remove('visible');
+    metricsView.classList.add('visible');
+    renderMetrics();
   }
 }
 
@@ -2193,6 +2262,399 @@ function computeOpsMetrics() {
   return { activeProjects, activeWithTasks, teamEffortAvg };
 }
 
+// ── METRICS VIEW ──
+function renderMetrics() {
+  const container = document.getElementById('metricsView');
+  container.innerHTML = '';
+
+  container.appendChild(renderMetricsTiles());
+  container.appendChild(renderEffortHeatmap());
+  container.appendChild(renderProjectGantt());
+  container.appendChild(renderProjectHealth());
+  container.appendChild(renderCategoryMix());
+}
+
+function mkSectionTitle(text) {
+  const t = document.createElement('div');
+  t.className = 'm-section-title';
+  t.textContent = text;
+  return t;
+}
+
+function mkEmpty(text) {
+  const d = document.createElement('div');
+  d.className = 'm-empty';
+  d.textContent = text;
+  return d;
+}
+
+function renderMetricsTiles() {
+  const section = document.createElement('div');
+  section.className = 'm-section';
+  section.appendChild(mkSectionTitle('Snapshot'));
+
+  const grid = document.createElement('div');
+  grid.className = 'm-tiles';
+  const m = computeOpsMetrics();
+  const effortInfo = workloadInfo(m.teamEffortAvg);
+  const tiles = [
+    { label: 'Current Projects', value: m.activeProjects },
+    { label: 'With Active Tasks', value: m.activeWithTasks },
+    { label: 'Team Effort', value: (effortInfo.emoji ? effortInfo.emoji + ' ' : '') + effortInfo.label, sub: m.teamEffortAvg + ' avg pts/person', color: effortInfo.color }
+  ];
+  tiles.forEach(t => {
+    const tile = document.createElement('div');
+    tile.className = 'm-tile';
+    const v = document.createElement('div');
+    v.className = 'm-tile-value';
+    v.textContent = t.value;
+    if (t.color) v.style.color = t.color;
+    const l = document.createElement('div');
+    l.className = 'm-tile-label';
+    l.textContent = t.label;
+    tile.appendChild(v);
+    tile.appendChild(l);
+    if (t.sub) {
+      const s = document.createElement('div');
+      s.className = 'm-tile-sub';
+      s.textContent = t.sub;
+      tile.appendChild(s);
+    }
+    grid.appendChild(tile);
+  });
+  section.appendChild(grid);
+  return section;
+}
+
+function renderEffortHeatmap() {
+  const section = document.createElement('div');
+  section.className = 'm-section';
+  section.appendChild(mkSectionTitle('Effort Heatmap · Last 30 Days (weekdays)'));
+
+  // Last ~30 calendar days (= ~22 weekdays), ending today
+  const today = todayStr();
+  const days = [];
+  let cursor = today;
+  while (days.length < 22) {
+    const dow = new Date(cursor + 'T00:00:00').getDay();
+    if (dow !== 0 && dow !== 6) days.unshift(cursor);
+    cursor = addDays(cursor, -1);
+  }
+
+  const people = getAllPeople().filter(p => !hiddenPeople.has(p));
+  if (!people.length) {
+    section.appendChild(mkEmpty('No team members visible. Use the filter to show people.'));
+    return section;
+  }
+
+  const heat = document.createElement('div');
+  heat.className = 'm-heat';
+  const cols = `120px repeat(${days.length}, minmax(20px, 1fr))`;
+
+  // Header row: day-of-month labels
+  const header = document.createElement('div');
+  header.className = 'm-heat-row';
+  header.style.gridTemplateColumns = cols;
+  header.appendChild(document.createElement('div'));
+  days.forEach(d => {
+    const day = new Date(d + 'T00:00:00');
+    const lab = document.createElement('div');
+    lab.className = 'm-heat-header';
+    if (d === today) lab.classList.add('today');
+    if (day.getDate() === 1) lab.classList.add('month-start');
+    lab.textContent = day.getDate() === 1 ? MONTHS[day.getMonth()].slice(0, 3) : day.getDate();
+    lab.title = fmtDateShort(d);
+    header.appendChild(lab);
+  });
+  heat.appendChild(header);
+
+  people.forEach(person => {
+    const row = document.createElement('div');
+    row.className = 'm-heat-row';
+    row.style.gridTemplateColumns = cols;
+    const name = document.createElement('div');
+    name.className = 'm-heat-name';
+    name.textContent = person;
+    name.title = person;
+    row.appendChild(name);
+    days.forEach(d => {
+      const pts = getDayWorkload(person, d);
+      const info = workloadInfo(pts);
+      const cell = document.createElement('div');
+      cell.className = 'm-heat-cell' + (pts === 0 ? ' empty' : '') + (d === today ? ' today-col' : '');
+      if (pts > 0) {
+        cell.style.background = info.color;
+        cell.textContent = pts;
+      }
+      cell.title = `${person} · ${fmtDateShort(d)} · ${pts} pts${info.label !== '—' ? ' (' + info.label + ')' : ''}`;
+      row.appendChild(cell);
+    });
+    heat.appendChild(row);
+  });
+
+  section.appendChild(heat);
+  return section;
+}
+
+function renderProjectGantt() {
+  const section = document.createElement('div');
+  section.className = 'm-section';
+  section.appendChild(mkSectionTitle('Project Timeline · Active Projects'));
+
+  const today = todayStr();
+  const data = (state.projects || [])
+    .filter(p => !p.completed && !p.ghost)
+    .map(proj => {
+      const tasks = (proj.tasks || []).filter(t => t.date);
+      if (!tasks.length) return null;
+      const start = tasks.reduce((a, t) => (!a || t.date < a) ? t.date : a, null);
+      const end = tasks.reduce((a, t) => {
+        const e = t.endDate || t.date;
+        return (!a || e > a) ? e : a;
+      }, null);
+      return { proj, start, end, producer: getPrimaryProducer(proj) };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.start.localeCompare(b.start));
+
+  if (!data.length) {
+    section.appendChild(mkEmpty('No active projects with scheduled tasks.'));
+    return section;
+  }
+
+  // Pad axis by a few days on each side for breathing room
+  const minMs = new Date(data[0].start + 'T00:00:00').getTime() - 3 * 86400000;
+  const maxRaw = data.reduce((m, d) => d.end > m ? d.end : m, data[0].end);
+  const maxMs = new Date(maxRaw + 'T00:00:00').getTime() + 3 * 86400000;
+  const span = Math.max(maxMs - minMs, 86400000);
+  const todayMs = new Date(today + 'T00:00:00').getTime();
+  const todayPct = (todayMs >= minMs && todayMs <= maxMs)
+    ? ((todayMs - minMs) / span) * 100
+    : null;
+
+  const gantt = document.createElement('div');
+  gantt.className = 'm-gantt';
+
+  data.forEach(({ proj, start, end, producer }) => {
+    const row = document.createElement('div');
+    row.className = 'm-gantt-row';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'm-gantt-name';
+    const a = document.createElement('a');
+    a.href = 'team.html#project=' + encodeURIComponent(proj.id);
+    a.target = '_blank';
+    a.textContent = producer ? `${producer} · ${proj.name}` : proj.name;
+    a.title = a.textContent;
+    nameEl.appendChild(a);
+    row.appendChild(nameEl);
+
+    const track = document.createElement('div');
+    track.className = 'm-gantt-track';
+    const bar = document.createElement('div');
+    bar.className = 'm-gantt-bar';
+    const sMs = new Date(start + 'T00:00:00').getTime();
+    const eMs = new Date(end + 'T00:00:00').getTime();
+    const left = ((sMs - minMs) / span) * 100;
+    const width = Math.max(((eMs - sMs) / span) * 100, 0.5);
+    bar.style.left = left + '%';
+    bar.style.width = width + '%';
+    bar.style.background = CAT_COLORS[getProducerCat(proj.name)] || '#6c63ff';
+    bar.title = `${proj.name}: ${fmtDateShort(start)} – ${fmtDateShort(end)}`;
+    track.appendChild(bar);
+
+    if (todayPct !== null) {
+      const todayLine = document.createElement('div');
+      todayLine.className = 'm-gantt-today';
+      todayLine.style.left = todayPct + '%';
+      track.appendChild(todayLine);
+    }
+    row.appendChild(track);
+    gantt.appendChild(row);
+  });
+
+  // Axis: month tick marks
+  const axis = document.createElement('div');
+  axis.className = 'm-gantt-axis';
+  axis.appendChild(document.createElement('div'));
+  const axisTrack = document.createElement('div');
+  axisTrack.className = 'm-gantt-axis-track';
+  const cur = new Date(minMs);
+  cur.setDate(1);
+  if (cur.getTime() < minMs) cur.setMonth(cur.getMonth() + 1);
+  while (cur.getTime() <= maxMs) {
+    const tick = document.createElement('div');
+    tick.className = 'm-gantt-axis-tick';
+    tick.style.left = (((cur.getTime() - minMs) / span) * 100) + '%';
+    tick.textContent = MONTHS[cur.getMonth()].slice(0, 3) + (cur.getMonth() === 0 ? ` '${String(cur.getFullYear()).slice(-2)}` : '');
+    axisTrack.appendChild(tick);
+    cur.setMonth(cur.getMonth() + 1);
+  }
+  axis.appendChild(axisTrack);
+
+  section.appendChild(gantt);
+  section.appendChild(axis);
+  return section;
+}
+
+function renderProjectHealth() {
+  const section = document.createElement('div');
+  section.className = 'm-section';
+  section.appendChild(mkSectionTitle('Project Health'));
+
+  const today = todayStr();
+  const projects = (state.projects || []).filter(p => !p.completed && !p.ghost);
+  if (!projects.length) {
+    section.appendChild(mkEmpty('No active projects.'));
+    return section;
+  }
+
+  const rows = projects.map(proj => {
+    const tasks = proj.tasks || [];
+    const workTasks = tasks.filter(t => !t.isReview && !t.isDueDate && t.date);
+    const totalTasks = workTasks.length;
+    const pastTasks = workTasks.filter(t => (t.endDate || t.date) < today).length;
+    const pct = totalTasks ? Math.round((pastTasks / totalTasks) * 100) : 0;
+
+    const upcoming = tasks
+      .filter(t => (t.isReview || t.isDueDate) && t.date && t.date >= today && t.milestoneType !== 'pto')
+      .sort((a, b) => a.date.localeCompare(b.date))[0];
+    const nextLabel = upcoming
+      ? (upcoming.taskName || upcoming.reviewLabel || 'Milestone') + ' · ' + fmtDateShort(upcoming.date)
+      : '—';
+
+    const lastEnd = workTasks.reduce((m, t) => {
+      const e = t.endDate || t.date;
+      return (!m || e > m) ? e : m;
+    }, null);
+    const daysRemaining = lastEnd
+      ? Math.round((new Date(lastEnd + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000)
+      : null;
+
+    return {
+      proj,
+      producer: getPrimaryProducer(proj) || '—',
+      pct, pastTasks, totalTasks,
+      nextLabel,
+      daysRemaining
+    };
+  }).sort((a, b) => {
+    const ad = a.daysRemaining ?? 99999;
+    const bd = b.daysRemaining ?? 99999;
+    return ad - bd;
+  });
+
+  const table = document.createElement('table');
+  table.className = 'm-health-table';
+  table.innerHTML = '<thead><tr><th>Project</th><th>Producer</th><th>Tasks Past</th><th>Next Up</th><th>Days Left</th></tr></thead>';
+  const tbody = document.createElement('tbody');
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    const projTd = document.createElement('td');
+    const a = document.createElement('a');
+    a.href = 'team.html#project=' + encodeURIComponent(r.proj.id);
+    a.target = '_blank';
+    a.textContent = r.proj.name;
+    projTd.appendChild(a);
+    tr.appendChild(projTd);
+
+    const prodTd = document.createElement('td');
+    prodTd.textContent = r.producer;
+    if (r.producer === '—') prodTd.classList.add('dim');
+    tr.appendChild(prodTd);
+
+    const pastTd = document.createElement('td');
+    pastTd.textContent = r.totalTasks ? `${r.pastTasks}/${r.totalTasks} (${r.pct}%)` : '—';
+    if (!r.totalTasks) pastTd.classList.add('dim');
+    tr.appendChild(pastTd);
+
+    const nextTd = document.createElement('td');
+    nextTd.textContent = r.nextLabel;
+    if (r.nextLabel === '—') nextTd.classList.add('dim');
+    tr.appendChild(nextTd);
+
+    const remTd = document.createElement('td');
+    if (r.daysRemaining === null) {
+      remTd.textContent = '—';
+      remTd.classList.add('dim');
+    } else if (r.daysRemaining < 0) {
+      remTd.textContent = `${-r.daysRemaining}d past`;
+      remTd.style.color = '#c0394f';
+    } else {
+      remTd.textContent = `${r.daysRemaining}d`;
+    }
+    tr.appendChild(remTd);
+
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  section.appendChild(table);
+  return section;
+}
+
+function renderCategoryMix() {
+  const section = document.createElement('div');
+  section.className = 'm-section';
+  section.appendChild(mkSectionTitle('Category Mix · Last 30 Days'));
+
+  const today = todayStr();
+  const start = addDays(today, -30);
+  const buckets = {};
+  getOpsEntries().forEach(e => {
+    if (e.endDate < start || e.date > today) return;
+    if (!e.cat) return;
+    let cur = e.date < start ? start : e.date;
+    const last = e.endDate > today ? today : e.endDate;
+    while (cur <= last) {
+      const dow = new Date(cur + 'T00:00:00').getDay();
+      if (dow !== 0 && dow !== 6) {
+        buckets[e.cat] = (buckets[e.cat] || 0) + loePts(e.loe);
+      }
+      cur = addDays(cur, 1);
+    }
+  });
+
+  const total = Object.values(buckets).reduce((a, b) => a + b, 0);
+  if (!total) {
+    section.appendChild(mkEmpty('No effort logged in the last 30 days.'));
+    return section;
+  }
+
+  const sorted = Object.entries(buckets).sort((a, b) => b[1] - a[1]);
+
+  const bar = document.createElement('div');
+  bar.className = 'm-cat-bar';
+  sorted.forEach(([cat, pts]) => {
+    const seg = document.createElement('div');
+    seg.className = 'm-cat-seg';
+    seg.style.background = CAT_COLORS[cat] || '#6c63ff';
+    seg.style.width = ((pts / total) * 100) + '%';
+    seg.title = `${cat}: ${pts} pts (${Math.round((pts / total) * 100)}%)`;
+    bar.appendChild(seg);
+  });
+  section.appendChild(bar);
+
+  const legend = document.createElement('div');
+  legend.className = 'm-cat-legend';
+  sorted.forEach(([cat, pts]) => {
+    const item = document.createElement('div');
+    item.className = 'm-cat-legend-item';
+    const sw = document.createElement('div');
+    sw.className = 'm-cat-swatch';
+    sw.style.background = CAT_COLORS[cat] || '#6c63ff';
+    item.appendChild(sw);
+    const lab = document.createElement('span');
+    lab.textContent = cat;
+    item.appendChild(lab);
+    const pct = document.createElement('span');
+    pct.className = 'm-cat-pct';
+    pct.textContent = Math.round((pts / total) * 100) + '%';
+    item.appendChild(pct);
+    legend.appendChild(item);
+  });
+  section.appendChild(legend);
+  return section;
+}
+
 // ── STUDIO VIEW ──
 function getStudioShoots() {
   const shoots = [];
@@ -2562,6 +3024,7 @@ function init() {
     if (viewMode === 'person') renderTimeline();
     else if (viewMode === 'studio') renderStudio();
     else if (viewMode === 'headsup') renderHeadsUp();
+    else if (viewMode === 'metrics') renderMetrics();
     else renderCalendar();
   });
 
@@ -2572,6 +3035,7 @@ function init() {
     if (viewMode === 'person') renderTimeline();
     else if (viewMode === 'studio') renderStudio();
     else if (viewMode === 'headsup') renderHeadsUp();
+    else if (viewMode === 'metrics') renderMetrics();
     else renderCalendar();
   });
 }
