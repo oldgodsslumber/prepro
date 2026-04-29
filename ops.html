@@ -180,15 +180,22 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .m-tile-label { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; margin-top: 6px; }
 .m-tile-sub { font-size: 10px; color: var(--dim); margin-top: 2px; }
 
-.m-heat { display: flex; flex-direction: column; gap: 2px; }
-.m-heat-row { display: grid; gap: 2px; align-items: center; }
-.m-heat-name { font-size: 11px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 4px; }
-.m-heat-cell { height: 20px; border-radius: 3px; font-size: 9px; color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; }
-.m-heat-cell.empty { background: #222232; }
-.m-heat-cell.today-col { outline: 1px solid #6c63ff; outline-offset: -1px; }
-.m-heat-header { font-size: 9px; color: var(--dim); text-align: center; line-height: 14px; }
-.m-heat-header.today { color: #6c63ff; font-weight: 700; }
-.m-heat-header.month-start { color: var(--text); }
+.m-chart { display: grid; grid-template-columns: 36px 1fr; gap: 6px; }
+.m-chart-y { display: flex; flex-direction: column; justify-content: space-between; font-size: 9px; color: var(--dim); text-align: right; padding-right: 4px; height: 180px; }
+.m-chart-area { display: flex; flex-direction: column; min-width: 0; }
+.m-chart-bars { display: flex; gap: 2px; align-items: flex-end; height: 180px; border-left: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 0 4px; }
+.m-chart-col { flex: 1; display: flex; flex-direction: column-reverse; min-width: 8px; height: 100%; }
+.m-chart-col.today { background: rgba(108,99,255,.08); }
+.m-chart-col.weekend { opacity: .5; }
+.m-chart-seg { width: 100%; }
+.m-chart-x { display: flex; gap: 2px; padding: 4px 4px 0; font-size: 9px; color: var(--dim); }
+.m-chart-x > div { flex: 1; min-width: 8px; text-align: center; white-space: nowrap; overflow: hidden; }
+.m-chart-x > div.today { color: #6c63ff; font-weight: 700; }
+.m-chart-x > div.month { color: var(--text); font-weight: 700; }
+
+.m-recap-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.m-recap-head .m-section-title { margin-bottom: 0; }
+.m-recap-range { background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; font-size: 11px; }
 
 .m-gantt { display: flex; flex-direction: column; gap: 4px; }
 .m-gantt-row { display: grid; grid-template-columns: 200px 1fr; gap: 8px; align-items: center; font-size: 11px; }
@@ -479,6 +486,7 @@ let calObserver     = null;
 let chipDisplay = 'categories'; // 'categories' | 'tasks'
 let personOrder = JSON.parse(localStorage.getItem('ops_person_order') || '[]'); // persisted row order
 let viewMode    = 'headsup';    // 'headsup' | 'person' | 'studio' | 'metrics'
+let metricsRecapRange = 'quarter'; // '30d' | 'quarter' | '6mo' | 'ytd'
 
 // Timeline-specific state
 let tlStart    = '';
@@ -2268,7 +2276,9 @@ function renderMetrics() {
   container.innerHTML = '';
 
   container.appendChild(renderMetricsTiles());
-  container.appendChild(renderEffortHeatmap());
+  container.appendChild(renderEffortChart('past', 22));   // ~30 calendar days
+  container.appendChild(renderEffortChart('next', 15));   // ~21 calendar days
+  container.appendChild(renderQuarterRecap());
   container.appendChild(renderProjectGantt());
   container.appendChild(renderProjectHealth());
   container.appendChild(renderCategoryMix());
@@ -2288,6 +2298,27 @@ function mkEmpty(text) {
   return d;
 }
 
+function mkTile({ label, value, sub, color }) {
+  const tile = document.createElement('div');
+  tile.className = 'm-tile';
+  const v = document.createElement('div');
+  v.className = 'm-tile-value';
+  v.textContent = value;
+  if (color) v.style.color = color;
+  const l = document.createElement('div');
+  l.className = 'm-tile-label';
+  l.textContent = label;
+  tile.appendChild(v);
+  tile.appendChild(l);
+  if (sub) {
+    const s = document.createElement('div');
+    s.className = 'm-tile-sub';
+    s.textContent = sub;
+    tile.appendChild(s);
+  }
+  return tile;
+}
+
 function renderMetricsTiles() {
   const section = document.createElement('div');
   section.className = 'm-section';
@@ -2297,103 +2328,296 @@ function renderMetricsTiles() {
   grid.className = 'm-tiles';
   const m = computeOpsMetrics();
   const effortInfo = workloadInfo(m.teamEffortAvg);
-  const tiles = [
+  [
     { label: 'Current Projects', value: m.activeProjects },
     { label: 'With Active Tasks', value: m.activeWithTasks },
     { label: 'Team Effort', value: (effortInfo.emoji ? effortInfo.emoji + ' ' : '') + effortInfo.label, sub: m.teamEffortAvg + ' avg pts/person', color: effortInfo.color }
-  ];
-  tiles.forEach(t => {
-    const tile = document.createElement('div');
-    tile.className = 'm-tile';
-    const v = document.createElement('div');
-    v.className = 'm-tile-value';
-    v.textContent = t.value;
-    if (t.color) v.style.color = t.color;
-    const l = document.createElement('div');
-    l.className = 'm-tile-label';
-    l.textContent = t.label;
-    tile.appendChild(v);
-    tile.appendChild(l);
-    if (t.sub) {
-      const s = document.createElement('div');
-      s.className = 'm-tile-sub';
-      s.textContent = t.sub;
-      tile.appendChild(s);
-    }
-    grid.appendChild(tile);
-  });
+  ].forEach(t => grid.appendChild(mkTile(t)));
   section.appendChild(grid);
   return section;
 }
 
-function renderEffortHeatmap() {
+// Map each internal-team person → their primary role (Producer/Editor/Animator)
+function getPeopleRoles() {
+  const counts = new Map();
+  (state.projects || []).filter(p => !p.ghost).forEach(proj => {
+    Object.entries(proj.roster || {}).forEach(([role, names]) => {
+      if (!['Producer', 'Editor', 'Animator'].includes(role)) return;
+      (names || []).forEach(name => {
+        if (!counts.has(name)) counts.set(name, {});
+        counts.get(name)[role] = (counts.get(name)[role] || 0) + 5;
+      });
+    });
+    (proj.tasks || []).forEach(t => {
+      if (!t.person || !['Producer', 'Editor', 'Animator'].includes(t.role)) return;
+      if (!counts.has(t.person)) counts.set(t.person, {});
+      counts.get(t.person)[t.role] = (counts.get(t.person)[t.role] || 0) + 1;
+    });
+  });
+  const result = new Map();
+  counts.forEach((roles, person) => {
+    const top = Object.entries(roles).sort((a, b) => b[1] - a[1])[0];
+    if (top) result.set(person, top[0]);
+  });
+  return result;
+}
+
+const ROLE_COLOR = {
+  Producer: '#6c63ff',
+  Editor:   '#4cba6a',
+  Animator: '#7c5cbf'
+};
+
+function renderEffortChart(direction, daySpan) {
   const section = document.createElement('div');
   section.className = 'm-section';
-  section.appendChild(mkSectionTitle('Effort Heatmap · Last 30 Days (weekdays)'));
+  const titleTxt = direction === 'past'
+    ? 'Team Effort by Role · Last 30 Days'
+    : 'Projected Effort by Role · Next 21 Days';
+  section.appendChild(mkSectionTitle(titleTxt));
 
-  // Last ~30 calendar days (= ~22 weekdays), ending today
   const today = todayStr();
   const days = [];
-  let cursor = today;
-  while (days.length < 22) {
-    const dow = new Date(cursor + 'T00:00:00').getDay();
-    if (dow !== 0 && dow !== 6) days.unshift(cursor);
-    cursor = addDays(cursor, -1);
+  if (direction === 'past') {
+    let cursor = today;
+    while (days.length < daySpan) {
+      const dow = new Date(cursor + 'T00:00:00').getDay();
+      if (dow !== 0 && dow !== 6) days.unshift(cursor);
+      cursor = addDays(cursor, -1);
+    }
+  } else {
+    let cursor = addDays(today, 1);
+    while (days.length < daySpan) {
+      const dow = new Date(cursor + 'T00:00:00').getDay();
+      if (dow !== 0 && dow !== 6) days.push(cursor);
+      cursor = addDays(cursor, 1);
+    }
   }
 
-  const people = getAllPeople().filter(p => !hiddenPeople.has(p));
-  if (!people.length) {
-    section.appendChild(mkEmpty('No team members visible. Use the filter to show people.'));
+  const peopleRoles = getPeopleRoles();
+  const roles = ['Producer', 'Editor', 'Animator'];
+  const peopleByRole = {};
+  roles.forEach(r => {
+    peopleByRole[r] = [...peopleRoles.entries()].filter(([_, role]) => role === r).map(([p]) => p);
+  });
+
+  // For each day, average pts per role across non-PTO people in that role
+  const perDay = days.map(d => {
+    const byRole = {};
+    roles.forEach(r => {
+      const ppl = peopleByRole[r];
+      let sum = 0, n = 0;
+      ppl.forEach(p => {
+        if (isPersonPTO(p, d)) return;
+        sum += getDayWorkload(p, d);
+        n++;
+      });
+      byRole[r] = n ? sum / n : 0;
+    });
+    return { date: d, byRole };
+  });
+
+  if (!perDay.some(d => roles.some(r => d.byRole[r] > 0))) {
+    section.appendChild(mkEmpty(direction === 'past'
+      ? 'No effort logged in this window.'
+      : 'No projected effort in this window.'));
     return section;
   }
 
-  const heat = document.createElement('div');
-  heat.className = 'm-heat';
-  const cols = `120px repeat(${days.length}, minmax(20px, 1fr))`;
+  const maxTotal = Math.max(0.1, ...perDay.map(p => roles.reduce((s, r) => s + p.byRole[r], 0)));
+  const yMax = Math.ceil(maxTotal * 2) / 2; // round up to nearest 0.5
 
-  // Header row: day-of-month labels
-  const header = document.createElement('div');
-  header.className = 'm-heat-row';
-  header.style.gridTemplateColumns = cols;
-  header.appendChild(document.createElement('div'));
-  days.forEach(d => {
+  const chart = document.createElement('div');
+  chart.className = 'm-chart';
+
+  const yAxis = document.createElement('div');
+  yAxis.className = 'm-chart-y';
+  [yMax, yMax / 2, 0].forEach(v => {
+    const t = document.createElement('div');
+    t.textContent = (Math.round(v * 10) / 10).toString();
+    yAxis.appendChild(t);
+  });
+  chart.appendChild(yAxis);
+
+  const area = document.createElement('div');
+  area.className = 'm-chart-area';
+  const bars = document.createElement('div');
+  bars.className = 'm-chart-bars';
+  perDay.forEach(({ date, byRole }) => {
+    const col = document.createElement('div');
+    col.className = 'm-chart-col';
+    if (date === today) col.classList.add('today');
+    const total = roles.reduce((s, r) => s + byRole[r], 0);
+    col.title = `${fmtDateShort(date)}\n` +
+      roles.map(r => `${r}: ${byRole[r].toFixed(1)}`).join('\n') +
+      `\nTotal: ${total.toFixed(1)} avg pts/person`;
+    // column-reverse stacks bottom→top, so push Producer first (bottom)
+    roles.forEach(role => {
+      const seg = document.createElement('div');
+      seg.className = 'm-chart-seg';
+      seg.style.height = ((byRole[role] / yMax) * 100) + '%';
+      seg.style.background = ROLE_COLOR[role];
+      col.appendChild(seg);
+    });
+    bars.appendChild(col);
+  });
+  area.appendChild(bars);
+
+  // X-axis labels
+  const xAxis = document.createElement('div');
+  xAxis.className = 'm-chart-x';
+  days.forEach((d, i) => {
     const day = new Date(d + 'T00:00:00');
     const lab = document.createElement('div');
-    lab.className = 'm-heat-header';
+    const isMonth = day.getDate() === 1 || i === 0;
+    const showLabel = isMonth || d === today || day.getDay() === 1; // Mondays + month starts + today
     if (d === today) lab.classList.add('today');
-    if (day.getDate() === 1) lab.classList.add('month-start');
-    lab.textContent = day.getDate() === 1 ? MONTHS[day.getMonth()].slice(0, 3) : day.getDate();
+    if (isMonth) lab.classList.add('month');
+    if (showLabel) {
+      lab.textContent = isMonth
+        ? `${MONTHS[day.getMonth()].slice(0, 3)} ${day.getDate()}`
+        : day.getDate().toString();
+    }
     lab.title = fmtDateShort(d);
-    header.appendChild(lab);
+    xAxis.appendChild(lab);
   });
-  heat.appendChild(header);
+  area.appendChild(xAxis);
+  chart.appendChild(area);
+  section.appendChild(chart);
 
-  people.forEach(person => {
-    const row = document.createElement('div');
-    row.className = 'm-heat-row';
-    row.style.gridTemplateColumns = cols;
-    const name = document.createElement('div');
-    name.className = 'm-heat-name';
-    name.textContent = person;
-    name.title = person;
-    row.appendChild(name);
-    days.forEach(d => {
-      const pts = getDayWorkload(person, d);
-      const info = workloadInfo(pts);
-      const cell = document.createElement('div');
-      cell.className = 'm-heat-cell' + (pts === 0 ? ' empty' : '') + (d === today ? ' today-col' : '');
-      if (pts > 0) {
-        cell.style.background = info.color;
-        cell.textContent = pts;
-      }
-      cell.title = `${person} · ${fmtDateShort(d)} · ${pts} pts${info.label !== '—' ? ' (' + info.label + ')' : ''}`;
-      row.appendChild(cell);
-    });
-    heat.appendChild(row);
+  // Legend
+  const legend = document.createElement('div');
+  legend.className = 'm-cat-legend';
+  legend.style.marginTop = '10px';
+  roles.forEach(role => {
+    const item = document.createElement('div');
+    item.className = 'm-cat-legend-item';
+    const sw = document.createElement('div');
+    sw.className = 'm-cat-swatch';
+    sw.style.background = ROLE_COLOR[role];
+    item.appendChild(sw);
+    const lab = document.createElement('span');
+    const ppl = peopleByRole[role];
+    lab.textContent = `${role} (${ppl.length})`;
+    item.appendChild(lab);
+    legend.appendChild(item);
   });
+  section.appendChild(legend);
 
-  section.appendChild(heat);
   return section;
+}
+
+function renderQuarterRecap() {
+  const section = document.createElement('div');
+  section.className = 'm-section';
+
+  const head = document.createElement('div');
+  head.className = 'm-recap-head';
+  head.appendChild(mkSectionTitle('Recap'));
+
+  const select = document.createElement('select');
+  select.className = 'm-recap-range';
+  [
+    { v: '30d',     l: 'Last 30 days' },
+    { v: 'quarter', l: 'Last quarter (90d)' },
+    { v: '6mo',     l: 'Last 6 months' },
+    { v: 'ytd',     l: 'Year to date' }
+  ].forEach(opt => {
+    const o = document.createElement('option');
+    o.value = opt.v;
+    o.textContent = opt.l;
+    if (opt.v === metricsRecapRange) o.selected = true;
+    select.appendChild(o);
+  });
+  select.addEventListener('change', () => {
+    metricsRecapRange = select.value;
+    const fresh = renderQuarterRecap();
+    section.replaceWith(fresh);
+  });
+  head.appendChild(select);
+  section.appendChild(head);
+
+  const today = todayStr();
+  let start;
+  if (metricsRecapRange === '30d') start = addDays(today, -30);
+  else if (metricsRecapRange === 'quarter') start = addDays(today, -90);
+  else if (metricsRecapRange === '6mo') start = addDays(today, -180);
+  else start = (new Date().getFullYear()) + '-01-01';
+
+  const stats = computeRecapStats(start, today);
+
+  const grid = document.createElement('div');
+  grid.className = 'm-tiles';
+  [
+    { label: 'Projects Completed', value: stats.projectsCompleted },
+    { label: 'Studio Days',        value: stats.studioDays },
+    { label: 'Reviews Held',       value: stats.reviewsHeld },
+    { label: 'Hours Produced',     value: stats.hoursProduced + 'h', sub: stats.totalPts + ' pts (≈2h/pt)' }
+  ].forEach(t => grid.appendChild(mkTile(t)));
+  section.appendChild(grid);
+
+  return section;
+}
+
+function computeRecapStats(start, end) {
+  const today = todayStr();
+  const cap = end > today ? today : end;
+  let projectsCompleted = 0;
+  let totalPts = 0;
+  let reviewsHeld = 0;
+  const studioDays = new Set();
+
+  (state.projects || []).forEach(proj => {
+    if (proj.ghost) return;
+    const tasks = proj.tasks || [];
+
+    if (proj.completed) {
+      // Use last task date as completion-date proxy
+      const lastEnd = tasks.reduce((m, t) => {
+        const e = t.endDate || t.date;
+        return (e && (!m || e > m)) ? e : m;
+      }, null);
+      if (lastEnd && lastEnd >= start && lastEnd <= cap) projectsCompleted++;
+    }
+
+    tasks.forEach(t => {
+      if (!t.date) return;
+      const tStart = t.date;
+      const tEnd = t.endDate || t.date;
+
+      // Effort: internal team work tasks overlapping the window (cap at today)
+      if (!t.isReview && !t.isDueDate && ['Producer', 'Editor', 'Animator'].includes(t.role)) {
+        let cur = tStart < start ? start : tStart;
+        const last = tEnd > cap ? cap : tEnd;
+        while (cur <= last) {
+          const dow = new Date(cur + 'T00:00:00').getDay();
+          if (dow !== 0 && dow !== 6) totalPts += loePts(t.loe);
+          cur = addDays(cur, 1);
+        }
+      }
+
+      // Reviews held in the window
+      if (t.isReview && tStart >= start && tStart <= cap) {
+        reviewsHeld++;
+        if ((t.reviewLabel || '').includes('Shoot')) {
+          let cur = tStart;
+          const last = tEnd > cap ? cap : tEnd;
+          while (cur <= last) {
+            studioDays.add(cur);
+            cur = addDays(cur, 1);
+          }
+        }
+      }
+    });
+  });
+
+  return {
+    projectsCompleted,
+    studioDays: studioDays.size,
+    reviewsHeld,
+    totalPts,
+    hoursProduced: Math.round(totalPts * 2)
+  };
 }
 
 function renderProjectGantt() {
