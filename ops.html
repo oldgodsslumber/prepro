@@ -161,6 +161,11 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .hu-task-item { font-size: 11px; color: var(--text); padding: 2px 0; display: flex; align-items: center; gap: 6px; }
 .hu-task-item + .hu-task-item { border-top: 1px solid var(--border); }
 .hu-empty { color: var(--dim); font-size: 13px; font-style: italic; padding: 20px 0; }
+.hu-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.hu-metric { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+.hu-metric-value { font-size: 22px; font-weight: 700; color: var(--text); line-height: 1.1; }
+.hu-metric-label { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; margin-top: 6px; }
+.hu-metric-sub { font-size: 10px; color: var(--dim); margin-top: 2px; }
 .hu-card.pto { border-color: rgba(255,180,50,.25); }
 .hu-card.review { border-color: rgba(192,57,79,.3); }
 .hu-card.shoot { border-color: rgba(192,57,79,.4); }
@@ -286,9 +291,9 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
   <span class="ops-header-title">Ops</span>
   <span class="ops-header-sub">Internal team workload view</span>
   <div class="toggle-group" id="viewToggle" title="Switch view">
-    <button class="toggle-btn active" data-view="headsup">Heads Up</button>
-    <button class="toggle-btn" data-view="person">By Person</button>
-    <button class="toggle-btn" data-view="studio">Studio</button>
+    <button class="toggle-btn active" data-view="headsup">Ops Dashboard</button>
+    <button class="toggle-btn" data-view="person">Gantt Chart</button>
+    <button class="toggle-btn" data-view="studio">Studio Calendar</button>
   </div>
   <div class="ops-header-spacer"></div>
   <div class="toggle-group" id="chipDisplayToggle" title="Chip label: category abbreviation or task name">
@@ -1754,6 +1759,19 @@ function esc(str) {
 }
 
 // ── HEADS UP VIEW ──
+// Returns the primary producer name for a project (most-tasked producer, with roster bonus)
+function getPrimaryProducer(proj) {
+  const counts = {};
+  (proj.tasks || []).forEach(t => {
+    if (t.role === 'Producer' && t.person) counts[t.person] = (counts[t.person] || 0) + 1;
+  });
+  ((proj.roster || {})['Producer'] || []).forEach(name => {
+    counts[name] = (counts[name] || 0) + 100;
+  });
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  return top ? top[0] : null;
+}
+
 function getTeamHeadsUp() {
   const items = [];
   const today = todayStr();
@@ -1782,6 +1800,9 @@ function getTeamHeadsUp() {
   });
 
   (state.projects || []).filter(p => !p.completed && !p.ghost).forEach(proj => {
+    const producer = getPrimaryProducer(proj);
+    const withProducer = (label) => producer ? (producer + ' - ' + label) : label;
+
     (proj.tasks || []).forEach(task => {
       const start = task.date;
       const end = task.endDate || task.date;
@@ -1791,10 +1812,11 @@ function getTeamHeadsUp() {
       if (task.isReview) {
         const isShoot = (task.reviewLabel || '').includes('Shoot');
         const attendeeNames = (task.attendees || []).filter(a => a.person).map(a => a.person);
+        const baseTitle = task.taskName || task.reviewLabel || 'Review';
         items.push({
           type: isShoot ? 'shoot' : 'review',
           icon: isShoot ? '🎬' : '📋',
-          title: task.taskName || task.reviewLabel || 'Review',
+          title: withProducer(baseTitle),
           project: proj.name,
           projectId: proj.id,
           date: start,
@@ -1812,7 +1834,7 @@ function getTeamHeadsUp() {
           items.push({
             type: 'milestone',
             icon: '🎯',
-            title: task.taskName || 'Milestone',
+            title: withProducer(task.taskName || 'Milestone'),
             project: proj.name,
             projectId: proj.id,
             date: start,
@@ -2101,6 +2123,74 @@ function renderHeadsUp() {
 
     container.appendChild(section);
   });
+
+  // ── METRICS ──
+  const metrics = computeOpsMetrics();
+  const mSection = document.createElement('div');
+  mSection.className = 'hu-section';
+  const mTitle = document.createElement('div');
+  mTitle.className = 'hu-section-title';
+  mTitle.textContent = 'Metrics';
+  mSection.appendChild(mTitle);
+
+  const mGrid = document.createElement('div');
+  mGrid.className = 'hu-metrics';
+  const effortInfo = workloadInfo(metrics.teamEffortAvg);
+  const tiles = [
+    { label: 'Current Projects', value: metrics.activeProjects },
+    { label: 'With Active Tasks', value: metrics.activeWithTasks },
+    { label: 'Team Effort', value: (effortInfo.emoji ? effortInfo.emoji + ' ' : '') + effortInfo.label, sub: metrics.teamEffortAvg + ' avg', color: effortInfo.color }
+  ];
+  tiles.forEach(t => {
+    const tile = document.createElement('div');
+    tile.className = 'hu-metric';
+    const v = document.createElement('div');
+    v.className = 'hu-metric-value';
+    v.textContent = t.value;
+    if (t.color) v.style.color = t.color;
+    const l = document.createElement('div');
+    l.className = 'hu-metric-label';
+    l.textContent = t.label;
+    tile.appendChild(v);
+    tile.appendChild(l);
+    if (t.sub) {
+      const s = document.createElement('div');
+      s.className = 'hu-metric-sub';
+      s.textContent = t.sub;
+      tile.appendChild(s);
+    }
+    mGrid.appendChild(tile);
+  });
+  mSection.appendChild(mGrid);
+  container.appendChild(mSection);
+}
+
+function computeOpsMetrics() {
+  const today = todayStr();
+  const projects = (state.projects || []).filter(p => !p.completed && !p.ghost);
+  const activeProjects = projects.length;
+
+  let activeWithTasks = 0;
+  projects.forEach(p => {
+    const hasOngoing = (p.tasks || []).some(t => {
+      if (t.isDueDate || t.isReview) return false;
+      const end = t.endDate || t.date;
+      return t.date && t.date <= today && end >= today;
+    });
+    if (hasOngoing) activeWithTasks++;
+  });
+
+  const people = getAllPeople();
+  let totalPts = 0;
+  let counted = 0;
+  people.forEach(person => {
+    if (isPersonPTO(person, today)) return;
+    totalPts += getDayWorkload(person, today);
+    counted++;
+  });
+  const teamEffortAvg = counted ? Math.round((totalPts / counted) * 10) / 10 : 0;
+
+  return { activeProjects, activeWithTasks, teamEffortAvg };
 }
 
 // ── STUDIO VIEW ──
