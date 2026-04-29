@@ -180,15 +180,13 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .m-tile-label { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; margin-top: 6px; }
 .m-tile-sub { font-size: 10px; color: var(--dim); margin-top: 2px; }
 
-.m-chart { display: grid; grid-template-columns: 36px 1fr; gap: 6px; }
-.m-chart-y { display: flex; flex-direction: column; justify-content: space-between; font-size: 9px; color: var(--dim); text-align: right; padding-right: 4px; height: 180px; }
+.m-chart { display: grid; grid-template-columns: 96px 1fr; gap: 4px; }
+.m-chart-y { position: relative; height: 200px; }
+.m-chart-y-label { position: absolute; right: 6px; transform: translateY(-50%); font-size: 10px; color: var(--dim); white-space: nowrap; line-height: 1; }
 .m-chart-area { display: flex; flex-direction: column; min-width: 0; }
-.m-chart-bars { display: flex; gap: 2px; align-items: flex-end; height: 180px; border-left: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 0 4px; }
-.m-chart-col { flex: 1; display: flex; flex-direction: column-reverse; min-width: 8px; height: 100%; }
-.m-chart-col.today { background: rgba(108,99,255,.08); }
-.m-chart-col.weekend { opacity: .5; }
-.m-chart-seg { width: 100%; }
-.m-chart-x { display: flex; gap: 2px; padding: 4px 4px 0; font-size: 9px; color: var(--dim); }
+.m-chart-svg-wrap { height: 200px; border-left: 1px solid var(--border); border-bottom: 1px solid var(--border); position: relative; }
+.m-chart-svg { width: 100%; height: 100%; display: block; }
+.m-chart-x { display: flex; padding: 4px 0 0; font-size: 9px; color: var(--dim); }
 .m-chart-x > div { flex: 1; min-width: 8px; text-align: center; white-space: nowrap; overflow: hidden; }
 .m-chart-x > div.today { color: #6c63ff; font-weight: 700; }
 .m-chart-x > div.month { color: var(--text); font-weight: 700; }
@@ -2424,46 +2422,113 @@ function renderEffortChart(direction, daySpan) {
     return section;
   }
 
-  const maxTotal = Math.max(0.1, ...perDay.map(p => roles.reduce((s, r) => s + p.byRole[r], 0)));
-  const yMax = Math.ceil(maxTotal * 2) / 2; // round up to nearest 0.5
+  const yMax = 5;            // workload meter tops out at "Overloaded" (5+)
+  const SVGNS = 'http://www.w3.org/2000/svg';
 
   const chart = document.createElement('div');
   chart.className = 'm-chart';
 
+  // Y-axis: workload tier labels positioned at the centre of each band
   const yAxis = document.createElement('div');
   yAxis.className = 'm-chart-y';
-  [yMax, yMax / 2, 0].forEach(v => {
-    const t = document.createElement('div');
-    t.textContent = (Math.round(v * 10) / 10).toString();
-    yAxis.appendChild(t);
+  const tiers = [
+    { v: 4.75, txt: '🚨 Overloaded' },
+    { v: 4,    txt: '🔴 Very Busy' },
+    { v: 3,    txt: '🟠 Busy' },
+    { v: 2,    txt: '🟡 Manageable' },
+    { v: 0.75, txt: '🟢 Light' }
+  ];
+  tiers.forEach(t => {
+    const lab = document.createElement('div');
+    lab.className = 'm-chart-y-label';
+    lab.textContent = t.txt;
+    lab.style.top = ((1 - t.v / yMax) * 100) + '%';
+    yAxis.appendChild(lab);
   });
   chart.appendChild(yAxis);
 
   const area = document.createElement('div');
   area.className = 'm-chart-area';
-  const bars = document.createElement('div');
-  bars.className = 'm-chart-bars';
-  perDay.forEach(({ date, byRole }) => {
-    const col = document.createElement('div');
-    col.className = 'm-chart-col';
-    if (date === today) col.classList.add('today');
-    const total = roles.reduce((s, r) => s + byRole[r], 0);
-    col.title = `${fmtDateShort(date)}\n` +
-      roles.map(r => `${r}: ${byRole[r].toFixed(1)}`).join('\n') +
-      `\nTotal: ${total.toFixed(1)} avg pts/person`;
-    // column-reverse stacks bottom→top, so push Producer first (bottom)
-    roles.forEach(role => {
-      const seg = document.createElement('div');
-      seg.className = 'm-chart-seg';
-      seg.style.height = ((byRole[role] / yMax) * 100) + '%';
-      seg.style.background = ROLE_COLOR[role];
-      col.appendChild(seg);
-    });
-    bars.appendChild(col);
-  });
-  area.appendChild(bars);
+  const svgWrap = document.createElement('div');
+  svgWrap.className = 'm-chart-svg-wrap';
 
-  // X-axis labels
+  const W = 100, H = 100;
+  const svg = document.createElementNS(SVGNS, 'svg');
+  svg.setAttribute('class', 'm-chart-svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('preserveAspectRatio', 'none');
+
+  // Horizontal gridlines at workload tier boundaries
+  [1.5, 2.5, 3.5, 4.5].forEach(v => {
+    const y = (1 - v / yMax) * H;
+    const line = document.createElementNS(SVGNS, 'line');
+    line.setAttribute('x1', 0);
+    line.setAttribute('x2', W);
+    line.setAttribute('y1', y);
+    line.setAttribute('y2', y);
+    line.setAttribute('stroke', '#2a2a3a');
+    line.setAttribute('stroke-width', '0.5');
+    line.setAttribute('stroke-dasharray', '1,1');
+    line.setAttribute('vector-effect', 'non-scaling-stroke');
+    svg.appendChild(line);
+  });
+
+  // Today vertical marker (only for past chart, since next chart starts tomorrow)
+  if (direction === 'past') {
+    const x = ((days.length - 0.5) / days.length) * W;
+    const tline = document.createElementNS(SVGNS, 'line');
+    tline.setAttribute('x1', x);
+    tline.setAttribute('x2', x);
+    tline.setAttribute('y1', 0);
+    tline.setAttribute('y2', H);
+    tline.setAttribute('stroke', '#6c63ff');
+    tline.setAttribute('stroke-width', '0.5');
+    tline.setAttribute('vector-effect', 'non-scaling-stroke');
+    svg.appendChild(tline);
+  }
+
+  // One polyline per role, plotted at slot centres so x-axis labels line up
+  roles.forEach(role => {
+    const points = perDay.map((p, i) => {
+      const x = ((i + 0.5) / days.length) * W;
+      const v = Math.min(p.byRole[role], yMax);
+      const y = (1 - v / yMax) * H;
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    }).join(' ');
+    const poly = document.createElementNS(SVGNS, 'polyline');
+    poly.setAttribute('points', points);
+    poly.setAttribute('fill', 'none');
+    poly.setAttribute('stroke', ROLE_COLOR[role]);
+    poly.setAttribute('stroke-width', '2');
+    poly.setAttribute('stroke-linejoin', 'round');
+    poly.setAttribute('stroke-linecap', 'round');
+    poly.setAttribute('vector-effect', 'non-scaling-stroke');
+    svg.appendChild(poly);
+  });
+
+  // Transparent hover columns for tooltips
+  perDay.forEach((p, i) => {
+    const colW = W / days.length;
+    const rect = document.createElementNS(SVGNS, 'rect');
+    rect.setAttribute('x', i * colW);
+    rect.setAttribute('y', 0);
+    rect.setAttribute('width', colW);
+    rect.setAttribute('height', H);
+    rect.setAttribute('fill', 'transparent');
+    const title = document.createElementNS(SVGNS, 'title');
+    title.textContent = `${fmtDateShort(p.date)}\n` +
+      roles.map(r => {
+        const info = workloadInfo(p.byRole[r]);
+        return `${r}: ${p.byRole[r].toFixed(1)} (${info.label})`;
+      }).join('\n');
+    rect.appendChild(title);
+    svg.appendChild(rect);
+  });
+
+  svgWrap.appendChild(svg);
+  area.appendChild(svgWrap);
+
+  // X-axis labels (one slot per day, centre-aligned to match polyline points)
   const xAxis = document.createElement('div');
   xAxis.className = 'm-chart-x';
   days.forEach((d, i) => {
