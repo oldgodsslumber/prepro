@@ -227,6 +227,32 @@ a.today-card-project:hover { color: var(--accent); }
 .coming-card-project { font-size: 9px; color: var(--dim); margin-top: 1px; }
 .coming-card-free { font-size: 12px; color: var(--dim); font-style: italic; }
 
+/* ── GANTT CHART ── */
+.gantt-chart { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--card); }
+.gantt-row { display: grid; grid-template-columns: 200px 1fr; min-height: 40px; }
+.gantt-row + .gantt-row { border-top: 1px solid var(--border); }
+.gantt-row.gantt-header-row { background: var(--bg); min-height: 36px; }
+.gantt-label { padding: 6px 10px; font-size: 11px; border-right: 1px solid var(--border); display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
+.gantt-task-name { font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gantt-task-project { font-size: 9px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+.gantt-cells { position: relative; display: grid; grid-template-columns: repeat(5, 1fr); }
+.gantt-cell { border-right: 1px solid var(--border); }
+.gantt-cell:last-child { border-right: none; }
+.gantt-cell.today { background: rgba(108,99,255,.08); }
+.gantt-day-header { padding: 6px 4px; text-align: center; font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; border-right: 1px solid var(--border); display: flex; flex-direction: column; justify-content: center; gap: 1px; }
+.gantt-day-header:last-child { border-right: none; }
+.gantt-day-header.today { color: var(--accent); background: rgba(108,99,255,.08); }
+.gantt-day-header .gantt-date { font-size: 10px; font-weight: 600; color: var(--text); }
+.gantt-day-header.today .gantt-date { color: var(--accent); }
+.gantt-bar { position: absolute; top: 5px; bottom: 5px; padding: 0 8px; border-radius: 4px; font-size: 11px; font-weight: 600; color: #fff; display: flex; align-items: center; gap: 5px; overflow: hidden; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,.35); cursor: default; }
+.gantt-bar-text { overflow: hidden; text-overflow: ellipsis; }
+.gantt-bar.milestone { background: #c0394f !important; }
+.gantt-bar.pto { background: #c8923a !important; }
+.gantt-bar.review { background: #c0394f !important; }
+.gantt-bar.clipped-left { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.gantt-bar.clipped-right { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.gantt-empty { padding: 24px; text-align: center; color: var(--dim); font-style: italic; font-size: 12px; }
+
 /* ── SETTINGS MODAL ── */
 .settings-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 9999; display: flex; align-items: center; justify-content: center; }
 .settings-modal { width: min(820px, 95vw); max-height: 85vh; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,.5); }
@@ -2033,51 +2059,166 @@ function renderHeadsUpSection() {
   return section;
 }
 
-// ── COMING UP SECTION ──
+// ── COMING UP — GANTT CHART (5 business days for selected person) ──
 function renderComingUpSection() {
   const section = document.createElement('div');
   section.className = 'dash-section';
 
   const title = document.createElement('div');
   title.className = 'dash-section-title';
-  title.textContent = 'Coming Up';
+  title.textContent = 'Next 5 Days';
   section.appendChild(title);
 
-  const grid = document.createElement('div');
-  grid.className = 'coming-grid';
+  const days = [];
+  let cursor = selectedDate;
+  while (days.length < 5) {
+    if (!isWeekend(cursor)) days.push(cursor);
+    cursor = addDays(cursor, 1);
+  }
+  const windowStart = days[0];
+  const windowEnd = days[days.length - 1];
+  const today = todayStr();
+  const lp = (selectedPerson || '').toLowerCase();
 
-  const days = getNextBusinessDays(selectedDate, 5);
+  // Collect tasks for this person that overlap the visible window
+  const items = [];
+  (state.projects || []).filter(p => !p.completed && !p.ghost).forEach(proj => {
+    (proj.tasks || []).forEach(task => {
+      const start = task.date;
+      const end = task.endDate || task.date;
+      if (!start) return;
+      if (end < windowStart || start > windowEnd) return;
 
-  days.forEach(dayStr => {
-    const tasks = getTasksForPerson(selectedPerson, dayStr);
-    const card = document.createElement('div');
-    card.className = 'coming-card' + (tasks.length === 0 ? ' free' : '');
+      let isMatch = false;
+      let matchRole = null;
+      if (task.person === selectedPerson) {
+        isMatch = true;
+        matchRole = task.role;
+      }
+      if (task.attendees) {
+        task.attendees.forEach(a => {
+          if (a.person === selectedPerson) {
+            isMatch = true;
+            if (!matchRole) matchRole = a.role;
+          }
+        });
+      }
+      if (task.isDueDate && task.milestoneType === 'pto') {
+        if ((task.attendees || []).some(a => a.person && a.person.toLowerCase() === lp)) isMatch = true;
+        if (task.taskName && task.taskName.toLowerCase().includes(lp)) isMatch = true;
+      }
+      if (!isMatch) return;
 
-    const dateLabel = document.createElement('div');
-    dateLabel.className = 'coming-card-date';
-    dateLabel.textContent = fmtDateShort(dayStr);
-    card.appendChild(dateLabel);
+      // Find first/last visible day index the task overlaps
+      let startIdx = -1, endIdx = -1;
+      for (let i = 0; i < days.length; i++) {
+        if (days[i] >= start && days[i] <= end) {
+          if (startIdx < 0) startIdx = i;
+          endIdx = i;
+        }
+      }
+      if (startIdx < 0) return; // task fell entirely on weekends within window
 
-    if (!tasks.length) {
-      const free = document.createElement('div');
-      free.className = 'coming-card-free';
-      free.textContent = 'Free';
-      card.appendChild(free);
-    } else {
-      tasks.forEach(t => {
-        const taskEl = document.createElement('div');
-        taskEl.className = 'coming-card-task';
-        const taskLabel = t.taskName || t.reviewLabel || '(untitled)';
-        const loe = (!t.isDueDate && t.loe) ? LOE_EMOJI[t.loe] || '' : '';
-        taskEl.innerHTML = `<div class="coming-card-task-row"><span class="task-name">${esc(taskLabel)}</span>${loe ? `<span>${loe}</span>` : ''}</div><div class="coming-card-project">${esc(t.projectName)}</div>`;
-        card.appendChild(taskEl);
+      items.push({
+        task, startIdx, endIdx,
+        clippedLeft: start < windowStart,
+        clippedRight: end > windowEnd,
+        projectName: proj.name,
+        projectId: proj.id,
+        color: getRoleColor(matchRole || task.role)
       });
-    }
-
-    grid.appendChild(card);
+    });
   });
 
-  section.appendChild(grid);
+  if (!items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'gantt-empty';
+    empty.textContent = 'Nothing scheduled in the next 5 business days';
+    section.appendChild(empty);
+    return section;
+  }
+
+  // Sort: earliest start, then longest, then project name
+  items.sort((a, b) =>
+    a.startIdx - b.startIdx
+    || (b.endIdx - b.startIdx) - (a.endIdx - a.startIdx)
+    || a.projectName.localeCompare(b.projectName)
+  );
+
+  const chart = document.createElement('div');
+  chart.className = 'gantt-chart';
+
+  // Header row
+  const headerRow = document.createElement('div');
+  headerRow.className = 'gantt-row gantt-header-row';
+  const headerLabel = document.createElement('div');
+  headerLabel.className = 'gantt-label';
+  headerRow.appendChild(headerLabel);
+  const headerCells = document.createElement('div');
+  headerCells.className = 'gantt-cells';
+  days.forEach(dayStr => {
+    const dh = document.createElement('div');
+    dh.className = 'gantt-day-header' + (dayStr === today ? ' today' : '');
+    const d = new Date(dayStr + 'T00:00:00');
+    const dow = DOW_SHORT[d.getDay()];
+    const dateStr = (d.getMonth() + 1) + '/' + d.getDate();
+    dh.innerHTML = `<div>${dow}</div><div class="gantt-date">${dateStr}</div>`;
+    headerCells.appendChild(dh);
+  });
+  headerRow.appendChild(headerCells);
+  chart.appendChild(headerRow);
+
+  // Task rows
+  items.forEach(({ task, startIdx, endIdx, clippedLeft, clippedRight, projectName, color }) => {
+    const row = document.createElement('div');
+    row.className = 'gantt-row';
+
+    const labelCell = document.createElement('div');
+    labelCell.className = 'gantt-label';
+    const taskName = task.taskName || task.reviewLabel || task.role || '(untitled)';
+    labelCell.innerHTML = `<div class="gantt-task-name">${esc(taskName)}</div><div class="gantt-task-project">${esc(projectName)}</div>`;
+    row.appendChild(labelCell);
+
+    const cellsWrap = document.createElement('div');
+    cellsWrap.className = 'gantt-cells';
+    days.forEach(dayStr => {
+      const cell = document.createElement('div');
+      cell.className = 'gantt-cell' + (dayStr === today ? ' today' : '');
+      cellsWrap.appendChild(cell);
+    });
+
+    const bar = document.createElement('div');
+    let barClass = 'gantt-bar';
+    if (task.isDueDate) {
+      barClass += task.milestoneType === 'pto' ? ' pto' : ' milestone';
+    } else if (task.isReview) {
+      barClass += ' review';
+    }
+    if (clippedLeft) barClass += ' clipped-left';
+    if (clippedRight) barClass += ' clipped-right';
+    bar.className = barClass;
+
+    const span = endIdx - startIdx + 1;
+    bar.style.left = `calc(${(startIdx / days.length) * 100}% + 2px)`;
+    bar.style.width = `calc(${(span / days.length) * 100}% - 4px)`;
+    if (!task.isDueDate && !task.isReview) bar.style.background = color;
+
+    const loe = (!task.isDueDate && task.loe) ? LOE_EMOJI[task.loe] || '' : '';
+    const prefix = clippedLeft ? '← ' : '';
+    const suffix = clippedRight ? ' →' : '';
+    bar.innerHTML = (loe ? `<span>${loe}</span>` : '') + `<span class="gantt-bar-text">${prefix}${esc(taskName)}${suffix}</span>`;
+
+    const fullStart = task.date;
+    const fullEnd = task.endDate || task.date;
+    const dateRange = fullStart === fullEnd ? fmtDateShort(fullStart) : `${fmtDateShort(fullStart)} – ${fmtDateShort(fullEnd)}`;
+    bar.title = `${taskName} — ${projectName}\n${dateRange}`;
+
+    cellsWrap.appendChild(bar);
+    row.appendChild(cellsWrap);
+    chart.appendChild(row);
+  });
+
+  section.appendChild(chart);
   return section;
 }
 
