@@ -218,9 +218,15 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .m-cat-bar { display: flex; height: 24px; border-radius: 4px; overflow: hidden; margin-bottom: 10px; background: #1a1a28; }
 .m-cat-seg { height: 100%; }
 .m-cat-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 11px; color: var(--text); }
+.m-cat-legend.vertical { flex-direction: column; flex-wrap: nowrap; gap: 8px; }
 .m-cat-legend-item { display: flex; align-items: center; gap: 6px; }
-.m-cat-swatch { width: 10px; height: 10px; border-radius: 2px; }
+.m-cat-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
 .m-cat-pct { color: var(--dim); margin-left: 2px; }
+
+.m-top-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; margin-bottom: 28px; }
+.m-top-row .m-section { margin-bottom: 0; }
+.m-pie-wrap { display: flex; align-items: center; gap: 20px; }
+.m-pie-svg { flex-shrink: 0; }
 .hu-card.pto { border-color: rgba(255,180,50,.25); }
 .hu-card.review { border-color: rgba(192,57,79,.3); }
 .hu-card.shoot { border-color: rgba(192,57,79,.4); }
@@ -2273,13 +2279,18 @@ function renderMetrics() {
   const container = document.getElementById('metricsView');
   container.innerHTML = '';
 
-  container.appendChild(renderMetricsTiles());
+  // Top row: snapshot tiles + category mix pie share the row
+  const topRow = document.createElement('div');
+  topRow.className = 'm-top-row';
+  topRow.appendChild(renderMetricsTiles());
+  topRow.appendChild(renderCategoryMix());
+  container.appendChild(topRow);
+
+  container.appendChild(renderQuarterRecap());
   container.appendChild(renderEffortChart('past', 22));   // ~30 calendar days
   container.appendChild(renderEffortChart('next', 15));   // ~21 calendar days
-  container.appendChild(renderQuarterRecap());
   container.appendChild(renderProjectGantt());
   container.appendChild(renderProjectHealth());
-  container.appendChild(renderCategoryMix());
 }
 
 function mkSectionTitle(text) {
@@ -2910,20 +2921,44 @@ function renderCategoryMix() {
 
   const sorted = Object.entries(buckets).sort((a, b) => b[1] - a[1]);
 
-  const bar = document.createElement('div');
-  bar.className = 'm-cat-bar';
+  const wrap = document.createElement('div');
+  wrap.className = 'm-pie-wrap';
+
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(SVGNS, 'svg');
+  svg.setAttribute('class', 'm-pie-svg');
+  svg.setAttribute('viewBox', '-1.05 -1.05 2.1 2.1');
+  svg.setAttribute('width', '150');
+  svg.setAttribute('height', '150');
+
+  let cumulative = 0;
   sorted.forEach(([cat, pts]) => {
-    const seg = document.createElement('div');
-    seg.className = 'm-cat-seg';
-    seg.style.background = CAT_COLORS[cat] || '#6c63ff';
-    seg.style.width = ((pts / total) * 100) + '%';
-    seg.title = `${cat}: ${pts} pts (${Math.round((pts / total) * 100)}%)`;
-    bar.appendChild(seg);
+    const frac = pts / total;
+    const path = document.createElementNS(SVGNS, 'path');
+    if (frac >= 0.999) {
+      // Single-category case: full circle as two arcs
+      path.setAttribute('d', 'M 0 -1 A 1 1 0 1 1 0 1 A 1 1 0 1 1 0 -1 Z');
+    } else {
+      const startA = cumulative * 2 * Math.PI - Math.PI / 2;
+      const endA = (cumulative + frac) * 2 * Math.PI - Math.PI / 2;
+      const x1 = Math.cos(startA), y1 = Math.sin(startA);
+      const x2 = Math.cos(endA),   y2 = Math.sin(endA);
+      const largeArc = frac > 0.5 ? 1 : 0;
+      path.setAttribute('d', `M 0 0 L ${x1.toFixed(4)} ${y1.toFixed(4)} A 1 1 0 ${largeArc} 1 ${x2.toFixed(4)} ${y2.toFixed(4)} Z`);
+    }
+    path.setAttribute('fill', CAT_COLORS[cat] || '#6c63ff');
+    path.setAttribute('stroke', '#0f0f1a');
+    path.setAttribute('stroke-width', '0.01');
+    const title = document.createElementNS(SVGNS, 'title');
+    title.textContent = `${cat}: ${pts} pts (${Math.round(frac * 100)}%)`;
+    path.appendChild(title);
+    svg.appendChild(path);
+    cumulative += frac;
   });
-  section.appendChild(bar);
+  wrap.appendChild(svg);
 
   const legend = document.createElement('div');
-  legend.className = 'm-cat-legend';
+  legend.className = 'm-cat-legend vertical';
   sorted.forEach(([cat, pts]) => {
     const item = document.createElement('div');
     item.className = 'm-cat-legend-item';
@@ -2940,7 +2975,9 @@ function renderCategoryMix() {
     item.appendChild(pct);
     legend.appendChild(item);
   });
-  section.appendChild(legend);
+  wrap.appendChild(legend);
+
+  section.appendChild(wrap);
   return section;
 }
 
