@@ -223,9 +223,9 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .m-cat-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
 .m-cat-pct { color: var(--dim); margin-left: 2px; }
 
-.m-top-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; margin-bottom: 28px; }
-.m-top-row .m-section { margin-bottom: 0; }
-.m-pie-wrap { display: flex; align-items: center; gap: 20px; }
+.m-top-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 24px; margin-bottom: 28px; align-items: stretch; }
+.m-top-row .m-section { margin-bottom: 0; display: flex; flex-direction: column; }
+.m-pie-wrap { display: flex; align-items: center; justify-content: center; gap: 28px; flex: 1; }
 .m-pie-svg { flex-shrink: 0; }
 .hu-card.pto { border-color: rgba(255,180,50,.25); }
 .hu-card.review { border-color: rgba(192,57,79,.3); }
@@ -489,7 +489,11 @@ let calLatestDate   = null;
 let calObserver     = null;
 let chipDisplay = 'categories'; // 'categories' | 'tasks'
 let personOrder = JSON.parse(localStorage.getItem('ops_person_order') || '[]'); // persisted row order
-let viewMode    = 'headsup';    // 'headsup' | 'person' | 'studio' | 'metrics'
+const VALID_VIEW_MODES = ['headsup', 'person', 'studio', 'metrics'];
+let viewMode = (() => {
+  const saved = localStorage.getItem('ops_view_mode');
+  return VALID_VIEW_MODES.includes(saved) ? saved : 'headsup';
+})();
 let metricsRecapRange = 'quarter'; // '30d' | 'quarter' | '6mo' | 'ytd'
 
 // Timeline-specific state
@@ -2928,8 +2932,8 @@ function renderCategoryMix() {
   const svg = document.createElementNS(SVGNS, 'svg');
   svg.setAttribute('class', 'm-pie-svg');
   svg.setAttribute('viewBox', '-1.05 -1.05 2.1 2.1');
-  svg.setAttribute('width', '150');
-  svg.setAttribute('height', '150');
+  svg.setAttribute('width', '190');
+  svg.setAttribute('height', '190');
 
   let cumulative = 0;
   sorted.forEach(([cat, pts]) => {
@@ -3246,7 +3250,8 @@ function setupCalObserver() {
 
 // ── INIT ──
 function init() {
-  // Start in heads up view
+  // Restore the persisted view tab's active state before first render
+  document.querySelectorAll('#viewToggle .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.view === viewMode));
   resetCalRange();
   resetTlRange();
   renderFilterChips();
@@ -3327,6 +3332,7 @@ function init() {
     const btn = e.target.closest('.toggle-btn');
     if (!btn) return;
     viewMode = btn.dataset.view;
+    try { localStorage.setItem('ops_view_mode', viewMode); } catch(_) {}
     document.querySelectorAll('#viewToggle .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.view === viewMode));
     applyViewMode();
   });
