@@ -8,27 +8,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <title>PRE-PRO — Team</title>
 
-<!-- Firebase -->
-<script type="module">
-import { initializeApp }                        from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getDatabase, ref, set, onValue, get }  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
-
-const firebaseConfig = {
-  apiKey:            'AIzaSyDYyEv6eospGbtmWt6orY6b4X71jhdUyKI',
-  authDomain:        'prepro-e2abc.firebaseapp.com',
-  databaseURL:       'https://prepro-e2abc-default-rtdb.firebaseio.com',
-  projectId:         'prepro-e2abc',
-  storageBucket:     'prepro-e2abc.appspot.com',
-  messagingSenderId: '',
-  appId:             ''
-};
-
-const app = initializeApp(firebaseConfig);
-const db  = getDatabase(app);
-
-// Expose Firebase helpers to the main script
-window._fb = { db, ref, set, onValue, get };
-</script>
+<!-- Firebase + auth gate -->
+<script type="module" src="./auth.js"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1730,18 +1711,30 @@ function buildGhostMap() {
 
 // Sync continuation bar/spacer heights to match the start block's actual rendered height
 function syncBarHeights() {
-  document.querySelectorAll('.review-block[data-task-id], .duedate-marker[data-task-id]').forEach(block => {
-    const id = block.dataset.taskId;
-    const h  = block.offsetHeight;
-    if (!h) return;
-    document.querySelectorAll(
-      `.review-bar[data-task-id="${id}"], .duedate-bar[data-task-id="${id}"], [data-spacer-for="${id}"]`
-    ).forEach(el => { el.style.height = h + 'px'; });
-  });
-  // Re-apply glow after DOM rebuild
-  if (selectedTaskId) {
-    document.querySelectorAll(`[data-task-id="${selectedTaskId}"]`).forEach(el => el.classList.add('task-selected'));
-  }
+  const apply = () => {
+    document.querySelectorAll('.review-block[data-task-id], .duedate-marker[data-task-id]').forEach(block => {
+      const id = block.dataset.taskId;
+      const h  = block.offsetHeight;
+      if (!h) return;
+      document.querySelectorAll(
+        `.review-bar[data-task-id="${id}"], .duedate-bar[data-task-id="${id}"], [data-spacer-for="${id}"]`
+      ).forEach(el => { el.style.height = h + 'px'; });
+    });
+    // Re-apply glow after DOM rebuild
+    if (selectedTaskId) {
+      document.querySelectorAll(`[data-task-id="${selectedTaskId}"]`).forEach(el => el.classList.add('task-selected'));
+    }
+  };
+  // Run now with current metrics, then again on the next frame so any late
+  // layout pass (font swap, scrollbar appearance) is captured.
+  apply();
+  requestAnimationFrame(apply);
+}
+
+// On initial page load, custom fonts (Open Sans) load asynchronously. Re-sync
+// once they're ready so heights reflect the final font metrics, not fallbacks.
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(() => syncBarHeights());
 }
 
 function rebuildCalGrid(adjustScrollTop) {

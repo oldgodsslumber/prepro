@@ -5,37 +5,27 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PRE-PRO — Ops Mode</title>
 
-<!-- Firebase -->
+<!-- Firebase + auth gate -->
+<script type="module" src="./auth.js"></script>
 <script type="module">
-import { initializeApp }                       from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getDatabase, ref, onValue, set }      from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+window._fbReady.then(({ db, ref, onValue }) => {
+  onValue(ref(db, 'prepro/state'), snapshot => {
+    const data = snapshot.val();
+    if (!data || !Array.isArray(data.projects)) return;
+    window._fbState = data;
+    if (window._opsReloadState) window._opsReloadState(data);
+  }, err => console.error('ops firebase error:', err));
 
-const firebaseConfig = {
-  apiKey:      'AIzaSyDYyEv6eospGbtmWt6orY6b4X71jhdUyKI',
-  authDomain:  'prepro-e2abc.firebaseapp.com',
-  databaseURL: 'https://prepro-e2abc-default-rtdb.firebaseio.com',
-  projectId:   'prepro-e2abc',
-};
-const app = initializeApp(firebaseConfig);
-const db  = getDatabase(app);
+  onValue(ref(db, 'prepro/nameHistory'), snapshot => {
+    const data = snapshot.val();
+    if (data) { window._fbNameHistory = data; if (window._opsReloadNameHistory) window._opsReloadNameHistory(data); }
+  }, err => console.error('ops nameHistory firebase error:', err));
 
-window._fb = { db, ref, set };
-onValue(ref(db, 'prepro/state'), snapshot => {
-  const data = snapshot.val();
-  if (!data || !Array.isArray(data.projects)) return;
-  window._fbState = data;
-  if (window._opsReloadState) window._opsReloadState(data);
-}, err => console.error('ops firebase error:', err));
-
-onValue(ref(db, 'prepro/nameHistory'), snapshot => {
-  const data = snapshot.val();
-  if (data) { window._fbNameHistory = data; if (window._opsReloadNameHistory) window._opsReloadNameHistory(data); }
-}, err => console.error('ops nameHistory firebase error:', err));
-
-onValue(ref(db, 'prepro/peopleEmails'), snapshot => {
-  const data = snapshot.val();
-  if (data) { window._fbPeopleEmails = data; if (window._opsReloadPeopleEmails) window._opsReloadPeopleEmails(data); }
-}, err => console.error('ops peopleEmails firebase error:', err));
+  onValue(ref(db, 'prepro/peopleEmails'), snapshot => {
+    const data = snapshot.val();
+    if (data) { window._fbPeopleEmails = data; if (window._opsReloadPeopleEmails) window._opsReloadPeopleEmails(data); }
+  }, err => console.error('ops peopleEmails firebase error:', err));
+});
 </script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -2080,8 +2070,10 @@ function renderHeadsUp() {
   const items = getTeamHeadsUp();
 
   if (!items.length) {
-    container.innerHTML = '<div class="hu-empty">Nothing flagged for the next 5 business days</div>';
-    return;
+    const empty = document.createElement('div');
+    empty.className = 'hu-empty';
+    empty.textContent = 'Nothing flagged for the next 5 business days';
+    container.appendChild(empty);
   }
 
   // Group by type
@@ -2209,45 +2201,88 @@ function renderHeadsUp() {
     container.appendChild(section);
   });
 
-  // ── METRICS ──
-  const metrics = computeOpsMetrics();
-  const mSection = document.createElement('div');
-  mSection.className = 'hu-section';
-  const mTitle = document.createElement('div');
-  mTitle.className = 'hu-section-title';
-  mTitle.textContent = 'Metrics';
-  mSection.appendChild(mTitle);
+  // ── PROJECT HEALTH · TOP 5 MOST LATE ──
+  const today = todayStr();
+  const healthRows = (state.projects || [])
+    .filter(p => !p.completed && !p.ghost)
+    .map(proj => {
+      const workTasks = (proj.tasks || []).filter(t => !t.isReview && !t.isDueDate && t.date);
+      const lastEnd = workTasks.reduce((m, t) => {
+        const e = t.endDate || t.date;
+        return (!m || e > m) ? e : m;
+      }, null);
+      const daysRemaining = lastEnd
+        ? Math.round((new Date(lastEnd + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000)
+        : null;
+      const pastTasks = workTasks
+        .filter(t => (t.endDate || t.date) < today)
+        .sort((a, b) => (b.endDate || b.date).localeCompare(a.endDate || a.date));
+      return {
+        proj,
+        producer: getPrimaryProducer(proj) || '—',
+        daysRemaining,
+        lastTask: pastTasks[0] || null
+      };
+    })
+    .filter(r => r.daysRemaining !== null && r.daysRemaining < 0)
+    .sort((a, b) => a.daysRemaining - b.daysRemaining)
+    .slice(0, 5);
 
-  const mGrid = document.createElement('div');
-  mGrid.className = 'hu-metrics';
-  const effortInfo = workloadInfo(metrics.teamEffortAvg);
-  const tiles = [
-    { label: 'Current Projects', value: metrics.activeProjects },
-    { label: 'With Active Tasks', value: metrics.activeWithTasks },
-    { label: 'Team Effort', value: (effortInfo.emoji ? effortInfo.emoji + ' ' : '') + effortInfo.label, sub: metrics.teamEffortAvg + ' avg', color: effortInfo.color }
-  ];
-  tiles.forEach(t => {
-    const tile = document.createElement('div');
-    tile.className = 'hu-metric';
-    const v = document.createElement('div');
-    v.className = 'hu-metric-value';
-    v.textContent = t.value;
-    if (t.color) v.style.color = t.color;
-    const l = document.createElement('div');
-    l.className = 'hu-metric-label';
-    l.textContent = t.label;
-    tile.appendChild(v);
-    tile.appendChild(l);
-    if (t.sub) {
-      const s = document.createElement('div');
-      s.className = 'hu-metric-sub';
-      s.textContent = t.sub;
-      tile.appendChild(s);
-    }
-    mGrid.appendChild(tile);
-  });
-  mSection.appendChild(mGrid);
-  container.appendChild(mSection);
+  const phSection = document.createElement('div');
+  phSection.className = 'hu-section';
+  const phTitle = document.createElement('div');
+  phTitle.className = 'hu-section-title';
+  phTitle.textContent = 'Project Health · Most Late';
+  phSection.appendChild(phTitle);
+
+  if (!healthRows.length) {
+    const phEmpty = document.createElement('div');
+    phEmpty.className = 'hu-empty';
+    phEmpty.style.padding = '8px 0';
+    phEmpty.textContent = 'No projects past due.';
+    phSection.appendChild(phEmpty);
+  } else {
+    const phTable = document.createElement('table');
+    phTable.className = 'm-health-table';
+    phTable.innerHTML = '<thead><tr><th>Project</th><th>Producer</th><th>Days Late</th><th>Last Completed Task</th></tr></thead>';
+    const phBody = document.createElement('tbody');
+    healthRows.forEach(r => {
+      const tr = document.createElement('tr');
+
+      const projTd = document.createElement('td');
+      const a = document.createElement('a');
+      a.href = 'team.html#project=' + encodeURIComponent(r.proj.id);
+      a.target = '_blank';
+      a.textContent = r.proj.name;
+      projTd.appendChild(a);
+      tr.appendChild(projTd);
+
+      const prodTd = document.createElement('td');
+      prodTd.textContent = r.producer;
+      if (r.producer === '—') prodTd.classList.add('dim');
+      tr.appendChild(prodTd);
+
+      const lateTd = document.createElement('td');
+      lateTd.textContent = `${-r.daysRemaining}d past`;
+      lateTd.style.color = '#c0394f';
+      tr.appendChild(lateTd);
+
+      const taskTd = document.createElement('td');
+      if (r.lastTask) {
+        const end = r.lastTask.endDate || r.lastTask.date;
+        taskTd.textContent = (r.lastTask.taskName || '(untitled)') + ' · ' + fmtDateShort(end);
+      } else {
+        taskTd.textContent = '—';
+        taskTd.classList.add('dim');
+      }
+      tr.appendChild(taskTd);
+
+      phBody.appendChild(tr);
+    });
+    phTable.appendChild(phBody);
+    phSection.appendChild(phTable);
+  }
+  container.appendChild(phSection);
 }
 
 function computeOpsMetrics() {

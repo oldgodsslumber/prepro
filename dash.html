@@ -5,42 +5,35 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PRE-PRO — Dashboard</title>
 
-<!-- Firebase -->
+<!-- Firebase + auth gate -->
+<script type="module" src="./auth.js"></script>
 <script type="module">
-import { initializeApp }                       from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getDatabase, ref, onValue, set }      from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+window._fbReady.then(({ db, ref, onValue }) => {
+  onValue(ref(db, 'prepro/state'), snapshot => {
+    const data = snapshot.val();
+    if (!data || !Array.isArray(data.projects)) return;
+    window._fbState = data;
+    if (window._dashReloadState) window._dashReloadState(data);
+  }, err => console.error('dash firebase error:', err));
 
-const firebaseConfig = {
-  apiKey:      'AIzaSyDYyEv6eospGbtmWt6orY6b4X71jhdUyKI',
-  authDomain:  'prepro-e2abc.firebaseapp.com',
-  databaseURL: 'https://prepro-e2abc-default-rtdb.firebaseio.com',
-  projectId:   'prepro-e2abc',
-};
-const app = initializeApp(firebaseConfig);
-const db  = getDatabase(app);
+  onValue(ref(db, 'prepro/dash'), snapshot => {
+    // Skip the echo of our own writes — local state is already current and
+    // re-rendering would tear down any input the user just opened.
+    if (window._fbSuppressDashEcho > 0) { window._fbSuppressDashEcho--; return; }
+    const data = snapshot.val();
+    if (data) { window._fbDashData = data; if (window._dashReloadDashData) window._dashReloadDashData(data); }
+  }, err => console.error('dash meta firebase error:', err));
 
-window._fb = { db, ref, set };
-onValue(ref(db, 'prepro/state'), snapshot => {
-  const data = snapshot.val();
-  if (!data || !Array.isArray(data.projects)) return;
-  window._fbState = data;
-  if (window._dashReloadState) window._dashReloadState(data);
-}, err => console.error('dash firebase error:', err));
+  onValue(ref(db, 'prepro/nameHistory'), snapshot => {
+    const data = snapshot.val();
+    if (data) { window._fbNameHistory = data; if (window._dashReloadNameHistory) window._dashReloadNameHistory(data); }
+  }, err => console.error('dash nameHistory firebase error:', err));
 
-onValue(ref(db, 'prepro/dash'), snapshot => {
-  const data = snapshot.val();
-  if (data) { window._fbDashData = data; if (window._dashReloadDashData) window._dashReloadDashData(data); }
-}, err => console.error('dash meta firebase error:', err));
-
-onValue(ref(db, 'prepro/nameHistory'), snapshot => {
-  const data = snapshot.val();
-  if (data) { window._fbNameHistory = data; if (window._dashReloadNameHistory) window._dashReloadNameHistory(data); }
-}, err => console.error('dash nameHistory firebase error:', err));
-
-onValue(ref(db, 'prepro/peopleEmails'), snapshot => {
-  const data = snapshot.val();
-  if (data) { window._fbPeopleEmails = data; if (window._dashReloadPeopleEmails) window._dashReloadPeopleEmails(data); }
-}, err => console.error('dash peopleEmails firebase error:', err));
+  onValue(ref(db, 'prepro/peopleEmails'), snapshot => {
+    const data = snapshot.val();
+    if (data) { window._fbPeopleEmails = data; if (window._dashReloadPeopleEmails) window._dashReloadPeopleEmails(data); }
+  }, err => console.error('dash peopleEmails firebase error:', err));
+});
 </script>
 
 <style>
@@ -378,6 +371,7 @@ let dashData = { completions: {}, subtasks: {}, status: {} };
 let selectedPerson = localStorage.getItem('dash_selected_person') || null;
 let selectedDate   = todayStr();
 let searchFilter   = '';
+let pendingAddSubtaskFor = null;
 
 // ── DATA LOADING ──
 function loadState() {
@@ -822,6 +816,7 @@ function saveDashData() {
   try { localStorage.setItem('dash_data', JSON.stringify(dashData)); } catch(e) {}
   if (window._fb) {
     const { db, ref, set } = window._fb;
+    window._fbSuppressDashEcho = (window._fbSuppressDashEcho || 0) + 1;
     set(ref(db, 'prepro/dash'), dashData).catch(e => console.error('dash meta save error:', e));
   }
 }
@@ -1634,7 +1629,15 @@ function renderTodaySection() {
           else { inputRow.remove(); addBtn.style.display = ''; }
         };
         input.addEventListener('keydown', e => {
-          if (e.key === 'Enter') commit();
+          if (e.key === 'Enter') {
+            if (input.value.trim() && !committed) {
+              committed = true;
+              pendingAddSubtaskFor = task.id;
+              addSubtask(task.id, input.value);
+            } else {
+              commit();
+            }
+          }
           if (e.key === 'Escape') { committed = true; inputRow.remove(); addBtn.style.display = ''; }
         });
         input.addEventListener('blur', commit);
@@ -1643,6 +1646,19 @@ function renderTodaySection() {
         input.focus();
       });
       subArea.appendChild(addBtn);
+
+      if (pendingAddSubtaskFor === task.id) {
+        // Defer until layout settles. Don't clear the flag yet — if another
+        // render replaces this DOM before the timeout fires, addBtn becomes
+        // detached. The flag stays set so the next render can also schedule,
+        // and whichever timeout finds a still-connected addBtn wins.
+        setTimeout(() => {
+          if (pendingAddSubtaskFor !== task.id) return;
+          if (!addBtn.isConnected) return;
+          pendingAddSubtaskFor = null;
+          addBtn.click();
+        }, 0);
+      }
 
       block.appendChild(subArea);
       card.appendChild(block);
