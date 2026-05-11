@@ -557,9 +557,9 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
             <div class="export-tab" data-tab="png">PNG</div>
             <div class="export-tab" data-tab="planyway">Trello Export</div>
             <div class="export-tab" data-tab="roster">Role Assignees</div>
-            <div class="export-tab" data-tab="invites">📅 Invites</div>
             <div class="export-tab" data-tab="invites-web">🌐 Invite Web</div>
             <div class="export-tab" data-tab="notes">📝 Notes</div>
+            <div class="export-tab" data-tab="cea">🔗 CEA</div>
           </div>
           <div class="export-content" id="exportContent"></div>
         </div>
@@ -1157,7 +1157,11 @@ function getDescendantIds(id) {
   return ids;
 }
 function addProject(name, parentId) {
-  const p = { id: genId(), name, parentId: parentId || null, tasks: [], roster: {}, dueDate: null, notes: [] };
+  const p = { id: genId(), name, parentId: parentId || null, tasks: [], roster: {}, dueDate: null, notes: [],
+              ticketId: null, ticketUrl: null, leadProducer: null,
+              function: null, videoType: null, targetAudience: null, budget: null,
+              synopsis: null, tangibleGoal1: null, tangibleGoal2: null,
+              completionIssues: null, additionalNotes: null };
   state.projects.push(p); saveState();
   addSystemNote(p.id, 'Project created');
   return p;
@@ -1828,8 +1832,7 @@ function updateCalTitle() {
   if (!firstDate) return;
   const fmt = (s, y) => new Date(s + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(y ? { year: 'numeric' } : {}) });
   const proj = getProject(activeProjectId);
-  const projName = proj ? proj.name + ' · ' : '';
-  document.getElementById('calTitle').textContent = projName + fmt(firstDate) + (lastDate && lastDate !== firstDate ? ' \u2013 ' + fmt(lastDate, true) : '');
+  document.getElementById('calTitle').textContent = proj ? proj.name : '';
 }
 
 function renderCalendar() {
@@ -3779,10 +3782,6 @@ function renderExportPanel() {
     renderRosterPanel();
     return;
 
-  } else if (exportTabActive === 'invites') {
-    renderInvitesPanel();
-    return;
-
   } else if (exportTabActive === 'invites-web') {
     renderInvitesWebPanel();
     return;
@@ -3904,6 +3903,7 @@ function getPlanywayCat(task) {
 // Returns the person name of the most frequently used Producer in the project.
 // Counts direct producer tasks + appearances as an attendee in reviews/key dates.
 function getMostUsedProducer(proj) {
+  if (proj && proj.leadProducer) return proj.leadProducer;
   const counts = {};
   (proj.tasks || []).forEach(t => {
     // Direct producer tasks
@@ -4594,6 +4594,13 @@ function setupInitListeners() {
     if (tab.dataset.tab === exportTabActive) tab.classList.add('active');
     else tab.classList.remove('active');
     tab.addEventListener('click', () => {
+      if (tab.dataset.tab === 'cea') {
+        const proj = getProject(activeProjectId);
+        const url = (proj && proj.ticketUrl) ? proj.ticketUrl
+          : 'https://corporateexpress.pegacloud.io/prweb/sso/app/CampaignExecution';
+        window.open(url, '_blank');
+        return;
+      }
       exportTabActive = tab.dataset.tab;
       try { localStorage.setItem('prepro_export_tab', exportTabActive); } catch(_) {}
       document.querySelectorAll('.export-tab').forEach(t => t.classList.remove('active'));
