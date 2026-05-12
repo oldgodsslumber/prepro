@@ -1143,7 +1143,11 @@ function getDescendantIds(id) {
   return ids;
 }
 function addProject(name, parentId) {
-  const p = { id: genId(), name, parentId: parentId || null, tasks: [], roster: {}, dueDate: null, notes: [] };
+  const p = { id: genId(), name, parentId: parentId || null, tasks: [], roster: {}, dueDate: null, notes: [],
+              ticketId: null, ticketUrl: null, leadProducer: null,
+              function: null, videoType: null, targetAudience: null, budget: null,
+              synopsis: null, tangibleGoal1: null, tangibleGoal2: null,
+              completionIssues: null, additionalNotes: null };
   state.projects.push(p); saveState();
   addSystemNote(p.id, 'Project created');
   return p;
@@ -1802,8 +1806,7 @@ function updateCalTitle() {
   if (!firstDate) return;
   const fmt = (s, y) => new Date(s + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(y ? { year: 'numeric' } : {}) });
   const proj = getProject(activeProjectId);
-  const projName = proj ? proj.name + ' · ' : '';
-  document.getElementById('calTitle').textContent = projName + fmt(firstDate) + (lastDate && lastDate !== firstDate ? ' \u2013 ' + fmt(lastDate, true) : '');
+  document.getElementById('calTitle').textContent = proj ? proj.name : '';
 }
 
 function renderCalendar() {
@@ -3876,6 +3879,7 @@ function getPlanywayCat(task) {
 // Returns the person name of the most frequently used Producer in the project.
 // Counts direct producer tasks + appearances as an attendee in reviews/key dates.
 function getMostUsedProducer(proj) {
+  if (proj && proj.leadProducer) return proj.leadProducer;
   const counts = {};
   (proj.tasks || []).forEach(t => {
     // Direct producer tasks

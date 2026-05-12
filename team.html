@@ -459,10 +459,11 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
       <div class="completed-tree" id="completedTree"></div>
     </div>
     <div class="data-migration">
-      <a href="guide.html" target="_blank" class="data-mig-btn" title="Open guide">❓ Help</a>
-      <a href="ops.html" target="_blank" class="data-mig-btn" title="Ops mode — team workload view">📊 Ops</a>
-      <a href="dash.html" target="_blank" class="data-mig-btn" title="Personal dashboard view">📋 Dash</a>
-      <button class="data-mig-btn" id="btnSettings" title="Settings: import/export data, manage people">⚙ Settings</button>
+      <a href="guide.html" target="_blank" class="data-mig-btn" title="Open guide" style="font-size:13px; padding:9px 4px;">❓ Help</a>
+      <!-- Ops/Dash hidden for now — remove style="display:none" to re-enable -->
+      <a href="ops.html" target="_blank" class="data-mig-btn" title="Ops mode — team workload view" style="display:none;">📊 Ops</a>
+      <a href="dash.html" target="_blank" class="data-mig-btn" title="Personal dashboard view" style="display:none;">📋 Dash</a>
+      <button class="data-mig-btn" id="btnSettings" title="Settings: import/export data, manage people" style="font-size:13px; padding:9px 4px;">⚙ Settings</button>
       <input type="file" id="importFileInput" accept=".json" style="display:none">
     </div>
   </div>
