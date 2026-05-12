@@ -4599,12 +4599,13 @@ function setupInitListeners() {
         const proj = getProject(activeProjectId);
         const rawUrl = (proj && proj.ticketUrl) ? proj.ticketUrl
           : 'https://corporateexpress.pegacloud.io/prweb/sso/app/CampaignExecution';
-        // Decode HTML entities that may have leaked in from email ingestion (&gt;, &amp;, etc.)
-        const url = rawUrl
+        // Strip trailing markup junk (e.g. "&gt;") that leaked in from email ingestion,
+        // then strip any stray literal angle brackets, then decode safe entities.
+        const cut = rawUrl.search(/&(?:gt|lt|quot|apos|#x?(?:3[ce]|22|27));/i);
+        const url = (cut !== -1 ? rawUrl.slice(0, cut) : rawUrl)
+          .replace(/[<>]/g, '')
           .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)))
           .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16)))
-          .replace(/&gt;/gi, '>').replace(/&lt;/gi, '<')
-          .replace(/&quot;/gi, '"').replace(/&apos;/gi, "'")
           .replace(/&amp;/gi, '&');
         window.open(url, '_blank');
         return;

@@ -134,13 +134,14 @@ function extractTicketUrl(html, ticketIdToken, plain) {
 }
 
 function decodeHtmlEntities(s) {
+  // Real URLs never contain literal <, >, ", ' — when those entities appear
+  // in a matched URL they're always trailing junk from surrounding markup.
+  // Truncate at the first such entity, then decode the safe ones.
+  var cut = s.search(/&(?:gt|lt|quot|apos|#x?(?:3[ce]|22|27));/i);
+  if (cut !== -1) s = s.slice(0, cut);
   return s
     .replace(/&#(\d+);/g, function(_, n) { return String.fromCharCode(parseInt(n, 10)); })
     .replace(/&#x([0-9a-f]+);/gi, function(_, n) { return String.fromCharCode(parseInt(n, 16)); })
-    .replace(/&gt;/gi, '>')
-    .replace(/&lt;/gi, '<')
-    .replace(/&quot;/gi, '"')
-    .replace(/&apos;/gi, "'")
     .replace(/&amp;/gi, '&');
 }
 
