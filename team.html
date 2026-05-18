@@ -1376,8 +1376,10 @@ function renderTreeLevel(parentId, depth, container) {
         e.dataTransfer.effectAllowed = 'move';
       }
       node.style.opacity = '.5';
+      console.log('[DRAG] dragstart', { from: proj.name, type: dragPayload.type });
     });
     node.addEventListener('dragend', () => {
+      console.log('[DRAG] dragend on', proj.name, { dragPayload, treeDropTarget });
       node.style.opacity = '';
       clearTreeDropIndicator();
       if (dragPayload && dragPayload.type === 'dup-project' && dragPayload.projectId === proj.id) {
@@ -1404,7 +1406,9 @@ function renderTreeLevel(parentId, depth, container) {
       return true;
     };
     node.addEventListener('dragenter', e => {
-      if (!treeDragAccept()) return;
+      const accept = treeDragAccept();
+      console.log('[DRAG] dragenter on', proj.name, { accept, dragPayload, target: e.target.tagName });
+      if (!accept) return;
       e.preventDefault(); e.stopPropagation();
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
     });
@@ -1440,6 +1444,7 @@ function renderTreeLevel(parentId, depth, container) {
     });
     node.addEventListener('drop', e => {
       e.preventDefault(); e.stopPropagation();
+      console.log('[DRAG] drop on', proj.name, { dragPayload, treeDropTarget, accept: treeDragAccept() });
       if (!dragPayload || dragPayload.type !== 'tree-move') { clearTreeDropIndicator(); return; }
       // Fallback: if treeDropTarget was lost (spurious dragleave, browser quirk),
       // but drop fired on this node and it's a valid target, default to 'into'.
@@ -1454,6 +1459,7 @@ function renderTreeLevel(parentId, depth, container) {
         clearTreeDropIndicator(); return;
       }
       clearTreeDropIndicator();
+      console.log('[DRAG] moving', dragPayload.projectId, '->', { targetId, position });
       moveProjectInTree(dragPayload.projectId, targetId, position);
       dragPayload = null;
     });
