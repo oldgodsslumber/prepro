@@ -1376,12 +1376,12 @@ function renderTreeLevel(parentId, depth, container) {
         e.dataTransfer.effectAllowed = 'move';
       }
       node.style.opacity = '.5';
-      console.log('[DRAG] dragstart', { from: proj.name, type: dragPayload.type });
     });
     node.addEventListener('dragend', () => {
-      console.log('[DRAG] dragend on', proj.name, { dragPayload, treeDropTarget });
       node.style.opacity = '';
-      clearTreeDropIndicator();
+      node.classList.remove('drop-above', 'drop-below', 'drop-onto');
+      document.querySelectorAll('.tree-node.drop-above, .tree-node.drop-below, .tree-node.drop-onto')
+        .forEach(n => n.classList.remove('drop-above', 'drop-below', 'drop-onto'));
       if (dragPayload && dragPayload.type === 'dup-project' && dragPayload.projectId === proj.id) {
         const newProj = duplicateProject(proj.id);
         dragPayload = null;
@@ -1395,72 +1395,52 @@ function renderTreeLevel(parentId, depth, container) {
       dragPayload = null;
     });
 
-    // Drop target: accept tree-move drags for reorder / reparent
-    // dragenter must also preventDefault — without it, the browser sets dropEffect='none'
-    // on first entry, causing fast drops to be rejected (the "2+ tries" bug).
-    const treeDragAccept = () => {
+    // Drop target — STATELESS: position is computed from the cursor at drop time
+    // (not stored across events). dragover/dragenter only do CSS feedback +
+    // the preventDefault dance the HTML5 DnD spec requires.
+    const canDropHere = () => {
       if (!dragPayload || dragPayload.type !== 'tree-move') return false;
-      const movingId = dragPayload.projectId;
-      if (movingId === proj.id) return false;
-      if (isDescendantOf(proj.id, movingId)) return false;
+      if (dragPayload.projectId === proj.id) return false;
+      if (isDescendantOf(proj.id, dragPayload.projectId)) return false;
       return true;
     };
+    const computePosition = clientY => {
+      const rect = node.getBoundingClientRect();
+      const y = clientY - rect.top;
+      if (y < 5) return 'before';
+      if (y > rect.height - 5) return 'after';
+      return 'into';
+    };
+    const setIndicator = pos => {
+      node.classList.remove('drop-above', 'drop-below', 'drop-onto');
+      if (pos === 'before') node.classList.add('drop-above');
+      else if (pos === 'after') node.classList.add('drop-below');
+      else node.classList.add('drop-onto');
+    };
     node.addEventListener('dragenter', e => {
-      const accept = treeDragAccept();
-      console.log('[DRAG] dragenter on', proj.name, { accept, dragPayload, target: e.target.tagName });
-      if (!accept) return;
+      if (!canDropHere()) return;
       e.preventDefault(); e.stopPropagation();
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      setIndicator(computePosition(e.clientY));
     });
     node.addEventListener('dragover', e => {
-      if (!treeDragAccept()) return;
+      if (!canDropHere()) return;
       e.preventDefault(); e.stopPropagation();
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-      const rect = node.getBoundingClientRect();
-      const y = e.clientY - rect.top;
-      clearTreeDropIndicator();
-      // "into" dominates: only the top/bottom 5px slivers count as before/after.
-      // This makes "make X a child of Y" the easy, default gesture.
-      if (y < 5) {
-        node.classList.add('drop-above');
-        treeDropTarget = { el: node, projectId: proj.id, position: 'before' };
-      } else if (y > rect.height - 5) {
-        node.classList.add('drop-below');
-        treeDropTarget = { el: node, projectId: proj.id, position: 'after' };
-      } else {
-        node.classList.add('drop-onto');
-        treeDropTarget = { el: node, projectId: proj.id, position: 'into' };
-      }
+      setIndicator(computePosition(e.clientY));
     });
     node.addEventListener('dragleave', e => {
-      // Only clear when we have a real relatedTarget AND it's outside this node.
-      // In Firefox/Chrome, relatedTarget can be null on internal boundary crossings
-      // (e.g., entering a child element), which would spuriously clear treeDropTarget
-      // and cause the next drop to be rejected — the "2+ tries" bug.
+      // Only clear visual feedback when we have a real relatedTarget AND it's outside this node.
       if (!e.relatedTarget) return;
       if (node.contains(e.relatedTarget)) return;
       node.classList.remove('drop-above', 'drop-below', 'drop-onto');
-      if (treeDropTarget && treeDropTarget.el === node) treeDropTarget = null;
     });
     node.addEventListener('drop', e => {
       e.preventDefault(); e.stopPropagation();
-      console.log('[DRAG] drop on', proj.name, { dragPayload, treeDropTarget, accept: treeDragAccept() });
-      if (!dragPayload || dragPayload.type !== 'tree-move') { clearTreeDropIndicator(); return; }
-      // Fallback: if treeDropTarget was lost (spurious dragleave, browser quirk),
-      // but drop fired on this node and it's a valid target, default to 'into'.
-      let targetId, position;
-      if (treeDropTarget) {
-        targetId = treeDropTarget.projectId;
-        position = treeDropTarget.position;
-      } else if (treeDragAccept()) {
-        targetId = proj.id;
-        position = 'into';
-      } else {
-        clearTreeDropIndicator(); return;
-      }
-      clearTreeDropIndicator();
-      console.log('[DRAG] moving', dragPayload.projectId, '->', { targetId, position });
-      moveProjectInTree(dragPayload.projectId, targetId, position);
+      node.classList.remove('drop-above', 'drop-below', 'drop-onto');
+      if (!canDropHere()) return;
+      const position = computePosition(e.clientY);
+      moveProjectInTree(dragPayload.projectId, proj.id, position);
       dragPayload = null;
     });
 
@@ -1470,15 +1450,6 @@ function renderTreeLevel(parentId, depth, container) {
 }
 
 // ── TREE DRAG-TO-REORDER ──
-let treeDropTarget = null;
-
-function clearTreeDropIndicator() {
-  if (treeDropTarget) {
-    treeDropTarget.el.classList.remove('drop-above', 'drop-below', 'drop-onto');
-    treeDropTarget = null;
-  }
-}
-
 function isDescendantOf(childId, ancestorId) {
   let p = getProject(childId);
   while (p && p.parentId) {
