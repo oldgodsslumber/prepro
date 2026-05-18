@@ -1429,15 +1429,30 @@ function renderTreeLevel(parentId, depth, container) {
       }
     });
     node.addEventListener('dragleave', e => {
-      if (!node.contains(e.relatedTarget)) {
-        node.classList.remove('drop-above', 'drop-below', 'drop-onto');
-        if (treeDropTarget && treeDropTarget.el === node) treeDropTarget = null;
-      }
+      // Only clear when we have a real relatedTarget AND it's outside this node.
+      // In Firefox/Chrome, relatedTarget can be null on internal boundary crossings
+      // (e.g., entering a child element), which would spuriously clear treeDropTarget
+      // and cause the next drop to be rejected — the "2+ tries" bug.
+      if (!e.relatedTarget) return;
+      if (node.contains(e.relatedTarget)) return;
+      node.classList.remove('drop-above', 'drop-below', 'drop-onto');
+      if (treeDropTarget && treeDropTarget.el === node) treeDropTarget = null;
     });
     node.addEventListener('drop', e => {
       e.preventDefault(); e.stopPropagation();
-      if (!treeDropTarget || !dragPayload || dragPayload.type !== 'tree-move') { clearTreeDropIndicator(); return; }
-      const { projectId: targetId, position } = treeDropTarget;
+      if (!dragPayload || dragPayload.type !== 'tree-move') { clearTreeDropIndicator(); return; }
+      // Fallback: if treeDropTarget was lost (spurious dragleave, browser quirk),
+      // but drop fired on this node and it's a valid target, default to 'into'.
+      let targetId, position;
+      if (treeDropTarget) {
+        targetId = treeDropTarget.projectId;
+        position = treeDropTarget.position;
+      } else if (treeDragAccept()) {
+        targetId = proj.id;
+        position = 'into';
+      } else {
+        clearTreeDropIndicator(); return;
+      }
       clearTreeDropIndicator();
       moveProjectInTree(dragPayload.projectId, targetId, position);
       dragPayload = null;
