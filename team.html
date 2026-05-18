@@ -1376,14 +1376,13 @@ function renderTreeLevel(parentId, depth, container) {
         e.dataTransfer.effectAllowed = 'move';
       }
       node.style.opacity = '.5';
-      console.log('%c[DRAG] dragstart', 'color:#6c63ff', proj.name, 'id=', proj.id);
     });
     node.addEventListener('dragend', () => {
-      console.log('%c[DRAG] dragend', 'color:#888', 'src=', proj.name, 'payload still=', dragPayload);
       node.style.opacity = '';
       node.classList.remove('drop-above', 'drop-below', 'drop-onto');
       document.querySelectorAll('.tree-node.drop-above, .tree-node.drop-below, .tree-node.drop-onto')
         .forEach(n => n.classList.remove('drop-above', 'drop-below', 'drop-onto'));
+      // Handle alt-drag duplicate (no drop fires for this case)
       if (dragPayload && dragPayload.type === 'dup-project' && dragPayload.projectId === proj.id) {
         const newProj = duplicateProject(proj.id);
         dragPayload = null;
@@ -1393,8 +1392,12 @@ function renderTreeLevel(parentId, depth, container) {
           renderSidebar(); renderCalendar();
           if (exportOpen) renderExportPanel();
         }
+        return;
       }
-      dragPayload = null;
+      // DO NOT null dragPayload here. In some Chrome versions, dragend fires
+      // BEFORE drop on the target — if we nulled it, drop would see null and bail.
+      // The drop handler nulls it on success; the next dragstart overwrites it
+      // if the drag was cancelled. Stale payload across drags is harmless.
     });
 
     // Drop target — STATELESS: position is computed from the cursor at drop time
@@ -1420,10 +1423,7 @@ function renderTreeLevel(parentId, depth, container) {
       else node.classList.add('drop-onto');
     };
     node.addEventListener('dragenter', e => {
-      const accept = canDropHere();
-      console.log('%c[DRAG] dragenter', 'color:#ffb000', 'over=', proj.name, 'accept=', accept,
-                  'payload=', dragPayload, 'evtTarget=', e.target && e.target.className);
-      if (!accept) return;
+      if (!canDropHere()) return;
       e.preventDefault(); e.stopPropagation();
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
       setIndicator(computePosition(e.clientY));
@@ -1443,14 +1443,8 @@ function renderTreeLevel(parentId, depth, container) {
     node.addEventListener('drop', e => {
       e.preventDefault(); e.stopPropagation();
       node.classList.remove('drop-above', 'drop-below', 'drop-onto');
-      const accept = canDropHere();
-      const pos = computePosition(e.clientY);
-      console.log('%c[DRAG] drop', 'color:#00c896', 'on=', proj.name, 'accept=', accept,
-                  'pos=', pos, 'payload=', dragPayload, 'y=', e.clientY);
-      if (!accept) return;
-      moveProjectInTree(dragPayload.projectId, proj.id, pos);
-      console.log('%c[DRAG] after move — source.parentId now =', 'color:#00c896',
-                  (getProject(dragPayload.projectId) || {}).parentId);
+      if (!canDropHere()) return;
+      moveProjectInTree(dragPayload.projectId, proj.id, computePosition(e.clientY));
       dragPayload = null;
     });
 
