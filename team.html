@@ -1413,12 +1413,14 @@ function renderTreeLevel(parentId, depth, container) {
       e.preventDefault(); e.stopPropagation();
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
       const rect = node.getBoundingClientRect();
-      const ratio = (e.clientY - rect.top) / rect.height;
+      const y = e.clientY - rect.top;
       clearTreeDropIndicator();
-      if (ratio < 0.3) {
+      // "into" dominates: only the top/bottom 5px slivers count as before/after.
+      // This makes "make X a child of Y" the easy, default gesture.
+      if (y < 5) {
         node.classList.add('drop-above');
         treeDropTarget = { el: node, projectId: proj.id, position: 'before' };
-      } else if (ratio > 0.7) {
+      } else if (y > rect.height - 5) {
         node.classList.add('drop-below');
         treeDropTarget = { el: node, projectId: proj.id, position: 'after' };
       } else {
