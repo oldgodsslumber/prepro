@@ -109,6 +109,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .tree-node.drop-onto { background: rgba(108,99,255,.22) !important; outline: 1px solid var(--accent); outline-offset: -1px; }
 .tree-node:hover { background: var(--card); }
 .tree-node.active { background: var(--accent); }
+.tree-node.folder .tree-label { font-weight: 600; color: var(--text); }
 .tree-node.active .tree-more, .tree-node.active .tree-toggle, .tree-node.active .tree-label { color: #fff; }
 .tree-toggle { width: 16px; text-align: center; font-size: 9px; color: var(--dim); flex-shrink: 0; }
 .tree-label  { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
@@ -447,7 +448,10 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
   <div class="sidebar">
     <div class="sidebar-head">
       <span class="sidebar-head-label">Projects</span>
-      <button class="btn btn-primary" id="btnNewProject" style="font-size:11px;padding:4px 9px;">+ New</button>
+      <span style="display:inline-flex;gap:6px;">
+        <button class="btn" id="btnNewFolder" style="font-size:11px;padding:4px 9px;" title="New folder (groups subprojects)">+ Folder</button>
+        <button class="btn btn-primary" id="btnNewProject" style="font-size:11px;padding:4px 9px;">+ New</button>
+      </span>
     </div>
     <div class="sidebar-tree" id="sidebarTree"></div>
     <div class="completed-section" id="completedSection" style="display:none">
@@ -622,7 +626,13 @@ const DOW_WD   = ['Mon','Tue','Wed','Thu','Fri'];
 let state = { projects: [] };
 let activeProjectId = null;
 let viewStart       = null; // YYYY-MM-DD of first visible day
-let collapsedIds    = new Set();
+let collapsedIds    = (() => {
+  try { return new Set(JSON.parse(localStorage.getItem('prepro_collapsed_ids') || '[]')); }
+  catch(_) { return new Set(); }
+})();
+function saveCollapsedIds() {
+  try { localStorage.setItem('prepro_collapsed_ids', JSON.stringify([...collapsedIds])); } catch(_) {}
+}
 let dragPayload     = null;
 let panelContext    = null;
 let exportTabActive  = localStorage.getItem('prepro_export_tab') || 'text';
@@ -1156,14 +1166,15 @@ function getDescendantIds(id) {
   while (q.length) { const c = q.shift(); getChildren(c).forEach(x => { ids.push(x.id); q.push(x.id); }); }
   return ids;
 }
-function addProject(name, parentId) {
+function addProject(name, parentId, isFolder) {
   const p = { id: genId(), name, parentId: parentId || null, tasks: [], roster: {}, dueDate: null, notes: [],
               ticketId: null, ticketUrl: null, leadProducer: null,
               function: null, videoType: null, targetAudience: null, budget: null,
               synopsis: null, tangibleGoal1: null, tangibleGoal2: null,
-              completionIssues: null, additionalNotes: null };
+              completionIssues: null, additionalNotes: null,
+              isFolder: !!isFolder };
   state.projects.push(p); saveState();
-  addSystemNote(p.id, 'Project created');
+  addSystemNote(p.id, isFolder ? 'Folder created' : 'Project created');
   return p;
 }
 function duplicateProject(id) {
@@ -1315,24 +1326,25 @@ function renderTreeLevel(parentId, depth, container) {
     const isCollapsed = collapsedIds.has(proj.id);
 
     const node = document.createElement('div');
-    node.className = 'tree-node' + (proj.id === activeProjectId ? ' active' : '') + (proj.ghost ? ' ghost' : '');
+    node.className = 'tree-node' + (proj.id === activeProjectId ? ' active' : '') + (proj.ghost ? ' ghost' : '') + (proj.isFolder ? ' folder' : '');
     node.style.paddingLeft = (8 + depth * 16) + 'px';
     node.dataset.id = proj.id;
 
     const toggle = document.createElement('span');
     toggle.className = 'tree-toggle';
-    toggle.textContent = hasKids ? (isCollapsed ? '▶' : '▼') : '';
+    toggle.textContent = hasKids ? (isCollapsed ? '▶' : '▼') : (proj.isFolder ? '▸' : '');
     toggle.addEventListener('click', e => {
       e.stopPropagation();
       if (!hasKids) return;
       collapsedIds.has(proj.id) ? collapsedIds.delete(proj.id) : collapsedIds.add(proj.id);
+      saveCollapsedIds();
       renderSidebar();
     });
     node.appendChild(toggle);
 
     const label = document.createElement('span');
     label.className = 'tree-label';
-    label.textContent = proj.name;
+    label.textContent = (proj.isFolder ? '📁 ' : '') + proj.name;
     node.appendChild(label);
 
     const more = document.createElement('button');
@@ -1382,12 +1394,24 @@ function renderTreeLevel(parentId, depth, container) {
     });
 
     // Drop target: accept tree-move drags for reorder / reparent
-    node.addEventListener('dragover', e => {
-      if (!dragPayload || dragPayload.type !== 'tree-move') return;
+    // dragenter must also preventDefault — without it, the browser sets dropEffect='none'
+    // on first entry, causing fast drops to be rejected (the "2+ tries" bug).
+    const treeDragAccept = () => {
+      if (!dragPayload || dragPayload.type !== 'tree-move') return false;
       const movingId = dragPayload.projectId;
-      if (movingId === proj.id) return;
-      if (isDescendantOf(proj.id, movingId)) return; // can't drop into own descendant
+      if (movingId === proj.id) return false;
+      if (isDescendantOf(proj.id, movingId)) return false;
+      return true;
+    };
+    node.addEventListener('dragenter', e => {
+      if (!treeDragAccept()) return;
       e.preventDefault(); e.stopPropagation();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    });
+    node.addEventListener('dragover', e => {
+      if (!treeDragAccept()) return;
+      e.preventDefault(); e.stopPropagation();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
       const rect = node.getBoundingClientRect();
       const ratio = (e.clientY - rect.top) / rect.height;
       clearTreeDropIndicator();
@@ -1448,6 +1472,7 @@ function moveProjectInTree(movingId, targetId, position) {
   if (position === 'into') {
     movingProj.parentId = targetId;
     collapsedIds.delete(targetId); // expand target so new child is visible
+    saveCollapsedIds();
   } else {
     movingProj.parentId = targetProj.parentId; // match target's level
     const arr = state.projects;
@@ -2931,6 +2956,7 @@ function openContextMenu(e, projectId) {
         { label: 'Rename',         action: 'rename' },
         { label: 'Duplicate',      action: 'duplicate' },
         { label: 'Add Subproject', action: 'addSub' },
+        { label: 'Add Subfolder',  action: 'addSubFolder' },
         { label: proj.ghost ? '👁 Show in Ops' : '👻 Ghost (hide from Ops)', action: 'ghost' },
         { label: '✓ Complete',     action: 'complete' },
         { label: 'Delete',         action: 'delete', danger: true }
@@ -3048,6 +3074,15 @@ function handleContextAction(action, projectId) {
     if (name && name.trim()) {
       addProject(name.trim(), projectId);
       collapsedIds.delete(projectId);
+      saveCollapsedIds();
+      renderSidebar();
+    }
+  } else if (action === 'addSubFolder') {
+    const name = prompt('Subfolder name:');
+    if (name && name.trim()) {
+      addProject(name.trim(), projectId, true);
+      collapsedIds.delete(projectId);
+      saveCollapsedIds();
       renderSidebar();
     }
   } else if (action === 'delete') {
@@ -4476,6 +4511,15 @@ function setupInitListeners() {
       try { localStorage.setItem('prepro_export_tab', exportTabActive); } catch(_) {}
       document.querySelectorAll('.export-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'roster'));
       renderExportPanel();
+    }
+  });
+
+  // New folder (container for subprojects)
+  document.getElementById('btnNewFolder').addEventListener('click', () => {
+    const name = prompt('Folder name:');
+    if (name && name.trim()) {
+      addProject(name.trim(), null, true);
+      renderSidebar();
     }
   });
 
