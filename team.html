@@ -626,12 +626,12 @@ const DOW_WD   = ['Mon','Tue','Wed','Thu','Fri'];
 let state = { projects: [] };
 let activeProjectId = null;
 let viewStart       = null; // YYYY-MM-DD of first visible day
-let collapsedIds    = (() => {
-  try { return new Set(JSON.parse(localStorage.getItem('prepro_collapsed_ids') || '[]')); }
+let expandedIds     = (() => {
+  try { return new Set(JSON.parse(localStorage.getItem('prepro_expanded_ids') || '[]')); }
   catch(_) { return new Set(); }
 })();
-function saveCollapsedIds() {
-  try { localStorage.setItem('prepro_collapsed_ids', JSON.stringify([...collapsedIds])); } catch(_) {}
+function saveExpandedIds() {
+  try { localStorage.setItem('prepro_expanded_ids', JSON.stringify([...expandedIds])); } catch(_) {}
 }
 let dragPayload     = null;
 let panelContext    = null;
@@ -1323,7 +1323,7 @@ function renderSidebar() {
 function renderTreeLevel(parentId, depth, container) {
   getChildren(parentId).filter(p => !isEffectivelyCompleted(p.id)).forEach(proj => {
     const hasKids     = getChildren(proj.id).length > 0;
-    const isCollapsed = collapsedIds.has(proj.id);
+    const isCollapsed = !expandedIds.has(proj.id);
 
     const node = document.createElement('div');
     node.className = 'tree-node' + (proj.id === activeProjectId ? ' active' : '') + (proj.ghost ? ' ghost' : '') + (proj.isFolder ? ' folder' : '');
@@ -1336,8 +1336,8 @@ function renderTreeLevel(parentId, depth, container) {
     toggle.addEventListener('click', e => {
       e.stopPropagation();
       if (!hasKids) return;
-      collapsedIds.has(proj.id) ? collapsedIds.delete(proj.id) : collapsedIds.add(proj.id);
-      saveCollapsedIds();
+      expandedIds.has(proj.id) ? expandedIds.delete(proj.id) : expandedIds.add(proj.id);
+      saveExpandedIds();
       renderSidebar();
     });
     node.appendChild(toggle);
@@ -1469,8 +1469,8 @@ function moveProjectInTree(movingId, targetId, position) {
   if (!movingProj || !targetProj) return;
   if (position === 'into') {
     movingProj.parentId = targetId;
-    collapsedIds.delete(targetId); // expand target so new child is visible
-    saveCollapsedIds();
+    expandedIds.add(targetId); // expand target so new child is visible
+    saveExpandedIds();
   } else {
     movingProj.parentId = targetProj.parentId; // match target's level
     const arr = state.projects;
@@ -1790,9 +1790,13 @@ function rebuildCalGrid(adjustScrollTop) {
 
   const layout   = buildTaskLayout(allDates);
   const ghostMap = showGhosts ? buildGhostMap() : new Map();
+  let prevMonth = null;
   allDates.forEach(dateStr => {
     const d = new Date(dateStr + 'T00:00:00');
-    grid.appendChild(makeCell(d.getDate(), dateStr, todayStr, layout.get(dateStr) || [], ghostMap.get(dateStr) || []));
+    const m = d.getMonth();
+    const showMonth = prevMonth !== null && m !== prevMonth;
+    prevMonth = m;
+    grid.appendChild(makeCell(d.getDate(), dateStr, todayStr, layout.get(dateStr) || [], ghostMap.get(dateStr) || [], showMonth));
   });
 
   if (adjustScrollTop) {
@@ -1911,7 +1915,7 @@ function getWeekStart() {
   return fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
 }
 
-function makeCell(dayNum, dateStr, todayStr, laneArr, ghosts) {
+function makeCell(dayNum, dateStr, todayStr, laneArr, ghosts, showMonthLabel) {
   const cell = document.createElement('div');
   cell.className = 'cal-day' + (dateStr === todayStr ? ' today' : '');
   cell.dataset.date = dateStr;
@@ -1921,8 +1925,8 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghosts) {
   const numSpan = document.createElement('span');
   numSpan.textContent = dayNum;
   numDiv.appendChild(numSpan);
-  // Show short month name when the date is the 1st (month crossover)
-  if (dayNum === 1) {
+  // Show short month name on first visible day of a new month (may not be the 1st if weekends hidden)
+  if (showMonthLabel) {
     const mLbl = document.createElement('span');
     mLbl.className = 'cal-day-month-label';
     mLbl.textContent = new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'short' });
@@ -3071,16 +3075,16 @@ function handleContextAction(action, projectId) {
     const name = prompt('Subproject name:');
     if (name && name.trim()) {
       addProject(name.trim(), projectId);
-      collapsedIds.delete(projectId);
-      saveCollapsedIds();
+      expandedIds.add(projectId);
+      saveExpandedIds();
       renderSidebar();
     }
   } else if (action === 'addSubFolder') {
     const name = prompt('Subfolder name:');
     if (name && name.trim()) {
       addProject(name.trim(), projectId, true);
-      collapsedIds.delete(projectId);
-      saveCollapsedIds();
+      expandedIds.add(projectId);
+      saveExpandedIds();
       renderSidebar();
     }
   } else if (action === 'delete') {
