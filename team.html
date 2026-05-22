@@ -187,11 +187,11 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .cal-day.today .cal-day-num span { background: var(--accent); color: #fff; }
 .cal-day-month-label { font-size: 9px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .07em; }
 
-/* ── GHOST CHIPS (cross-project busyness overlay) ── */
-.ghost-chip { font-size: 10px; font-weight: 500; border-radius: 4px; padding: 2px 6px; color: rgba(255,255,255,.45); background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); pointer-events: none; user-select: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-style: italic; min-width: 0; max-width: 100%; }
-.ghost-name { font-weight: 600; color: rgba(255,255,255,.65); }
-.ghost-pto { background: rgba(255,180,50,.12); border-color: rgba(255,180,50,.25); }
-.ghost-pto .ghost-name { color: rgba(255,200,80,.8); }
+/* ── GHOST ROWS (cross-project busyness overlay) ── */
+.ghost-row { font-size: 10px; font-weight: 500; padding: 1px 4px; color: rgba(255,255,255,.55); display: flex; align-items: center; gap: 4px; pointer-events: none; user-select: none; overflow: hidden; white-space: nowrap; min-width: 0; max-width: 100%; }
+.ghost-row .ghost-name { font-weight: 600; color: rgba(255,255,255,.7); overflow: hidden; text-overflow: ellipsis; }
+.ghost-effort { font-size: 9px; line-height: 1; flex-shrink: 0; width: 11px; text-align: center; }
+.ghost-row.idle .ghost-name { color: rgba(255,255,255,.32); }
 
 /* ── TASK CHIPS ── */
 /* Fixed height on ALL chip variants so lane positions stay aligned across cells */
@@ -1664,11 +1664,13 @@ function renderDowHeader() {
   });
 }
 
-// Build a map of dateStr → ghost entries from other projects for people on this project
-function buildGhostMap() {
-  if (!activeProjectId) return new Map();
+// Build cross-project busyness data: stable list of people on this project,
+// plus per-date map of { person → { count, isPTO, projects:Set, roles:Set } }
+function buildGhostInfo() {
+  const empty = { people: [], byDate: new Map() };
+  if (!activeProjectId) return empty;
   const proj = getProject(activeProjectId);
-  if (!proj) return new Map();
+  if (!proj) return empty;
 
   // Collect Internal Team people associated with the active project (roster + task assignments)
   const INTERNAL_ROLES = new Set(['Producer', 'Editor', 'Animator']);
@@ -1680,12 +1682,19 @@ function buildGhostMap() {
     if (t.person && INTERNAL_ROLES.has(t.role)) rosterPeople.add(t.person);
     (t.attendees || []).forEach(a => { if (a.person && a.category === 'Internal Team') rosterPeople.add(a.person); });
   });
-  if (!rosterPeople.size) return new Map();
+  if (!rosterPeople.size) return empty;
 
-  const map = new Map(); // dateStr → [{person, role, color, projectName}]
-  const addEntry = (dateStr, entry) => {
-    if (!map.has(dateStr)) map.set(dateStr, []);
-    map.get(dateStr).push(entry);
+  const LOE_PTS = { low: 1, medium: 2, high: 3 };
+  const byDate = new Map(); // dateStr → Map<person, {pts, isPTO, projects:Set, roles:Set}>
+  const addEntry = (dateStr, person, role, projectName, isPTO, loe) => {
+    if (!byDate.has(dateStr)) byDate.set(dateStr, new Map());
+    const m = byDate.get(dateStr);
+    if (!m.has(person)) m.set(person, { pts: 0, isPTO: false, projects: new Set(), roles: new Set() });
+    const e = m.get(person);
+    if (isPTO) e.isPTO = true;
+    else e.pts += LOE_PTS[loe] || 2;
+    e.projects.add(projectName);
+    e.roles.add(role);
   };
 
   state.projects.forEach(p => {
@@ -1702,7 +1711,7 @@ function buildGhostMap() {
           const end = new Date(endDate + 'T00:00:00');
           while (d <= end) {
             const ds = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
-            addEntry(ds, { person: a.person, role: 'PTO', color: '#555', projectName: p.name, isPTO: true });
+            addEntry(ds, a.person, 'PTO', p.name, true, null);
             d.setDate(d.getDate() + 1);
           }
         });
@@ -1715,7 +1724,7 @@ function buildGhostMap() {
         const end = new Date(endDate + 'T00:00:00');
         while (d <= end) {
           const ds = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
-          addEntry(ds, { person: t.person, role: t.role, color: t.color, projectName: p.name });
+          addEntry(ds, t.person, t.role, p.name, false, t.loe || 'medium');
           d.setDate(d.getDate() + 1);
         }
       }
@@ -1727,13 +1736,15 @@ function buildGhostMap() {
         const end = new Date(endDate + 'T00:00:00');
         while (d <= end) {
           const ds = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
-          addEntry(ds, { person: a.person, role: a.role || t.reviewLabel || 'Review', color: a.color || REVIEW_COLOR, projectName: p.name });
+          addEntry(ds, a.person, a.role || t.reviewLabel || 'Review', p.name, false, t.loe || 'medium');
           d.setDate(d.getDate() + 1);
         }
       });
     });
   });
-  return map;
+
+  const people = Array.from(rosterPeople).sort((a, b) => a.localeCompare(b));
+  return { people, byDate };
 }
 
 // Sync continuation bar/spacer heights to match the start block's actual rendered height
@@ -1788,15 +1799,15 @@ function rebuildCalGrid(adjustScrollTop) {
     cur.setDate(cur.getDate() + 1);
   }
 
-  const layout   = buildTaskLayout(allDates);
-  const ghostMap = showGhosts ? buildGhostMap() : new Map();
+  const layout    = buildTaskLayout(allDates);
+  const ghostInfo = showGhosts ? buildGhostInfo() : { people: [], byDate: new Map() };
   let prevMonth = null;
   allDates.forEach(dateStr => {
     const d = new Date(dateStr + 'T00:00:00');
     const m = d.getMonth();
     const showMonth = prevMonth !== null && m !== prevMonth;
     prevMonth = m;
-    grid.appendChild(makeCell(d.getDate(), dateStr, todayStr, layout.get(dateStr) || [], ghostMap.get(dateStr) || [], showMonth));
+    grid.appendChild(makeCell(d.getDate(), dateStr, todayStr, layout.get(dateStr) || [], ghostInfo, showMonth));
   });
 
   if (adjustScrollTop) {
@@ -1915,7 +1926,7 @@ function getWeekStart() {
   return fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
 }
 
-function makeCell(dayNum, dateStr, todayStr, laneArr, ghosts, showMonthLabel) {
+function makeCell(dayNum, dateStr, todayStr, laneArr, ghostInfo, showMonthLabel) {
   const cell = document.createElement('div');
   cell.className = 'cal-day' + (dateStr === todayStr ? ' today' : '');
   cell.dataset.date = dateStr;
@@ -1945,27 +1956,41 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghosts, showMonthLabel) {
     }
   });
 
-  // Ghost chips: busyiness from other projects for people on this project
-  if (ghosts && ghosts.length) {
-    // Deduplicate by person+role per cell so multi-day tasks don't pile up
-    const seen = new Set();
-    ghosts.forEach(g => {
-      const key = g.person + '|' + g.role;
-      if (seen.has(key)) return;
-      seen.add(key);
-      const gc = document.createElement('div');
-      gc.className = 'ghost-chip' + (g.isPTO ? ' ghost-pto' : '');
-      gc.title = g.person + ' · ' + g.role + ' (' + g.projectName + ')';
+  // Ghost rows: one stable row per person on this project, with an effort dot
+  if (ghostInfo && ghostInfo.people.length) {
+    const dayMap = ghostInfo.byDate.get(dateStr) || new Map();
+    const workloadEmoji = pts => {
+      if (pts < 1.5) return { e: '🟢', label: 'Light' };
+      if (pts < 2.5) return { e: '🟡', label: 'Manageable' };
+      if (pts < 3.5) return { e: '🟠', label: 'Busy' };
+      if (pts < 4.5) return { e: '🔴', label: 'Very Busy' };
+      return { e: '🚨', label: 'Overloaded' };
+    };
+    ghostInfo.people.forEach(person => {
+      const e = dayMap.get(person);
+      const row = document.createElement('div');
+      row.className = 'ghost-row' + (e ? '' : ' idle');
+      const eff = document.createElement('span');
+      eff.className = 'ghost-effort';
+      let title;
+      if (e && e.isPTO) {
+        eff.textContent = '🏝';
+        title = person + ' · PTO (' + Array.from(e.projects).join(', ') + ')';
+      } else if (e && e.pts > 0) {
+        const w = workloadEmoji(e.pts);
+        eff.textContent = w.e;
+        title = person + ' · ' + w.label + ' (' + e.pts + ' pts on ' + Array.from(e.projects).join(', ') + ')';
+      } else {
+        eff.textContent = '';
+        title = person + ' · no conflicts';
+      }
       const nameSpan = document.createElement('span');
       nameSpan.className = 'ghost-name';
-      nameSpan.textContent = g.isPTO ? '🏖 ' + g.person + ' PTO' : g.person;
-      gc.appendChild(nameSpan);
-      if (!g.isPTO) {
-        const projSpan = document.createElement('span');
-        projSpan.textContent = ' · ' + g.projectName;
-        gc.appendChild(projSpan);
-      }
-      cell.appendChild(gc);
+      nameSpan.textContent = person;
+      row.title = title;
+      row.appendChild(eff);
+      row.appendChild(nameSpan);
+      cell.appendChild(row);
     });
   }
 
