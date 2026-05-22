@@ -1968,21 +1968,19 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghostInfo, showMonthLabel)
     };
     ghostInfo.people.forEach(person => {
       const e = dayMap.get(person);
+      if (!e || (!e.isPTO && e.pts <= 0)) return;
       const row = document.createElement('div');
-      row.className = 'ghost-row' + (e ? '' : ' idle');
+      row.className = 'ghost-row';
       const eff = document.createElement('span');
       eff.className = 'ghost-effort';
       let title;
-      if (e && e.isPTO) {
+      if (e.isPTO) {
         eff.textContent = '🏝';
         title = person + ' · PTO (' + Array.from(e.projects).join(', ') + ')';
-      } else if (e && e.pts > 0) {
+      } else {
         const w = workloadEmoji(e.pts);
         eff.textContent = w.e;
         title = person + ' · ' + w.label + ' (' + e.pts + ' pts on ' + Array.from(e.projects).join(', ') + ')';
-      } else {
-        eff.textContent = '';
-        title = person + ' · no conflicts';
       }
       const nameSpan = document.createElement('span');
       nameSpan.className = 'ghost-name';
