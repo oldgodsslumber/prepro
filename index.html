@@ -1261,38 +1261,63 @@ function renderSidebar() {
   renderTreeLevel(null, 0, tree);
 
   // Completed section
-  const completed = state.projects.filter(p => p.completed && (!p.parentId || !isEffectivelyCompleted(p.parentId)));
+  const allCompleted = state.projects.filter(p => p.completed);
+  const completedRoots = allCompleted.filter(p => !p.parentId || !(getProject(p.parentId) && getProject(p.parentId).completed));
   const section   = document.getElementById('completedSection');
   const ctree     = document.getElementById('completedTree');
   const count     = document.getElementById('completedCount');
-  section.style.display = completed.length ? '' : 'none';
-  count.textContent = completed.length;
+  section.style.display = allCompleted.length ? '' : 'none';
+  count.textContent = allCompleted.length;
   ctree.innerHTML = '';
-  completed.forEach(proj => {
-    const node = document.createElement('div');
-    node.className = 'tree-node done' + (proj.id === activeProjectId ? ' active' : '');
-    node.style.paddingLeft = '8px';
-    node.dataset.id = proj.id;
-    const lbl = document.createElement('span');
-    lbl.className = 'tree-label';
-    lbl.textContent = '✓ ' + proj.name;
-    const more = document.createElement('button');
-    more.className = 'tree-more';
-    more.textContent = '···';
-    more.addEventListener('click', e => { e.stopPropagation(); openContextMenu(e, proj.id); });
-    node.appendChild(lbl);
-    node.appendChild(more);
-    node.addEventListener('click', () => {
-      activeProjectId = proj.id;
-      calEarliestDate = null;
-      closePanel();
-      renderSidebar();
-      renderCalendar();
-      if (exportOpen) renderExportPanel();
-    });
-    node.addEventListener('contextmenu', e => { e.preventDefault(); openContextMenu(e, proj.id); });
-    ctree.appendChild(node);
+  completedRoots.forEach(proj => renderCompletedNode(proj, 0, ctree));
+}
+
+function renderCompletedNode(proj, depth, container) {
+  const completedKids = getChildren(proj.id).filter(c => c.completed);
+  const hasKids = completedKids.length > 0;
+  const isCollapsed = collapsedIds.has(proj.id);
+
+  const node = document.createElement('div');
+  node.className = 'tree-node done' + (proj.id === activeProjectId ? ' active' : '');
+  node.style.paddingLeft = (8 + depth * 16) + 'px';
+  node.dataset.id = proj.id;
+
+  const toggle = document.createElement('span');
+  toggle.className = 'tree-toggle';
+  toggle.textContent = hasKids ? (isCollapsed ? '▶' : '▼') : '';
+  toggle.addEventListener('click', e => {
+    e.stopPropagation();
+    if (!hasKids) return;
+    collapsedIds.has(proj.id) ? collapsedIds.delete(proj.id) : collapsedIds.add(proj.id);
+    renderSidebar();
   });
+  node.appendChild(toggle);
+
+  const lbl = document.createElement('span');
+  lbl.className = 'tree-label';
+  lbl.textContent = '✓ ' + proj.name;
+  node.appendChild(lbl);
+
+  const more = document.createElement('button');
+  more.className = 'tree-more';
+  more.textContent = '···';
+  more.addEventListener('click', e => { e.stopPropagation(); openContextMenu(e, proj.id); });
+  node.appendChild(more);
+
+  node.addEventListener('click', () => {
+    activeProjectId = proj.id;
+    calEarliestDate = null;
+    closePanel();
+    renderSidebar();
+    renderCalendar();
+    if (exportOpen) renderExportPanel();
+  });
+  node.addEventListener('contextmenu', e => { e.preventDefault(); openContextMenu(e, proj.id); });
+  container.appendChild(node);
+
+  if (hasKids && !isCollapsed) {
+    completedKids.forEach(child => renderCompletedNode(child, depth + 1, container));
+  }
 }
 
 function renderTreeLevel(parentId, depth, container) {
