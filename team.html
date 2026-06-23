@@ -153,7 +153,11 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
 .rename-input { background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; padding: 1px 6px; color: var(--text); font-size: 13px; outline: none; flex: 1; min-width: 0; }
 
 /* ── RIGHT COLUMN ── */
-.right-col { display: flex; flex-direction: column; min-height: 0; background: var(--bg); }
+.right-col { grid-column: 3; display: flex; flex-direction: column; min-height: 0; background: var(--bg); }
+
+/* ── PROJECT NAME (above the role palette) ── */
+.project-name-bar { font-size: 22px; font-weight: 700; color: var(--text); letter-spacing: .01em; padding: 12px 16px 8px; flex-shrink: 0; background: var(--panel); border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.project-name-bar:empty { display: none; }
 
 /* ── PALETTE ── */
 .palette { background: var(--panel); border-bottom: 1px solid var(--border); padding: 8px 14px; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; flex-shrink: 0; }
@@ -330,6 +334,14 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
 .panel-field input:focus { border-color: var(--accent); }
 .panel-field-loe { flex: 0 0 auto; }
 .panel-field-loe select { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 5px 7px; color: var(--text); font-size: 12px; outline: none; cursor: pointer; transition: border-color .15s; width: 88px; }
+/* Effort dots (replaces the LOE dropdown) */
+.loe-dots { display: inline-flex; align-items: center; gap: 8px; padding: 2px 2px; }
+.loe-dot  { width: 18px; height: 18px; border-radius: 50%; border: none; padding: 0; cursor: pointer; opacity: .38; transition: opacity .12s, transform .12s, box-shadow .12s; }
+.loe-dot:hover { opacity: .85; transform: scale(1.1); }
+.loe-dot.selected { opacity: 1; box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px currentColor; }
+.loe-low    { background: #4cba6a; color: #4cba6a; }
+.loe-medium { background: #e0a93b; color: #e0a93b; }
+.loe-high   { background: #e05555; color: #e05555; }
 .panel-field-loe select:focus { border-color: var(--accent); }
 .panel-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
 
@@ -352,15 +364,17 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
 .export-table tr:hover td { background: rgba(255,255,255,.03); }
 
 /* ── TOOLS RAIL (vertical tabs, far right) ── */
-.tools-rail { background: var(--panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; align-items: stretch; padding: 6px 0; gap: 2px; overflow-y: auto; }
+.tools-rail { grid-column: 5; background: var(--panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; align-items: stretch; padding: 6px 0; gap: 2px; overflow-y: auto; }
 .tools-rail-tab { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 9px 2px; font-size: 9px; font-weight: 600; color: var(--dim); cursor: pointer; border-left: 2px solid transparent; transition: color .15s, background .15s, border-color .15s; user-select: none; text-align: center; line-height: 1.1; }
 .tools-rail-tab .tr-icon { font-size: 16px; line-height: 1; }
 .tools-rail-tab:hover { color: var(--text); background: var(--card); }
 .tools-rail-tab.active { color: var(--accent); border-left-color: var(--accent); background: rgba(108,99,255,.10); }
 
 /* ── TOOLS PANEL (content, collapsible) ── */
-.tools-panel { width: 360px; background: var(--panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.tools-panel { grid-column: 4; position: relative; width: 360px; background: var(--panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
 .tools-panel.collapsed { display: none; }
+.tools-resize { position: absolute; left: 0; top: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 5; background: transparent; transition: background .15s; }
+.tools-resize:hover, .tools-resize.active { background: var(--accent); }
 .tools-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--card); }
 .tools-panel-title { font-size: 12px; font-weight: 700; color: var(--text); letter-spacing: .04em; }
 .tools-panel-close { background: transparent; color: var(--dim); font-size: 14px; padding: 2px 7px; border-radius: 4px; line-height: 1; }
@@ -516,6 +530,9 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
   <!-- RIGHT COLUMN -->
   <div class="right-col">
 
+    <!-- PROJECT NAME -->
+    <div class="project-name-bar" id="projectNameBar"></div>
+
     <!-- ROLE PALETTE -->
     <div class="palette" id="palette">
       <span class="htip" style="margin-left:6px;">?<span class="htip-popup">Drag any role chip onto a calendar day to create a task. Red chips (Review, Studio Shoot, On-Location Shoot) create multi-day event blocks. Drop more chips onto a red block to add attendees.</span></span>
@@ -557,13 +574,12 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
         <div class="panel-divider"></div>
         <div class="panel-fields">
           <div class="panel-field panel-field-loe" id="panelFieldLOE">
-            <label>Effort <span class="htip">?<span class="htip-popup">Optional level of effort: 🟢 Low, 🟡 Medium, 🔴 High. Shows as a dot on the task chip and feeds into the Trello Export.</span></span></label>
-            <select id="panelLOE">
-              <option value="">—</option>
-              <option value="low">🟢 Low</option>
-              <option value="medium">🟡 Med</option>
-              <option value="high">🔴 High</option>
-            </select>
+            <label>Effort <span class="htip">?<span class="htip-popup">Level of effort — click a dot: 🟢 Low, 🟡 Medium, 🔴 High. Defaults to Low. Shows as a dot on the task chip and feeds into the Trello Export.</span></span></label>
+            <div class="loe-dots" id="panelLOE" data-value="low" role="radiogroup" aria-label="Effort">
+              <button type="button" class="loe-dot loe-low"    data-loe="low"    title="Low"    aria-label="Low effort"></button>
+              <button type="button" class="loe-dot loe-medium" data-loe="medium" title="Medium" aria-label="Medium effort"></button>
+              <button type="button" class="loe-dot loe-high"   data-loe="high"   title="High"   aria-label="High effort"></button>
+            </div>
           </div>
           <div class="panel-field" id="panelFieldPerson">
             <label id="panelPersonLabel">Person <span class="htip">?<span class="htip-popup">Choose from people added to this project in Role Assignees. Select "Other…" to type a new name — they'll be saved to history for future projects.</span></span></label>
@@ -589,6 +605,7 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
 
   <!-- TOOLS PANEL (content for the active tab; collapsible) -->
   <div class="tools-panel collapsed" id="toolsPanel">
+    <div class="tools-resize" id="toolsResize" title="Drag to resize"></div>
     <div class="tools-panel-head">
       <span class="tools-panel-title" id="toolsPanelTitle">Project Info</span>
       <button class="tools-panel-close" id="toolsPanelClose" title="Collapse panel">✕</button>
@@ -2307,17 +2324,13 @@ function teardownCalObserver() {
 }
 
 function updateCalTitle() {
-  const calScroll = document.getElementById('calScroll');
-  if (!calScroll) return;
-  const rect = calScroll.getBoundingClientRect();
-  const topEl = document.elementFromPoint(rect.left + 40, rect.top + 4);
-  const botEl = document.elementFromPoint(rect.left + 40, rect.bottom - 4);
-  const firstDate = topEl?.closest?.('[data-date]')?.dataset?.date;
-  const lastDate  = botEl?.closest?.('[data-date]')?.dataset?.date;
-  if (!firstDate) return;
-  const fmt = (s, y) => new Date(s + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(y ? { year: 'numeric' } : {}) });
+  // Project name now lives in the bar above the role palette; the in-calendar
+  // title is left empty (acts as a flex spacer for the nav buttons).
   const proj = getProject(activeProjectId);
-  document.getElementById('calTitle').textContent = proj ? proj.name : '';
+  const nameBar = document.getElementById('projectNameBar');
+  if (nameBar) nameBar.textContent = proj ? proj.name : '';
+  const titleEl = document.getElementById('calTitle');
+  if (titleEl) titleEl.textContent = '';
 }
 
 function renderCalendar() {
@@ -3157,6 +3170,19 @@ function skipToWorkday(d) {
   return d;
 }
 
+// Effort dots — selection state lives on the container's data-value.
+function setPanelLOE(v) {
+  const cont = document.getElementById('panelLOE');
+  if (!cont) return;
+  const val = v || 'low';
+  cont.dataset.value = val;
+  cont.querySelectorAll('.loe-dot').forEach(d => d.classList.toggle('selected', d.dataset.loe === val));
+}
+function getPanelLOE() {
+  const cont = document.getElementById('panelLOE');
+  return (cont && cont.dataset.value) || 'low';
+}
+
 function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) {
   if (!activeProjectId) return;
 
@@ -3172,7 +3198,7 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
   fieldLOE.style.display    = '';
   taskLabel.textContent     = 'Task';
   taskInput.placeholder     = 'e.g. Script Review';
-  document.getElementById('panelLOE').value = '';
+  setPanelLOE('low'); // green pre-selected by default
   const _badge = document.getElementById('panelRoleBadge');
   _badge.onclick = null; _badge.style.cursor = ''; _badge.title = '';
 
@@ -3217,7 +3243,7 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
       otherInp.style.display = ''; otherInp.value = task.person;
     }
     taskInput.value                              = task.taskName || '';
-    document.getElementById('panelLOE').value   = task.loe      || '';
+    setPanelLOE(task.loe || 'low');
     document.getElementById('panelDelete').classList.remove('hidden');
 
   } else if (mode === 'create-review') {
@@ -3341,7 +3367,7 @@ function savePanel() {
     addToRoster(panelContext.role, person); // also calls recordNameHistory internally
   }
 
-  const loe = (document.getElementById('panelLOE').value) || null;
+  const loe = getPanelLOE();
 
   if (panelContext.mode === 'create') {
     if (!person && !taskName) { document.getElementById('panelPerson').focus(); return; }
@@ -5147,6 +5173,12 @@ function setupInitListeners() {
   document.getElementById('panelCancel').addEventListener('click', closePanel);
   document.getElementById('panelDelete').addEventListener('click', deleteFromPanel);
 
+  // Effort dots — click to select Low / Medium / High
+  document.getElementById('panelLOE').addEventListener('click', e => {
+    const dot = e.target.closest('.loe-dot');
+    if (dot) setPanelLOE(dot.dataset.loe);
+  });
+
   // Person dropdown → show/hide Other input
   document.getElementById('panelPerson').addEventListener('change', function() {
     const other = document.getElementById('panelPersonOther');
@@ -5247,6 +5279,35 @@ function setupInitListeners() {
     });
   });
   document.getElementById('toolsPanelClose').addEventListener('click', collapseTools);
+
+  // Restore the last panel width (persists across collapse/reopen)
+  const TOOLS_MIN = 240, TOOLS_MAX = 760;
+  const savedTW = parseInt(localStorage.getItem('prepro_tools_width'));
+  if (!isNaN(savedTW)) toolsPanel.style.width = Math.max(TOOLS_MIN, Math.min(TOOLS_MAX, savedTW)) + 'px';
+
+  // Drag the left edge to resize the panel
+  {
+    const handle = document.getElementById('toolsResize');
+    let rz = false, sx = 0, sw = 0;
+    handle.addEventListener('mousedown', e => {
+      rz = true; sx = e.clientX; sw = toolsPanel.offsetWidth;
+      handle.classList.add('active');
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', e => {
+      if (!rz) return;
+      const w = Math.max(TOOLS_MIN, Math.min(TOOLS_MAX, sw + (sx - e.clientX)));
+      toolsPanel.style.width = w + 'px';
+    });
+    document.addEventListener('mouseup', () => {
+      if (!rz) return;
+      rz = false;
+      handle.classList.remove('active');
+      document.body.style.userSelect = '';
+      localStorage.setItem('prepro_tools_width', toolsPanel.offsetWidth);
+    });
+  }
 
   // Apply initial open/collapsed state to the DOM
   if (exportOpen) toolsPanel.classList.remove('collapsed');
