@@ -10,6 +10,8 @@
 
 <!-- Firebase + auth gate -->
 <script type="module" src="./auth.js"></script>
+<!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
+<script src="./xlsx.full.min.js"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -50,7 +52,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .btn-toggle.on { background: rgba(108,99,255,.18); color: var(--accent); border-color: var(--accent); }
 
 /* ── APP ROW ── */
-.app-row { display: grid; grid-template-columns: 220px 4px 1fr; flex: 1; min-height: 0; }
+.app-row { display: grid; grid-template-columns: var(--sidebar-w, 220px) 4px 1fr auto 56px; flex: 1; min-height: 0; }
 
 /* ── SIDEBAR ── */
 .sidebar { background: var(--panel); border-right: none; display: flex; flex-direction: column; overflow: hidden; }
@@ -65,6 +67,22 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 /* ── SETTINGS MODAL ── */
 .settings-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 9999; display: flex; align-items: center; justify-content: center; }
 .settings-modal { width: min(820px, 95vw); max-height: 85vh; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,.5); }
+.xl-review-summary { font-size: 13px; color: var(--dim); padding: 2px 2px 0; }
+.xl-review-summary b { color: var(--text); }
+.xl-review-scroll { overflow: auto; flex: 1; border: 1px solid var(--border); border-radius: 8px; }
+.xl-review-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 12px 18px; border-top: 1px solid var(--border); }
+table.xl-review-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+table.xl-review-table th { position: sticky; top: 0; z-index: 2; background: var(--card); padding: 6px 8px; text-align: left; font-weight: 600; color: var(--dim); white-space: nowrap; border-bottom: 1px solid var(--border); }
+table.xl-review-table td { padding: 3px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.xl-review-table tr.xl-unchecked td { opacity: .45; }
+table.xl-review-table input[type="text"], table.xl-review-table select, table.xl-review-table textarea {
+  width: 100%; min-width: 90px; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  border-radius: 4px; padding: 3px 5px; font: inherit; font-size: 12px; resize: vertical;
+}
+table.xl-review-table textarea { min-width: 220px; height: 30px; }
+table.xl-review-table input:focus, table.xl-review-table select:focus, table.xl-review-table textarea:focus { border-color: var(--accent); outline: none; }
+table.xl-review-table td.xl-check { text-align: center; }
+table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
 .settings-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--card); border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .settings-title { font-weight: 700; font-size: 14px; color: var(--text); }
 .settings-close { background: transparent; color: var(--dim); border: none; font-size: 16px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
@@ -315,18 +333,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .panel-field-loe select:focus { border-color: var(--accent); }
 .panel-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
 
-/* ── EXPORT PANEL ── */
-.export-row   { display: flex; align-items: stretch; border-top: 1px solid var(--border); flex-shrink: 0; }
-.export-panel { background: var(--panel); flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.export-toggle { display: flex; align-items: center; gap: 8px; padding: 8px 14px; font-size: 11px; font-weight: 700; color: var(--dim); letter-spacing: .07em; text-transform: uppercase; user-select: none; cursor: pointer; transition: color .15s; }
-.export-toggle:hover { color: var(--text); }
-.export-chevron { font-size: 9px; transition: transform .2s; }
-.export-body   { display: none; height: 258px; flex-direction: column; }
-.export-body.visible { display: flex; }
-.export-tabs   { display: flex; border-bottom: 1px solid var(--border); padding: 0 10px; flex-shrink: 0; overflow-x: auto; }
-.export-tab    { padding: 6px 9px; font-size: 11px; font-weight: 600; color: var(--dim); border-bottom: 2px solid transparent; cursor: pointer; transition: color .15s; white-space: nowrap; flex-shrink: 0; }
-.export-tab:hover  { color: var(--text); }
-.export-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+/* ── EXPORT / TOOLS CONTENT ── */
 .export-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 8px 14px 10px; gap: 7px; min-height: 0; }
 .export-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
 .export-opts    { display: flex; gap: 16px; align-items: center; flex-shrink: 0; padding: 4px 0; border-bottom: 1px solid var(--border); margin-bottom: 2px; }
@@ -343,6 +350,34 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .export-table td { padding: 4px 10px; border-bottom: 1px solid var(--border); color: var(--text); white-space: nowrap; }
 .export-table tr:last-child td { border-bottom: none; }
 .export-table tr:hover td { background: rgba(255,255,255,.03); }
+
+/* ── TOOLS RAIL (vertical tabs, far right) ── */
+.tools-rail { background: var(--panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; align-items: stretch; padding: 6px 0; gap: 2px; overflow-y: auto; }
+.tools-rail-tab { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 9px 2px; font-size: 9px; font-weight: 600; color: var(--dim); cursor: pointer; border-left: 2px solid transparent; transition: color .15s, background .15s, border-color .15s; user-select: none; text-align: center; line-height: 1.1; }
+.tools-rail-tab .tr-icon { font-size: 16px; line-height: 1; }
+.tools-rail-tab:hover { color: var(--text); background: var(--card); }
+.tools-rail-tab.active { color: var(--accent); border-left-color: var(--accent); background: rgba(108,99,255,.10); }
+
+/* ── TOOLS PANEL (content, collapsible) ── */
+.tools-panel { width: 360px; background: var(--panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.tools-panel.collapsed { display: none; }
+.tools-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--card); }
+.tools-panel-title { font-size: 12px; font-weight: 700; color: var(--text); letter-spacing: .04em; }
+.tools-panel-close { background: transparent; color: var(--dim); font-size: 14px; padding: 2px 7px; border-radius: 4px; line-height: 1; }
+.tools-panel-close:hover { color: var(--text); background: rgba(255,255,255,.06); }
+
+/* ── PROJECT INFO PANEL ── */
+.project-info { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; }
+.pi-section-title { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .07em; padding: 8px 2px 6px; }
+.pi-grid { display: flex; flex-direction: column; }
+.pi-row { display: grid; grid-template-columns: 112px 1fr; gap: 8px; padding: 5px 2px; border-bottom: 1px solid var(--border); font-size: 12px; align-items: start; }
+.pi-row:last-child { border-bottom: none; }
+.pi-label { color: var(--dim); font-weight: 600; }
+.pi-value { color: var(--text); word-break: break-word; white-space: pre-wrap; }
+.pi-value a { color: var(--accent); text-decoration: none; }
+.pi-value a:hover { text-decoration: underline; }
+.pi-divider { height: 1px; background: var(--border); margin: 12px 0 2px; }
+.pi-empty { color: var(--dim); font-style: italic; padding: 14px 2px; font-size: 12px; }
 
 /* ── INVITES PANEL ── */
 .invite-row  { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 12px; min-width: 0; }
@@ -440,6 +475,10 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
     <span id="fbDot" style="width:7px;height:7px;border-radius:50%;background:#555;display:inline-block;"></span>
     <span id="fbLabel">Connecting…</span>
   </span>
+  <span style="display:inline-flex;gap:6px;margin-right:10px;">
+    <button class="btn btn-ghost" id="btnUndo" style="font-size:11px;padding:4px 9px;" title="Undo (Ctrl/⌘+Z)" disabled>↶ Undo</button>
+    <button class="btn btn-ghost" id="btnRedo" style="font-size:11px;padding:4px 9px;" title="Redo (Ctrl/⌘+Shift+Z)" disabled>↷ Redo</button>
+  </span>
 </header>
 
 <div class="app-row">
@@ -468,6 +507,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
       <a href="dash.html" target="_blank" class="data-mig-btn" title="Personal dashboard view">📋 Dash</a>
       <button class="data-mig-btn" id="btnSettings" title="Settings: import/export data, manage people">⚙ Settings</button>
       <input type="file" id="importFileInput" accept=".json" style="display:none">
+      <input type="file" id="excelImportInput" accept=".xlsx,.xls" style="display:none">
     </div>
   </div>
 
@@ -545,32 +585,27 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
       </div>
     </div>
 
-    <!-- EXPORT ROW -->
-    <div class="export-row">
+  </div>
 
-      <!-- EXPORT / ROSTER PANEL (unified) -->
-      <div class="export-panel">
-        <div class="export-toggle" id="exportToggle" style="cursor:pointer;">
-          <span class="export-chevron" id="exportChevron">▲</span>
-          <span>Schedule Tools</span>
-        </div>
-        <div class="export-body" id="exportBody">
-          <div class="export-tabs">
-            <div class="export-tab active" data-tab="text">Text</div>
-            <div class="export-tab" data-tab="table">Table / Excel</div>
-            <div class="export-tab" data-tab="png">PNG</div>
-            <div class="export-tab" data-tab="planyway">Trello Export</div>
-            <div class="export-tab" data-tab="roster">Role Assignees</div>
-            <div class="export-tab" data-tab="invites-web">🌐 Invite Web</div>
-            <div class="export-tab" data-tab="notes">📝 Notes</div>
-            <div class="export-tab" data-tab="cea">🔗 CEA</div>
-          </div>
-          <div class="export-content" id="exportContent"></div>
-        </div>
-      </div>
-
+  <!-- TOOLS PANEL (content for the active tab; collapsible) -->
+  <div class="tools-panel collapsed" id="toolsPanel">
+    <div class="tools-panel-head">
+      <span class="tools-panel-title" id="toolsPanelTitle">Project Info</span>
+      <button class="tools-panel-close" id="toolsPanelClose" title="Collapse panel">✕</button>
     </div>
+    <div class="export-content" id="exportContent"></div>
+  </div>
 
+  <!-- TOOLS RAIL (vertical tabs) -->
+  <div class="tools-rail" id="toolsRail">
+    <div class="tools-rail-tab" data-tab="projectinfo"><span class="tr-icon">📋</span>Info</div>
+    <div class="tools-rail-tab" data-tab="text"><span class="tr-icon">📄</span>Text</div>
+    <div class="tools-rail-tab" data-tab="table"><span class="tr-icon">📊</span>Table</div>
+    <div class="tools-rail-tab" data-tab="png"><span class="tr-icon">🖼️</span>PNG</div>
+    <div class="tools-rail-tab" data-tab="planyway"><span class="tr-icon">🗂️</span>Trello</div>
+    <div class="tools-rail-tab" data-tab="invites-web"><span class="tr-icon">🌐</span>Invite</div>
+    <div class="tools-rail-tab" data-tab="notes"><span class="tr-icon">📝</span>Notes</div>
+    <div class="tools-rail-tab" data-tab="cea"><span class="tr-icon">🔗</span>CEA</div>
   </div>
 </div>
 
@@ -591,6 +626,24 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
         <div class="settings-tab" data-settings-tab="people">People</div>
       </div>
       <div class="settings-content" id="settingsContent"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Excel import review / audit overlay -->
+<div class="settings-overlay" id="excelReviewOverlay" style="display:none; z-index:10000;">
+  <div class="settings-modal" id="excelReviewModal" style="width:min(1400px,98vw); max-height:92vh;">
+    <div class="settings-header">
+      <span class="settings-title">⬆ Review imported tickets</span>
+      <button class="settings-close" id="excelReviewClose" title="Close">✕</button>
+    </div>
+    <div class="settings-body" style="overflow:hidden; display:flex; flex-direction:column; gap:10px;">
+      <div class="xl-review-summary" id="excelReviewSummary"></div>
+      <div class="xl-review-scroll" id="excelReviewGridWrap"></div>
+    </div>
+    <div class="xl-review-footer">
+      <button class="settings-btn" id="excelReviewCancel">Cancel</button>
+      <button class="settings-btn primary" id="excelReviewConfirm">Add selected tickets</button>
     </div>
   </div>
 </div>
@@ -635,7 +688,9 @@ function saveExpandedIds() {
 }
 let dragPayload     = null;
 let panelContext    = null;
-let exportTabActive  = localStorage.getItem('prepro_export_tab') || 'text';
+let exportTabActive  = localStorage.getItem('prepro_export_tab') || 'projectinfo';
+if (exportTabActive === 'roster') exportTabActive = 'projectinfo'; // old tab merged into Project Info
+const TAB_TITLES = { projectinfo: 'Project Info', text: 'Text Export', table: 'Table / Excel', png: 'PNG Export', planyway: 'Trello Export', 'invites-web': 'Invite Web', notes: 'Notes', cea: 'CEA' };
 let exportOpen       = false;
 let exportOptBold       = true;
 let exportOptRoles      = false;
@@ -867,6 +922,27 @@ function renderDataSettings(c) {
   hint.className = 'settings-hint';
   hint.textContent = 'Export downloads a JSON backup of every project, name history, and saved emails. Import merges projects by ID (overwrites duplicates) and adds new names/emails.';
   c.appendChild(hint);
+
+  // ── Excel ticket import ──
+  const xlTitle = document.createElement('div');
+  xlTitle.className = 'settings-section-title';
+  xlTitle.style.marginTop = '24px';
+  xlTitle.textContent = 'Import tickets from Excel';
+  c.appendChild(xlTitle);
+
+  const xlActions = document.createElement('div');
+  xlActions.className = 'data-actions';
+  const xlBtn = document.createElement('button');
+  xlBtn.className = 'settings-btn primary';
+  xlBtn.textContent = '⬆ Import from Excel';
+  xlBtn.addEventListener('click', () => document.getElementById('excelImportInput').click());
+  xlActions.appendChild(xlBtn);
+  c.appendChild(xlActions);
+
+  const xlHint = document.createElement('div');
+  xlHint.className = 'settings-hint';
+  xlHint.textContent = 'Upload the Pega "Video Scheduler" export (.xlsx). New tickets (by Case ID) are detected; review, edit, and select which to add. Tickets already in the app are skipped.';
+  c.appendChild(xlHint);
 }
 
 function doExportData() {
@@ -1127,8 +1203,45 @@ function wireSettingsModal() {
       this.value = '';
     });
   }
+  const excelInput = document.getElementById('excelImportInput');
+  if (excelInput) {
+    excelInput.addEventListener('change', function() {
+      const file = this.files[0];
+      if (!file) return;
+      handleExcelImport(file);
+      this.value = '';
+    });
+  }
+  const xlClose  = document.getElementById('excelReviewClose');
+  const xlCancel = document.getElementById('excelReviewCancel');
+  const xlOk     = document.getElementById('excelReviewConfirm');
+  if (xlClose)  xlClose.addEventListener('click', closeExcelReview);
+  if (xlCancel) xlCancel.addEventListener('click', closeExcelReview);
+  if (xlOk)     xlOk.addEventListener('click', confirmExcelImport);
+
+  const undoBtn = document.getElementById('btnUndo');
+  const redoBtn = document.getElementById('btnRedo');
+  if (undoBtn) undoBtn.addEventListener('click', undo);
+  if (redoBtn) redoBtn.addEventListener('click', redo);
+  updateUndoRedoButtons();
+
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && document.getElementById('settingsOverlay').style.display === 'flex') closeSettings();
+    if (e.key === 'Escape' && document.getElementById('excelReviewOverlay').style.display === 'flex') { closeExcelReview(); return; }
+    if (e.key === 'Escape' && document.getElementById('settingsOverlay').style.display === 'flex') { closeSettings(); return; }
+
+    // Undo / redo — Ctrl+Z, Ctrl+Shift+Z (and Ctrl+Y) ; ⌘ on Mac.
+    const mod = e.ctrlKey || e.metaKey;
+    if (!mod || e.altKey) return;
+    const key = e.key.toLowerCase();
+    if (key !== 'z' && key !== 'y') return;
+
+    // Let the browser handle native text editing inside form fields / editable cells.
+    const el = e.target;
+    const tag = el && el.tagName ? el.tagName.toLowerCase() : '';
+    if (tag === 'input' || tag === 'textarea' || tag === 'select' || (el && el.isContentEditable)) return;
+
+    if (key === 'y' || (key === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+    else if (key === 'z') { e.preventDefault(); undo(); }
   });
 }
 
@@ -1137,11 +1250,82 @@ let _suppressRemoteRender = 0; // avoid double-render when we wrote the change o
 
 function loadState() { /* no-op — data arrives via onValue listener */ }
 
-function saveState() {
+// ── UNDO / REDO HISTORY ──
+// History tracks the `state` object (projects). Each local change (saveState) pushes the
+// prior committed state onto the undo stack; undo/redo swap snapshots without re-recording.
+const UNDO_LIMIT = 60;
+let _undoStack = [];
+let _redoStack = [];
+let _lastSnapshot = null;     // JSON of the last committed state (the undo baseline)
+let _applyingHistory = false; // true while undo/redo is writing, so it isn't re-recorded
+
+function _stateSnapshot() { return JSON.stringify(state); }
+
+// Call when the committed baseline changes from outside (initial load / remote update).
+function resetHistoryBaseline() { _lastSnapshot = _stateSnapshot(); }
+
+function recordHistory() {
+  if (_applyingHistory) return;
+  const cur = _stateSnapshot();
+  if (_lastSnapshot == null) { _lastSnapshot = cur; return; }
+  if (cur === _lastSnapshot) return; // nothing actually changed
+  _undoStack.push(_lastSnapshot);
+  if (_undoStack.length > UNDO_LIMIT) _undoStack.shift();
+  _redoStack = [];
+  _lastSnapshot = cur;
+  updateUndoRedoButtons();
+}
+
+function _pushStateToFirebase() {
   if (!window._fb) return;
   _suppressRemoteRender++;
   const { db, ref, set } = window._fb;
   set(ref(db, 'prepro/state'), state).catch(err => console.error('saveState:', err));
+}
+
+function saveState() {
+  recordHistory();
+  _pushStateToFirebase();
+}
+
+function _applyHistorySnapshot(snap) {
+  _applyingHistory = true;
+  state = JSON.parse(snap);
+  _lastSnapshot = snap;
+  _pushStateToFirebase();
+  _applyingHistory = false;
+
+  // Active project may have been created/removed in the swapped state.
+  if (activeProjectId && !getProject(activeProjectId)) {
+    const roots = getRootProjects();
+    activeProjectId = roots.length ? roots[0].id : null;
+  }
+  if (typeof renderSidebar === 'function')  renderSidebar();
+  if (typeof renderCalendar === 'function') renderCalendar();
+  if (typeof renderPalette === 'function')  renderPalette();
+  if (typeof exportOpen !== 'undefined' && exportOpen && typeof renderExportPanel === 'function') renderExportPanel();
+  const so = document.getElementById('settingsOverlay');
+  if (so && so.style.display === 'flex' && typeof renderSettingsContent === 'function') renderSettingsContent();
+  updateUndoRedoButtons();
+}
+
+function undo() {
+  if (!_undoStack.length) return;
+  _redoStack.push(_stateSnapshot());
+  _applyHistorySnapshot(_undoStack.pop());
+}
+
+function redo() {
+  if (!_redoStack.length) return;
+  _undoStack.push(_stateSnapshot());
+  _applyHistorySnapshot(_redoStack.pop());
+}
+
+function updateUndoRedoButtons() {
+  const u = document.getElementById('btnUndo');
+  const r = document.getElementById('btnRedo');
+  if (u) u.disabled = _undoStack.length === 0;
+  if (r) r.disabled = _redoStack.length === 0;
 }
 
 function setFbStatus(connected) {
@@ -1172,11 +1356,274 @@ function addProject(name, parentId, isFolder) {
               function: null, videoType: null, targetAudience: null, budget: null,
               synopsis: null, tangibleGoal1: null, tangibleGoal2: null,
               completionIssues: null, additionalNotes: null,
+              createDate: null, region: null, scopeLevel: null,
+              internalExternal: null, audienceDescription: null, caseStatus: null,
               isFolder: !!isFolder };
   state.projects.push(p); saveState();
   addSystemNote(p.id, isFolder ? 'Folder created' : 'Project created');
   return p;
 }
+
+// ── EXCEL IMPORT HELPERS ──
+// Accepts "M/D/YY[ HH:MM]" strings or JS Date objects → "YYYY-MM-DD" (or '' if unparseable).
+function xlNormalizeDate(raw) {
+  if (raw == null || raw === '') return '';
+  if (raw instanceof Date && !isNaN(raw)) {
+    return raw.getFullYear() + '-' +
+           String(raw.getMonth() + 1).padStart(2, '0') + '-' +
+           String(raw.getDate()).padStart(2, '0');
+  }
+  const s = String(raw).trim();
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return iso[1] + '-' + iso[2] + '-' + iso[3];
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (!m) return '';
+  let mo = m[1], d = m[2], y = m[3];
+  if (y.length === 2) y = '20' + y;
+  return y + '-' + mo.padStart(2, '0') + '-' + d.padStart(2, '0');
+}
+
+// Build a full project object from a reviewed/edited import row (does NOT push to state).
+function buildProjectFromRow(row) {
+  const ticketId = (row.ticketId || '').trim();
+  const label    = (row.label || '').trim();
+  const name     = ticketId ? (label ? ticketId + ' ' + label : ticketId) : (label || 'Untitled');
+
+  const tasks = [];
+  const dueIso = xlNormalizeDate(row.dueDateRaw);
+  if (dueIso) tasks.push({
+    id: genId(), date: dueIso, taskName: 'Requested Due Date',
+    isDueDate: true, milestoneType: 'milestone'
+  });
+
+  const roster = {};
+  const requester = (row.requester || '').trim();
+  if (requester) roster.Stakeholder = [requester];
+
+  const now = new Date();
+  const sysType = NOTE_TYPES.find(t => t.key === 'system') || NOTE_TYPES[0];
+  const notes = [{
+    id: genId(), type: sysType.key, emoji: sysType.emoji,
+    body: 'Imported from Excel (Case ' + (ticketId || '—') + ')',
+    person: 'System',
+    date: fmtDate(now.getFullYear(), now.getMonth() + 1, now.getDate()),
+    time: String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0')
+  }];
+
+  return {
+    id: genId(), name, parentId: null, tasks, roster, dueDate: null, notes,
+    ticketId: ticketId || null, ticketUrl: null, leadProducer: null,
+    function: null, videoType: (row.videoType || '').trim() || null,
+    targetAudience: (row.targetAudience || '').trim() || null, budget: null,
+    synopsis: (row.synopsis || '').trim() || null,
+    tangibleGoal1: null, tangibleGoal2: null,
+    completionIssues: null, additionalNotes: null,
+    createDate: xlNormalizeDate(row.createDate) || null,
+    region: (row.region || '').trim() || null,
+    scopeLevel: (row.scopeLevel || '').trim() || null,
+    internalExternal: (row.internalExternal || '').trim() || null,
+    audienceDescription: (row.audienceDescription || '').trim() || null,
+    caseStatus: (row.caseStatus || '').trim() || null,
+    isFolder: false
+  };
+}
+
+// Excel header (normalized) → row field key. Matching ignores case/spaces/punctuation.
+const XL_COLUMN_MAP = {
+  'caseid':                    'ticketId',
+  'label':                     'label',
+  'dayofduedate':              'dueDateRaw',
+  'typeofsupport':             'videoType',
+  'regionvalues':              'region',
+  'isinternalorexternal':      'internalExternal',
+  'requestername':             'requester',
+  'scopelevel':                'scopeLevel',
+  'eventdescription':          'synopsis',
+  'targetaudience':            'targetAudience',
+  'targetaudiencedescription': 'audienceDescription',
+  'casestatus':                'caseStatus',
+  'createdatetime':            'createDate'
+};
+function xlNormHeader(h) { return String(h == null ? '' : h).toLowerCase().replace(/[^a-z0-9]/g, ''); }
+
+// Columns shown in the review grid (order matters). type: text | date | textarea | status
+const XL_GRID_COLS = [
+  { key: 'ticketId',            label: 'Case ID',     type: 'text' },
+  { key: 'caseStatus',          label: 'Status',      type: 'status' },
+  { key: 'label',               label: 'Label',       type: 'text' },
+  { key: 'dueDateRaw',          label: 'Due Date',    type: 'date' },
+  { key: 'videoType',           label: 'Type',        type: 'text' },
+  { key: 'requester',           label: 'Requester',   type: 'text' },
+  { key: 'region',              label: 'Region',      type: 'text' },
+  { key: 'internalExternal',    label: 'Int/Ext',     type: 'text' },
+  { key: 'scopeLevel',          label: 'Scope',       type: 'text' },
+  { key: 'targetAudience',      label: 'Audience',    type: 'text' },
+  { key: 'audienceDescription', label: 'Audience Desc', type: 'textarea' },
+  { key: 'synopsis',            label: 'Event Description', type: 'textarea' },
+  { key: 'createDate',          label: 'Created',     type: 'date' }
+];
+const XL_STATUS_OPTIONS = ['New','Draft','Pending-Approval','Pending-Fulfillment','On Hold','Resolved-COERejected'];
+
+let _xlReviewRows = [];   // candidate rows currently shown in the review overlay
+
+function handleExcelImport(file) {
+  if (typeof XLSX === 'undefined') { alert('Excel parser failed to load (xlsx.full.min.js).'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    let wb;
+    try { wb = XLSX.read(e.target.result, { type: 'array', cellDates: true }); }
+    catch (err) { alert('Could not read that file as Excel.\n' + err); return; }
+
+    const ws = wb.Sheets['Data'] || wb.Sheets[wb.SheetNames[0]];
+    if (!ws) { alert('No data sheet found in the workbook.'); return; }
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: '' });
+    if (!rows.length) { alert('The sheet appears to be empty.'); return; }
+
+    // Map header row → field keys by column index.
+    const header = rows[0];
+    const idxToKey = {};
+    header.forEach((h, i) => { const k = XL_COLUMN_MAP[xlNormHeader(h)]; if (k) idxToKey[i] = k; });
+    if (Object.values(idxToKey).indexOf('ticketId') === -1) {
+      alert('Could not find a "Case ID" column in the sheet. Headers found:\n' + header.join(', '));
+      return;
+    }
+
+    // Build candidate objects from data rows.
+    const candidates = [];
+    for (let r = 1; r < rows.length; r++) {
+      const cells = rows[r];
+      const obj = {};
+      Object.keys(idxToKey).forEach(i => {
+        const key = idxToKey[i];
+        let v = cells[i];
+        if (key === 'dueDateRaw' || key === 'createDate') v = xlNormalizeDate(v);
+        else v = (v == null ? '' : String(v)).trim();
+        obj[key] = v;
+      });
+      if ((obj.ticketId || '').trim()) candidates.push(obj);
+    }
+
+    // Cross-check against existing projects (dedup by Case ID / ticketId).
+    const existing = new Set(state.projects.map(p => (p.ticketId || '').trim()).filter(Boolean));
+    const newRows = [], skipped = [];
+    candidates.forEach(o => { (existing.has(o.ticketId.trim()) ? skipped : newRows).push(o); });
+
+    openExcelReview(newRows, candidates.length, skipped.length);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function openExcelReview(newRows, totalRows, skippedCount) {
+  _xlReviewRows = newRows.map(o => Object.assign({ _selected: true }, o));
+
+  const summary = document.getElementById('excelReviewSummary');
+  summary.innerHTML = '<b>' + totalRows + '</b> rows in file · <b>' + skippedCount +
+    '</b> already in app (skipped) · <b>' + _xlReviewRows.length + '</b> new';
+
+  const wrap = document.getElementById('excelReviewGridWrap');
+  wrap.innerHTML = '';
+
+  if (!_xlReviewRows.length) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'padding:28px; text-align:center; color:var(--dim);';
+    empty.textContent = 'No new tickets to import — everything in this file is already in the app.';
+    wrap.appendChild(empty);
+  } else {
+    wrap.appendChild(buildExcelReviewTable());
+  }
+
+  updateExcelConfirmLabel();
+  document.getElementById('excelReviewOverlay').style.display = 'flex';
+}
+
+function buildExcelReviewTable() {
+  const table = document.createElement('table');
+  table.className = 'xl-review-table';
+
+  // Header
+  const thead = table.createTHead();
+  const hrow = thead.insertRow();
+  const thCheck = document.createElement('th');
+  const selAll = document.createElement('input');
+  selAll.type = 'checkbox'; selAll.checked = true; selAll.title = 'Select / deselect all';
+  selAll.addEventListener('change', () => {
+    _xlReviewRows.forEach(r => { r._selected = selAll.checked; });
+    table.querySelectorAll('tbody input.xl-row-check').forEach((cb, i) => {
+      cb.checked = selAll.checked;
+      cb.closest('tr').classList.toggle('xl-unchecked', !selAll.checked);
+    });
+    updateExcelConfirmLabel();
+  });
+  thCheck.appendChild(selAll);
+  hrow.appendChild(thCheck);
+  XL_GRID_COLS.forEach(col => {
+    const th = document.createElement('th'); th.textContent = col.label; hrow.appendChild(th);
+  });
+
+  // Body
+  const tbody = table.createTBody();
+  _xlReviewRows.forEach(row => {
+    const tr = tbody.insertRow();
+
+    const cCell = tr.insertCell();
+    cCell.className = 'xl-check';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.className = 'xl-row-check'; cb.checked = row._selected !== false;
+    cb.addEventListener('change', () => {
+      row._selected = cb.checked;
+      tr.classList.toggle('xl-unchecked', !cb.checked);
+      updateExcelConfirmLabel();
+    });
+    cCell.appendChild(cb);
+
+    XL_GRID_COLS.forEach(col => {
+      const td = tr.insertCell();
+      let field;
+      if (col.type === 'textarea') {
+        field = document.createElement('textarea');
+      } else if (col.type === 'status') {
+        field = document.createElement('select');
+        const opts = XL_STATUS_OPTIONS.slice();
+        const cur = row[col.key] || '';
+        if (cur && opts.indexOf(cur) === -1) opts.push(cur);
+        if (!cur) { const blank = document.createElement('option'); blank.value=''; blank.textContent='—'; field.appendChild(blank); }
+        opts.forEach(o => { const op = document.createElement('option'); op.value = o; op.textContent = o; field.appendChild(op); });
+      } else {
+        field = document.createElement('input'); field.type = 'text';
+      }
+      field.value = row[col.key] || '';
+      field.addEventListener('input', () => { row[col.key] = field.value; });
+      field.addEventListener('change', () => { row[col.key] = field.value; });
+      td.appendChild(field);
+    });
+  });
+
+  return table;
+}
+
+function updateExcelConfirmLabel() {
+  const n = _xlReviewRows.filter(r => r._selected !== false).length;
+  const btn = document.getElementById('excelReviewConfirm');
+  if (btn) { btn.textContent = 'Add ' + n + ' selected ticket' + (n === 1 ? '' : 's'); btn.disabled = n === 0; }
+}
+
+function closeExcelReview() {
+  document.getElementById('excelReviewOverlay').style.display = 'none';
+  _xlReviewRows = [];
+}
+
+function confirmExcelImport() {
+  const chosen = _xlReviewRows.filter(r => r._selected !== false);
+  if (!chosen.length) { closeExcelReview(); return; }
+  chosen.forEach(row => { state.projects.push(buildProjectFromRow(row)); });
+  saveState();
+  if (typeof renderSidebar === 'function') renderSidebar();
+  if (typeof renderCalendar === 'function') renderCalendar();
+  const n = chosen.length;
+  closeExcelReview();
+  alert('Added ' + n + ' ticket' + (n === 1 ? '' : 's') + ' from Excel.');
+}
+
 function duplicateProject(id) {
   const allIds = [id, ...getDescendantIds(id)];
   const idMap  = {};
@@ -3313,6 +3760,11 @@ function renderRosterPanel() {
   const content = document.getElementById('exportContent');
   if (!content) return;
   content.innerHTML = '';
+  renderRosterInto(content);
+}
+// Builds the role-assignee UI into any container (reused by the Project Info panel).
+function renderRosterInto(content) {
+  if (!content) return;
   const wrap = document.createElement('div');
   wrap.className = 'roster-content';
   content.appendChild(wrap);
@@ -3363,7 +3815,7 @@ function renderRosterPanel() {
       chip.addEventListener('click', e => {
         e.stopPropagation();
         removeFromRoster(role, name);
-        renderRosterPanel();
+        renderExportPanel();
         renderPalette();
         if (panelContext && panelContext.role === role) populatePersonDropdown(role);
       });
@@ -3384,7 +3836,7 @@ function renderRosterPanel() {
         addSpan.addEventListener('click', e => {
           e.stopPropagation();
           addToRoster(role, name);
-          renderRosterPanel();
+          renderExportPanel();
           renderPalette();
           if (panelContext && panelContext.role === role) populatePersonDropdown(role);
         });
@@ -3730,11 +4182,129 @@ function showNoteCompose(container, noteType, addBar) {
   textarea.focus();
 }
 
+// Open the CEA (Pega CampaignExecution) ticket URL in a new tab, sanitising any
+// markup junk that leaked in from email ingestion.
+function openCEA(proj) {
+  const rawUrl = (proj && proj.ticketUrl) ? proj.ticketUrl
+    : 'https://corporateexpress.pegacloud.io/prweb/sso/app/CampaignExecution';
+  const cut = rawUrl.search(/&(?:gt|lt|quot|apos|#x?(?:3[ce]|22|27));/i);
+  const url = (cut !== -1 ? rawUrl.slice(0, cut) : rawUrl)
+    .replace(/[<>]/g, '')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16)))
+    .replace(/&amp;/gi, '&');
+  window.open(url, '_blank');
+}
+
+// First tab: the key ticket data (top) merged with Role Assignees (bottom).
+function renderProjectInfo() {
+  const content = document.getElementById('exportContent');
+  if (!content) return;
+  content.innerHTML = '';
+  const proj = getProject(activeProjectId);
+  if (!proj) {
+    const empty = document.createElement('div');
+    empty.className = 'pi-empty';
+    empty.textContent = 'No project selected.';
+    content.appendChild(empty);
+    return;
+  }
+
+  const wrap = document.createElement('div');
+  wrap.className = 'project-info';
+
+  // ── Ticket key data ──
+  const t1 = document.createElement('div');
+  t1.className = 'pi-section-title';
+  t1.textContent = 'Project Data';
+  wrap.appendChild(t1);
+
+  const grid = document.createElement('div');
+  grid.className = 'pi-grid';
+
+  const fmtIso = iso => iso ? new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+  const dueTask = (proj.tasks || []).find(t => t.isDueDate);
+  const dueIso  = dueTask ? dueTask.date : (proj.dueDate || '');
+  const requesters = (proj.roster && proj.roster.Stakeholder || []).join(', ');
+
+  const rows = [
+    ['Case ID',           proj.ticketId, 'cea'],
+    ['Status',            proj.caseStatus],
+    ['Requested Due',     fmtIso(dueIso)],
+    ['Type',              proj.videoType],
+    ['Lead Producer',     proj.leadProducer],
+    ['Requester',         requesters],
+    ['Region',            proj.region],
+    ['Int / Ext',         proj.internalExternal],
+    ['Scope',             proj.scopeLevel],
+    ['Target Audience',   proj.targetAudience],
+    ['Audience Desc',     proj.audienceDescription],
+    ['Event Description', proj.synopsis],
+    ['Created',           fmtIso(proj.createDate)],
+  ];
+
+  let shown = 0;
+  rows.forEach(([label, val, kind]) => {
+    const v = (val == null ? '' : String(val)).trim();
+    if (!v) return;
+    shown++;
+    const row = document.createElement('div');
+    row.className = 'pi-row';
+    const l = document.createElement('div');
+    l.className = 'pi-label';
+    l.textContent = label;
+    const value = document.createElement('div');
+    value.className = 'pi-value';
+    if (kind === 'cea') {
+      const a = document.createElement('a');
+      a.textContent = v;
+      a.href = '#';
+      a.title = 'Open in CEA';
+      a.addEventListener('click', e => { e.preventDefault(); openCEA(proj); });
+      value.appendChild(a);
+    } else {
+      value.textContent = v;
+    }
+    row.appendChild(l);
+    row.appendChild(value);
+    grid.appendChild(row);
+  });
+  if (!shown) {
+    const e = document.createElement('div');
+    e.className = 'pi-empty';
+    e.textContent = 'No ticket data on this project yet. Import from Excel to populate it.';
+    grid.appendChild(e);
+  }
+  wrap.appendChild(grid);
+
+  // ── Role assignees (merged in) ──
+  const divider = document.createElement('div');
+  divider.className = 'pi-divider';
+  wrap.appendChild(divider);
+
+  const t2 = document.createElement('div');
+  t2.className = 'pi-section-title';
+  t2.textContent = 'Role Assignees';
+  wrap.appendChild(t2);
+
+  const rosterHost = document.createElement('div');
+  wrap.appendChild(rosterHost);
+
+  content.appendChild(wrap);
+  renderRosterInto(rosterHost);
+}
+
 function renderExportPanel() {
   const content = document.getElementById('exportContent');
+  if (!content) return;
+  const titleEl = document.getElementById('toolsPanelTitle');
+  if (titleEl) titleEl.textContent = TAB_TITLES[exportTabActive] || '';
   content.innerHTML = '';
 
-  if (exportTabActive === 'text') {
+  if (exportTabActive === 'projectinfo') {
+    renderProjectInfo();
+    return;
+  } else if (exportTabActive === 'text') {
     // ── Format options ──
     const opts = document.createElement('div');
     opts.className = 'export-opts';
@@ -4442,6 +5012,9 @@ function applyRemoteState(snapshot) {
 
   if (data.state) {
     state = normalizeState(data.state);
+    // A change arrived from outside our own writes — rebase undo history on it.
+    resetHistoryBaseline();
+    updateUndoRedoButtons();
   }
 
   if (data.nameHistory) {
@@ -4517,10 +5090,8 @@ function setupInitListeners() {
   if (window._listenersReady) return;
   window._listenersReady = true;
 
-  // Export panel starts closed
-  exportOpen = false;
-  document.getElementById('exportChevron').style.transform = 'rotate(180deg)';
-  document.getElementById('exportBody').classList.remove('visible');
+  // Tools panel opens to Project Info by default (DOM applied in the rail wiring below)
+  exportOpen = true;
 
   // New project
   document.getElementById('btnNewProject').addEventListener('click', () => {
@@ -4531,11 +5102,8 @@ function setupInitListeners() {
       calEarliestDate = null;
       renderSidebar();
       renderCalendar();
-      // Switch to Role Assignees tab for new projects so team can be set up immediately
-      exportTabActive = 'roster';
-      try { localStorage.setItem('prepro_export_tab', exportTabActive); } catch(_) {}
-      document.querySelectorAll('.export-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'roster'));
-      renderExportPanel();
+      // Open Project Info so ticket data + team are visible immediately
+      openToolsTab('projectinfo');
     }
   });
 
@@ -4651,40 +5219,39 @@ function setupInitListeners() {
     if (!document.getElementById('typeSwitcher').contains(e.target)) closeTypeSwitcher();
   });
 
-  // Export/Roster panel — chevron toggles open/close
-  document.getElementById('exportToggle').addEventListener('click', () => {
-    exportOpen = !exportOpen;
-    document.getElementById('exportChevron').style.transform = exportOpen ? '' : 'rotate(180deg)';
-    document.getElementById('exportBody').classList.toggle('visible', exportOpen);
-    if (exportOpen) renderExportPanel();
-  });
-
-  document.querySelectorAll('.export-tab').forEach(tab => {
-    if (tab.dataset.tab === exportTabActive) tab.classList.add('active');
-    else tab.classList.remove('active');
+  // ── Tools rail (vertical tabs) ──
+  const railTabs = document.querySelectorAll('.tools-rail-tab');
+  const toolsPanel = document.getElementById('toolsPanel');
+  function setRailActive() {
+    railTabs.forEach(t => t.classList.toggle('active', exportOpen && t.dataset.tab === exportTabActive));
+  }
+  function openToolsTab(name) {
+    exportTabActive = name;
+    try { localStorage.setItem('prepro_export_tab', name); } catch(_) {}
+    exportOpen = true;
+    toolsPanel.classList.remove('collapsed');
+    setRailActive();
+    renderExportPanel();
+  }
+  function collapseTools() {
+    exportOpen = false;
+    toolsPanel.classList.add('collapsed');
+    setRailActive();
+  }
+  railTabs.forEach(tab => {
     tab.addEventListener('click', () => {
-      if (tab.dataset.tab === 'cea') {
-        const proj = getProject(activeProjectId);
-        const rawUrl = (proj && proj.ticketUrl) ? proj.ticketUrl
-          : 'https://corporateexpress.pegacloud.io/prweb/sso/app/CampaignExecution';
-        // Strip trailing markup junk (e.g. "&gt;") that leaked in from email ingestion,
-        // then strip any stray literal angle brackets, then decode safe entities.
-        const cut = rawUrl.search(/&(?:gt|lt|quot|apos|#x?(?:3[ce]|22|27));/i);
-        const url = (cut !== -1 ? rawUrl.slice(0, cut) : rawUrl)
-          .replace(/[<>]/g, '')
-          .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)))
-          .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16)))
-          .replace(/&amp;/gi, '&');
-        window.open(url, '_blank');
-        return;
-      }
-      exportTabActive = tab.dataset.tab;
-      try { localStorage.setItem('prepro_export_tab', exportTabActive); } catch(_) {}
-      document.querySelectorAll('.export-tab').forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      if (exportOpen) renderExportPanel();
+      const name = tab.dataset.tab;
+      if (name === 'cea') { openCEA(getProject(activeProjectId)); return; }
+      if (exportOpen && exportTabActive === name) { collapseTools(); return; }
+      openToolsTab(name);
     });
   });
+  document.getElementById('toolsPanelClose').addEventListener('click', collapseTools);
+
+  // Apply initial open/collapsed state to the DOM
+  if (exportOpen) toolsPanel.classList.remove('collapsed');
+  else toolsPanel.classList.add('collapsed');
+  setRailActive();
 
   // ── SIDEBAR RESIZE ──
   {
@@ -4694,7 +5261,7 @@ function setupInitListeners() {
 
     // Restore saved width
     const savedW = localStorage.getItem('prepro_sidebar_width');
-    if (savedW) appRow.style.gridTemplateColumns = savedW + 'px 4px 1fr';
+    if (savedW) appRow.style.setProperty('--sidebar-w', savedW + 'px');
 
     handle.addEventListener('mousedown', e => {
       resizing = true;
@@ -4706,14 +5273,13 @@ function setupInitListeners() {
     document.addEventListener('mousemove', e => {
       if (!resizing) return;
       const w = Math.max(150, Math.min(480, startW + e.clientX - startX));
-      appRow.style.gridTemplateColumns = w + 'px 4px 1fr';
+      appRow.style.setProperty('--sidebar-w', w + 'px');
     });
     document.addEventListener('mouseup', () => {
       if (!resizing) return;
       resizing = false;
       handle.classList.remove('active');
-      const cols = appRow.style.gridTemplateColumns;
-      const w = parseInt(cols);
+      const w = parseInt(appRow.style.getPropertyValue('--sidebar-w'));
       if (!isNaN(w)) localStorage.setItem('prepro_sidebar_width', w);
     });
   }
