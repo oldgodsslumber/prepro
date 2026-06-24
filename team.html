@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260624c';
+window.PREPRO_BUILD = '20260624d';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,9 +29,9 @@ window.PREPRO_BUILD = '20260624c';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260624c"></script>
+<script type="module" src="./auth.js?v=20260624d"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260624c"></script>
+<script src="./xlsx.full.min.js?v=20260624d"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -121,8 +121,14 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
 .settings-section-title { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .5px; margin: 0 0 10px; font-weight: 700; }
 .settings-hint { font-size: 11px; color: var(--dim); margin: 6px 0 14px; line-height: 1.5; }
 .people-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-.people-row { display: grid; grid-template-columns: 140px 1fr 200px 28px; gap: 10px; align-items: center; padding: 7px 10px; border-bottom: 1px solid var(--border); background: var(--card); }
+.people-row { display: grid; grid-template-columns: 140px 1fr 150px auto; gap: 10px; align-items: center; padding: 7px 10px; border-bottom: 1px solid var(--border); background: var(--card); }
 .people-row:last-child { border-bottom: none; }
+.people-row.sunset { opacity: .6; }
+.people-row.sunset .pname { font-style: italic; }
+.people-row .pacts { display: inline-flex; gap: 4px; align-items: center; justify-content: flex-end; }
+.people-row .psun, .people-row .prestore { background: transparent; border: 1px solid var(--border); color: var(--dim); cursor: pointer; font-size: 11px; padding: 3px 8px; border-radius: 5px; white-space: nowrap; transition: color .15s, border-color .15s; }
+.people-row .psun:hover { color: var(--accent); border-color: var(--accent); }
+.people-row .prestore:hover { color: var(--cat-other); border-color: var(--cat-other); }
 .people-row .pname { font-weight: 600; color: var(--text); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .people-row input.pemail { background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 5px 8px; color: var(--text); font-size: 12px; outline: none; width: 100%; transition: border-color .15s; }
 .people-row input.pemail:focus { border-color: var(--accent); }
@@ -547,10 +553,6 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
     <span id="fbDot" style="width:7px;height:7px;border-radius:50%;background:#555;display:inline-block;"></span>
     <span id="fbLabel">Connecting…</span>
   </span>
-  <span style="display:inline-flex;gap:6px;margin-right:10px;">
-    <button class="btn btn-ghost" id="btnUndo" style="font-size:11px;padding:4px 9px;" title="Undo (Ctrl/⌘+Z)" disabled>↶ Undo</button>
-    <button class="btn btn-ghost" id="btnRedo" style="font-size:11px;padding:4px 9px;" title="Redo (Ctrl/⌘+Shift+Z)" disabled>↷ Redo</button>
-  </span>
 </header>
 
 <div class="app-row">
@@ -605,6 +607,8 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
       <div id="calendarArea" class="hidden">
         <div class="cal-nav">
           <div class="cal-nav-title" id="calTitle"></div>
+          <button class="btn btn-ghost" id="btnUndo" style="font-size:11px;padding:4px 9px;" title="Undo (Ctrl/⌘+Z)" disabled>↶ Undo</button>
+          <button class="btn btn-ghost" id="btnRedo" style="font-size:11px;padding:4px 9px;margin-right:4px;" title="Redo (Ctrl/⌘+Shift+Z)" disabled>↷ Redo</button>
           <button class="btn-toggle" id="calToday">Today</button>
           <button class="btn-toggle on" id="ghostToggle">Team Conflicts</button>
           <button class="btn-toggle on" id="wkndToggle">Show Weekends</button>
@@ -682,6 +686,8 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
     <div class="tools-rail-tab" data-tab="invites-web"><span class="tr-icon">🌐</span>Invite</div>
     <div class="tools-rail-tab" data-tab="notes"><span class="tr-icon">📝</span>Notes</div>
     <div class="tools-rail-tab" data-tab="cea"><span class="tr-icon">🔗</span>CEA</div>
+    <!-- Admin button (auth.js docks the admin-only invite/approve button here for the admin) -->
+    <div id="pp-admin-slot" style="margin-top:auto;padding:6px 6px 2px;"></div>
   </div>
 </div>
 
@@ -772,12 +778,12 @@ function isPtoProject(proj) { return !!(proj && /pto|time\s*off/i.test(proj.name
 // Unique people in a roster group (union across its roles, deduped — no repeats).
 function getGroupNames(group) {
   const seen = new Set(), out = [];
-  group.roles.forEach(r => getRosterNames(r).forEach(n => { if (!seen.has(n)) { seen.add(n); out.push(n); } }));
+  group.roles.forEach(r => getRosterNames(r).forEach(n => { if (!seen.has(n) && !isSunset(n)) { seen.add(n); out.push(n); } }));
   return out;
 }
 function getGroupSuggestions(group) {
   const assigned = new Set(getGroupNames(group)), seen = new Set(), out = [];
-  group.roles.forEach(r => (nameHistory[r] || []).forEach(n => { if (!assigned.has(n) && !seen.has(n)) { seen.add(n); out.push(n); } }));
+  group.roles.forEach(r => (nameHistory[r] || []).forEach(n => { if (!assigned.has(n) && !seen.has(n) && !isSunset(n)) { seen.add(n); out.push(n); } }));
   return out;
 }
 function removeFromGroup(group, name) { group.roles.forEach(r => removeFromRoster(r, name)); }
@@ -897,7 +903,7 @@ function removeFromRoster(role, name) {
 }
 function getHistorySuggestions(role) {
   const current = getRosterNames(role);
-  return (nameHistory[role] || []).filter(n => !current.includes(n));
+  return (nameHistory[role] || []).filter(n => !current.includes(n) && !isSunset(n));
 }
 function removeFromHistory(role, name) {
   if (!nameHistory[role]) return;
@@ -924,6 +930,19 @@ function setPersonEmail(name, email) {
   savePeopleEmails();
 }
 function getPersonEmail(name) { return peopleEmails[name] || ''; }
+
+// ── SUNSET PEOPLE (soft-removed: hidden from every selection list, but their
+// existing task/attendee assignments are kept intact). Synced via Firebase. ──
+let sunsetPeople = {}; // name -> true
+function saveSunsetPeople() {
+  if (!window._fb) return;
+  _suppressRemoteRender++;
+  const { db, ref, set } = window._fb;
+  set(ref(db, 'prepro/sunsetPeople'), sunsetPeople).catch(err => console.error('saveSunsetPeople:', err));
+}
+function isSunset(name) { return !!sunsetPeople[name]; }
+function sunsetPerson(name) { if (name) { sunsetPeople[name] = true; saveSunsetPeople(); } }
+function restorePerson(name) { if (sunsetPeople[name]) { delete sunsetPeople[name]; saveSunsetPeople(); } }
 
 function collectAllPeople() {
   const people = {};
@@ -956,6 +975,7 @@ function deletePersonEverywhere(name) {
     });
   });
   delete peopleEmails[name];
+  if (sunsetPeople[name]) { delete sunsetPeople[name]; saveSunsetPeople(); }
   saveNameHistory();
   savePeopleEmails();
   saveState();
@@ -994,6 +1014,7 @@ function mergePersonInto(from, into) {
   });
   if (!peopleEmails[into] && peopleEmails[from]) peopleEmails[into] = peopleEmails[from];
   delete peopleEmails[from];
+  if (sunsetPeople[from]) { delete sunsetPeople[from]; saveSunsetPeople(); }
   saveNameHistory();
   savePeopleEmails();
   saveState();
@@ -1221,7 +1242,8 @@ function doExportData() {
     exported: new Date().toISOString(),
     prepro_data: JSON.stringify(state),
     prepro_name_history: JSON.stringify(nameHistory),
-    prepro_people_emails: JSON.stringify(peopleEmails)
+    prepro_people_emails: JSON.stringify(peopleEmails),
+    prepro_sunset_people: JSON.stringify(sunsetPeople)
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url  = URL.createObjectURL(blob);
@@ -1240,6 +1262,7 @@ function handleImportFile(file) {
       const rawData    = payload.prepro_data    || (payload.projects ? JSON.stringify(payload) : null);
       const rawHistory = payload.prepro_name_history || null;
       const rawEmails  = payload.prepro_people_emails || null;
+      const rawSunset  = payload.prepro_sunset_people || null;
       if (!rawData) { alert('File doesn\'t look like a PRE-PRO backup.'); return; }
 
       const incoming = JSON.parse(rawData);
@@ -1269,6 +1292,13 @@ function handleImportFile(file) {
           savePeopleEmails();
         } catch(_) {}
       }
+      if (rawSunset) {
+        try {
+          const inSunset = JSON.parse(rawSunset);
+          Object.keys(inSunset).forEach(name => { if (inSunset[name]) sunsetPeople[name] = true; });
+          saveSunsetPeople();
+        } catch(_) {}
+      }
 
       renderSidebar();
       renderCalendar();
@@ -1291,61 +1321,114 @@ function renderPeopleSettings(c) {
 
   const hint = document.createElement('div');
   hint.className = 'settings-hint';
-  hint.textContent = 'Add an email to any person to auto-fill the To: line when exporting meetings to Outlook. Deleting a person removes them from every project roster and unassigns their tasks. Merging moves all roles, rosters, and assignments from one person to another.';
+  hint.textContent = 'Add an email to any person to auto-fill the To: line when exporting meetings to Outlook. Sunset hides someone from every selection list while keeping their existing assignments (reversible). Delete removes them from every roster and unassigns their tasks. Merging moves all roles, rosters, and assignments from one person to another.';
   c.appendChild(hint);
 
+  const refreshAll = () => {
+    renderSettingsContent();
+    renderPalette();
+    renderCalendar();
+    if (exportOpen) renderExportPanel();
+  };
+
+  // Build a single person row. `sunset` flag chooses Sunset vs Restore action.
+  const mkPersonRow = (p, sunset) => {
+    const row = document.createElement('div');
+    row.className = 'people-row' + (sunset ? ' sunset' : '');
+
+    const nm = document.createElement('div');
+    nm.className = 'pname';
+    nm.textContent = p.name;
+    nm.title = p.name;
+    row.appendChild(nm);
+
+    const emailInput = document.createElement('input');
+    emailInput.className = 'pemail';
+    emailInput.type = 'email';
+    emailInput.placeholder = 'email@example.com';
+    emailInput.value = p.email;
+    emailInput.addEventListener('blur', () => setPersonEmail(p.name, emailInput.value));
+    emailInput.addEventListener('keydown', e => { if (e.key === 'Enter') emailInput.blur(); });
+    row.appendChild(emailInput);
+
+    const rolesEl = document.createElement('div');
+    rolesEl.className = 'proles';
+    const rolesArr = Array.from(p.roles);
+    rolesEl.textContent = rolesArr.length ? rolesArr.join(', ') : '—';
+    rolesEl.title = rolesEl.textContent;
+    row.appendChild(rolesEl);
+
+    const acts = document.createElement('div');
+    acts.className = 'pacts';
+
+    if (sunset) {
+      const restore = document.createElement('button');
+      restore.className = 'prestore';
+      restore.textContent = '↩ Restore';
+      restore.title = 'Make ' + p.name + ' selectable again';
+      restore.addEventListener('click', () => { restorePerson(p.name); refreshAll(); });
+      acts.appendChild(restore);
+    } else {
+      const sun = document.createElement('button');
+      sun.className = 'psun';
+      sun.textContent = '🌙 Sunset';
+      sun.title = 'Hide ' + p.name + ' from selection (keeps their existing assignments)';
+      sun.addEventListener('click', () => {
+        if (!confirm('Sunset "' + p.name + '"?\n\nThey will no longer appear as an option anywhere, but their existing tasks and meeting assignments stay untouched. You can restore them later.')) return;
+        sunsetPerson(p.name);
+        refreshAll();
+      });
+      acts.appendChild(sun);
+    }
+
+    const del = document.createElement('button');
+    del.className = 'pdel';
+    del.textContent = '✕';
+    del.title = 'Delete ' + p.name + ' everywhere';
+    del.addEventListener('click', () => {
+      if (!confirm('Delete "' + p.name + '" from every project roster, unassign their tasks, and remove their email?\n\nThis cannot be undone.')) return;
+      deletePersonEverywhere(p.name);
+      refreshAll();
+    });
+    acts.appendChild(del);
+    row.appendChild(acts);
+
+    return row;
+  };
+
   const people = collectAllPeople();
-  if (!people.length) {
+  const activePeople = people.filter(p => !isSunset(p.name));
+  const sunsetList   = people.filter(p => isSunset(p.name));
+
+  if (!activePeople.length) {
     const empty = document.createElement('div');
     empty.className = 'people-empty';
-    empty.textContent = 'No people yet. Add one below.';
+    empty.textContent = people.length ? 'No active people — all are sunset.' : 'No people yet. Add one below.';
     c.appendChild(empty);
   } else {
     const list = document.createElement('div');
     list.className = 'people-list';
-    people.forEach(p => {
-      const row = document.createElement('div');
-      row.className = 'people-row';
-
-      const nm = document.createElement('div');
-      nm.className = 'pname';
-      nm.textContent = p.name;
-      nm.title = p.name;
-      row.appendChild(nm);
-
-      const emailInput = document.createElement('input');
-      emailInput.className = 'pemail';
-      emailInput.type = 'email';
-      emailInput.placeholder = 'email@example.com';
-      emailInput.value = p.email;
-      emailInput.addEventListener('blur', () => setPersonEmail(p.name, emailInput.value));
-      emailInput.addEventListener('keydown', e => { if (e.key === 'Enter') emailInput.blur(); });
-      row.appendChild(emailInput);
-
-      const rolesEl = document.createElement('div');
-      rolesEl.className = 'proles';
-      const rolesArr = Array.from(p.roles);
-      rolesEl.textContent = rolesArr.length ? rolesArr.join(', ') : '—';
-      rolesEl.title = rolesEl.textContent;
-      row.appendChild(rolesEl);
-
-      const del = document.createElement('button');
-      del.className = 'pdel';
-      del.textContent = '✕';
-      del.title = 'Delete ' + p.name + ' everywhere';
-      del.addEventListener('click', () => {
-        if (!confirm('Delete "' + p.name + '" from every project roster, unassign their tasks, and remove their email?\n\nThis cannot be undone.')) return;
-        deletePersonEverywhere(p.name);
-        renderSettingsContent();
-        renderPalette();
-        renderCalendar();
-        if (exportOpen) renderExportPanel();
-      });
-      row.appendChild(del);
-
-      list.appendChild(row);
-    });
+    activePeople.forEach(p => list.appendChild(mkPersonRow(p, false)));
     c.appendChild(list);
+  }
+
+  // Sunset section
+  if (sunsetList.length) {
+    const sTitle = document.createElement('div');
+    sTitle.className = 'settings-section-title';
+    sTitle.style.marginTop = '18px';
+    sTitle.textContent = 'Sunset · hidden from selection (' + sunsetList.length + ')';
+    c.appendChild(sTitle);
+
+    const sHint = document.createElement('div');
+    sHint.className = 'settings-hint';
+    sHint.textContent = 'These people no longer appear as an option anywhere. Their existing task and meeting assignments are kept. Restore to make them selectable again.';
+    c.appendChild(sHint);
+
+    const sList = document.createElement('div');
+    sList.className = 'people-list';
+    sunsetList.forEach(p => sList.appendChild(mkPersonRow(p, true)));
+    c.appendChild(sList);
   }
 
   const addTitle = document.createElement('div');
@@ -4201,7 +4284,7 @@ function populatePersonDropdown(role) {
       (t.attendees || []).forEach(a => { if (a.role === role && a.person) taskNames.add(a.person); });
     });
   }
-  const allNames = [...new Set([...rosterNames, ...taskNames])].sort();
+  const allNames = [...new Set([...rosterNames, ...taskNames])].filter(n => !isSunset(n)).sort();
 
   sel.innerHTML = '';
   const blank = document.createElement('option');
@@ -5514,6 +5597,8 @@ function applyRemoteState(snapshot) {
   if (data.peopleEmails) {
     peopleEmails = data.peopleEmails;
   }
+
+  sunsetPeople = data.sunsetPeople || {};
 }
 
 function initFirebase() {

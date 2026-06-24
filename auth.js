@@ -51,6 +51,9 @@ style.textContent = `
 #pp-admin-btn { position: fixed; bottom: 16px; right: 16px; background: #6c63ff; color: #fff; padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; box-shadow: 0 4px 12px rgba(0,0,0,.4); z-index: 9000; font-family: inherit; }
 #pp-admin-btn:hover { opacity: .92; }
 #pp-admin-btn .pp-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #e05555; margin-right: 6px; vertical-align: middle; }
+/* When mounted into a host page slot (e.g. the team right-side rail) instead of the floating corner */
+#pp-admin-btn.pp-in-slot { position: static; inset: auto; bottom: auto; right: auto; width: 100%; margin: 0; padding: 8px 3px; border-radius: 6px; font-size: 9px; font-weight: 700; line-height: 1.25; box-shadow: none; white-space: normal; text-align: center; letter-spacing: .03em; }
+#pp-admin-btn.pp-in-slot .pp-dot { margin-right: 4px; width: 7px; height: 7px; }
 
 #pp-admin-modal { position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 9500; display: none; align-items: center; justify-content: center; font-family: system-ui, -apple-system, sans-serif; }
 #pp-admin-modal.show { display: flex; }
@@ -218,7 +221,11 @@ function setupAdminUI() {
     </div>`;
 
   function mount() {
-    document.body.appendChild(btn);
+    // If the host page offers a slot (e.g. team's right-side rail), dock the
+    // button there; otherwise fall back to the floating bottom-right pill.
+    const slot = document.getElementById('pp-admin-slot');
+    if (slot) { btn.classList.add('pp-in-slot'); slot.appendChild(btn); }
+    else document.body.appendChild(btn);
     document.body.appendChild(modal);
   }
   if (document.body) mount(); else window.addEventListener('DOMContentLoaded', mount);
