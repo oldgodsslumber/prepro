@@ -306,6 +306,23 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
 .review-drop-hint { font-size: 9px; color: rgba(192,57,79,.75); margin-top: 4px; font-style: italic; display: none; }
 .review-block.drag-accepting .review-drop-hint { display: block; }
 
+/* ── ROLE BLOCK (role tasks: header + attendee list, accepts dropped people) ── */
+.role-block { background: var(--card); border: 1.5px solid var(--border); border-left-width: 3px; border-radius: 5px; padding: 5px 7px; cursor: pointer; flex-shrink: 0; transition: background .12s; position: relative; }
+.role-block.role-multi-start { border-radius: 5px 0 0 5px; border-right: none; margin-right: -7px; z-index: 1; }
+.role-block:hover { background: #23232f; }
+.role-block.drag-accepting { background: rgba(108,99,255,.16); outline: 2px solid var(--accent); outline-offset: -1px; }
+.role-block.drag-accepting .review-drop-hint { display: block; color: var(--accent); }
+.role-block .chip-handle-l,
+.role-block .chip-handle-r { top: 10px; transform: none; }
+.role-block:hover .chip-handle-l,
+.role-block:hover .chip-handle-r { color: rgba(255,255,255,.9); }
+.role-block .review-badge { color: #fff; }
+.role-bar { flex-shrink: 0; position: relative; cursor: pointer; background: var(--card); border: 1.5px solid var(--border); border-left: none; font-size: 0; display: flex; align-items: center; min-height: 38px; }
+.role-bar-mid { border-radius: 0; border-right: none; margin-left: -5px; margin-right: -6px; }
+.role-bar-end { border-radius: 0 5px 5px 0; margin-left: -5px; padding-right: 17px; }
+.role-bar.drag-accepting { background: rgba(108,99,255,.18); }
+.role-bar .cont-label { font-size: 10px; opacity: .55; padding-left: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 /* ── EMPTY STATE ── */
 .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 8px; color: var(--dim); text-align: center; }
 .empty-state h2 { font-size: 15px; font-weight: 600; }
@@ -320,7 +337,7 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
   overflow: hidden;
   transition: max-height .2s ease, border-top-color .15s;
 }
-.task-panel.open { max-height: 90px; border-top-color: var(--accent); }
+.task-panel.open { max-height: 150px; border-top-color: var(--accent); }
 
 .task-panel-inner {
   display: flex;
@@ -329,6 +346,12 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
   padding: 10px 16px;
   min-height: 70px;
 }
+
+/* Second row: quick-pick task title suggestions */
+.task-suggest-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 0 16px 12px; }
+.task-suggest-label { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .07em; margin-right: 2px; }
+.task-suggest-chip { font-size: 11px; font-weight: 600; color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 4px 11px; cursor: pointer; transition: border-color .15s, color .15s; }
+.task-suggest-chip:hover { border-color: var(--accent); color: var(--accent); }
 
 .panel-meta    { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .panel-role-badge { padding: 3px 10px; border-radius: 10px; font-size: 11px; font-weight: 600; color: #fff; white-space: nowrap; }
@@ -608,6 +631,7 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
           <button class="btn btn-primary" id="panelSave">Save</button>
         </div>
       </div>
+      <div class="task-suggest-row" id="taskSuggestRow" style="display:none;"></div>
     </div>
 
   </div>
@@ -688,6 +712,56 @@ const ROLE_CATS = [
 const REVIEW_COLOR = '#c0394f';
 const LOE_EMOJI    = { low: '🟢', medium: '🟡', high: '🔴' };
 const ROLE_ABBR    = { 'Producer': 'PRD', 'Editor': 'EDT', 'Animator': 'ANM', 'Copywriter': 'CPY', 'Designer': 'DSN', 'Stakeholder': 'STK', 'External Vendor': 'VND', 'Other': 'OTH' };
+// Verb form a role-task name defaults to when left blank.
+const ROLE_VERB    = { 'Producer': 'Producing', 'Editor': 'Editing', 'Animator': 'Animating', 'Copywriter': 'Copywriting', 'Designer': 'Designing', 'Stakeholder': 'Reviewing', 'External Vendor': 'Vendor Work', 'Other': 'Working' };
+function roleVerb(role) { return ROLE_VERB[role] || role || 'Task'; }
+// Quick-pick task-title options shown as a second row in the task panel.
+const TASK_SUGGESTIONS = {
+  'Producer':        ['Script Writing', 'Concepting', 'Pre-Production', 'Casting', 'Location Scouting'],
+  'Editor':          ['Rough Cut', 'Editing', 'Revisions', 'Color Correction', 'Final Cut'],
+  'Animator':        ['Storyboard', 'Animation', 'Motion Graphics', 'VFX', 'Revisions'],
+  'Copywriter':      ['Script Writing', 'Copy Draft', 'Messaging', 'Revisions', 'Proofing'],
+  'Designer':        ['Design', 'Storyboard', 'Illustration', 'Layout', 'Revisions'],
+  'Stakeholder':     ['Review', 'Feedback', 'Approval', 'Sign-off', 'Kickoff'],
+  'External Vendor': ['Vendor Brief', 'Procurement', 'Production', 'Delivery', 'Billing'],
+  'Other':           ['Task', 'Meeting', 'Research', 'Admin']
+};
+const REVIEW_SUGGESTIONS = {
+  'Review':            ['Internal Review', 'Client Review', 'Round 1', 'Round 2', 'Final Review'],
+  'Meeting':           ['Kickoff', 'Status Update', 'Brainstorm', 'Planning', 'Check-in'],
+  'Studio Shoot':      ['Studio Shoot', 'B-Roll', 'Interviews', 'Reshoot'],
+  'On-Location Shoot': ['On-Location Shoot', 'B-Roll', 'Interviews', 'Reshoot']
+};
+// Display groups for the Role Assignees side panel. Underlying roles are
+// unchanged; these only control how the roster is grouped. `primary` is the
+// role a newly-assigned person is stored under; `color` styles their chip.
+const ROSTER_GROUPS = [
+  { label: 'Video Team',      primary: 'Producer',        roles: ['Producer', 'Editor', 'Animator'], color: '#4a90d9' },
+  { label: 'Creative',        primary: 'Copywriter',      roles: ['Copywriter', 'Designer'],         color: '#e07b39' },
+  { label: 'Stakeholder',     primary: 'Stakeholder',     roles: ['Stakeholder'],                    color: '#e07b39' },
+  { label: 'External Vendor', primary: 'External Vendor', roles: ['External Vendor'],                color: '#7c5cbf' }
+];
+function catLabelForRole(role) { const c = ROLE_CATS.find(c => c.roles.includes(role)); return c ? c.label : ''; }
+function isPtoProject(proj) { return !!(proj && /pto|time\s*off/i.test(proj.name || '')); }
+// Unique people in a roster group (union across its roles, deduped — no repeats).
+function getGroupNames(group) {
+  const seen = new Set(), out = [];
+  group.roles.forEach(r => getRosterNames(r).forEach(n => { if (!seen.has(n)) { seen.add(n); out.push(n); } }));
+  return out;
+}
+function getGroupSuggestions(group) {
+  const assigned = new Set(getGroupNames(group)), seen = new Set(), out = [];
+  group.roles.forEach(r => (nameHistory[r] || []).forEach(n => { if (!assigned.has(n) && !seen.has(n)) { seen.add(n); out.push(n); } }));
+  return out;
+}
+function removeFromGroup(group, name) { group.roles.forEach(r => removeFromRoster(r, name)); }
+// People shown on a role task = optional legacy single person + the attendee list.
+function taskPeople(task) {
+  const out = [];
+  if (task.person) out.push({ id: '__primary__', person: task.person, role: task.role, category: task.roleCategory, color: task.color, legacy: true });
+  (task.attendees || []).forEach(a => out.push(a));
+  return out;
+}
 const NOTE_TYPES = [
   { key: 'update',    label: 'Project Update',      emoji: '📋', desc: 'General status update' },
   { key: 'delay',     label: 'Project Delay',        emoji: '⏳', desc: 'Something is behind schedule' },
@@ -2105,7 +2179,9 @@ function moveProjectInTree(movingId, targetId, position) {
 function renderPalette() {
   const pal = document.getElementById('palette');
   pal.innerHTML = '';
-  ROLE_CATS.forEach(cat => {
+  // 'Other' is hidden from the palette for now (kept in ROLE_CATS so any
+  // existing tasks tagged Other still render).
+  ROLE_CATS.filter(cat => cat.label !== 'Other').forEach(cat => {
     const grp = document.createElement('div');
     grp.className = 'pal-cat';
     const lbl = document.createElement('span');
@@ -2141,7 +2217,7 @@ function renderPalette() {
   revLbl.className = 'pal-label';
   revLbl.textContent = 'Meeting';
   revGrp.appendChild(revLbl);
-  ['Review', 'Studio Shoot', 'On-Location Shoot'].forEach(label => {
+  ['Review', 'Meeting', 'Studio Shoot', 'On-Location Shoot'].forEach(label => {
     const chip = document.createElement('div');
     chip.className = 'role-chip';
     chip.draggable = true;
@@ -2186,74 +2262,12 @@ function renderPalette() {
   keyGrp.appendChild(mkDueChip('Project Due Date', '🏁', 'Project Due Date'));
   keyGrp.appendChild(mkDueChip('Milestone', '🎯', 'Milestone'));
   keyGrp.appendChild(mkDueChip('Delivery', '📦', 'Delivery'));
-  keyGrp.appendChild(mkDueChip('PTO', '🏖', 'PTO'));
+  // PTO only appears inside a PTO / Time-Off project
+  if (isPtoProject(getProject(activeProjectId))) keyGrp.appendChild(mkDueChip('PTO', '🏖', 'PTO'));
   pal.appendChild(keyGrp);
 
-  // ── PERSON QUICK-CHIPS (from active project roster) ──
-  if (!activeProjectId) return;
-  const proj = getProject(activeProjectId);
-  if (!proj) return;
-
-  // Collect unique person+role+category+color — start from roster so assignees always appear
-  const seen = new Map(); // key: "person|role"
-  const roster = proj.roster || {};
-  ROLE_CATS.forEach(cat => {
-    cat.roles.forEach(role => {
-      (roster[role] || []).forEach(person => {
-        const key = person + '|' + role;
-        if (!seen.has(key)) seen.set(key, { person, role, category: cat.label, color: cat.color });
-      });
-    });
-  });
-
-  // Also pick up anyone assigned directly in tasks (covers cases not in roster)
-  (proj.tasks || []).forEach(t => {
-    if (!t.person || t.isDueDate || t.isReview) return;
-    const key = t.person + '|' + t.role;
-    if (!seen.has(key)) seen.set(key, { person: t.person, role: t.role, category: t.roleCategory, color: t.color });
-  });
-  // Also include attendees from review tasks
-  (proj.tasks || []).forEach(t => {
-    if (!t.isReview) return;
-    (t.attendees || []).forEach(a => {
-      if (!a.person) return;
-      const key = a.person + '|' + a.role;
-      if (!seen.has(key)) seen.set(key, { person: a.person, role: a.role, category: a.category, color: a.color });
-    });
-  });
-
-  if (!seen.size) return; // no roster names and no tasks yet — nothing to show
-
-  const sep3 = document.createElement('div');
-  sep3.style.cssText = 'width:1px;height:20px;background:var(--border);margin:0 4px;align-self:center';
-  pal.appendChild(sep3);
-
-  const pplGrp = document.createElement('div');
-  pplGrp.className = 'pal-cat';
-  pplGrp.style.cssText = 'flex: 1 1 auto; flex-wrap: wrap;';
-  const pplLbl = document.createElement('span');
-  pplLbl.className = 'pal-label';
-  pplLbl.textContent = 'People';
-  pplGrp.appendChild(pplLbl);
-
-  // Sort by role then person
-  const entries = [...seen.values()].sort((a, b) => a.role.localeCompare(b.role) || a.person.localeCompare(b.person));
-  entries.forEach(({ person, role, category, color }) => {
-    const chip = document.createElement('div');
-    chip.className = 'role-chip chip-person';
-    chip.draggable = true;
-    chip.textContent = `${person} (${ROLE_ABBR[role] || role.slice(0,3).toUpperCase()})`;
-    chip.style.background = color;
-    chip.title = `${person} · ${role} · drag to create task`;
-    chip.addEventListener('dragstart', e => {
-      dragPayload = { role, category, color, person };
-      e.dataTransfer.setData('text', JSON.stringify(dragPayload));
-      e.dataTransfer.effectAllowed = 'copy';
-    });
-    chip.addEventListener('dragend', () => { dragPayload = null; });
-    pplGrp.appendChild(chip);
-  });
-  pal.appendChild(pplGrp);
+  // People are no longer on the top row — they live in the side panel's
+  // Role Assignees section and are dragged from there onto timeline chips.
 }
 
 // ── CALENDAR ──
@@ -2367,12 +2381,12 @@ function buildGhostInfo() {
 // Sync continuation bar/spacer heights to match the start block's actual rendered height
 function syncBarHeights() {
   const apply = () => {
-    document.querySelectorAll('.review-block[data-task-id], .duedate-marker[data-task-id]').forEach(block => {
+    document.querySelectorAll('.review-block[data-task-id], .duedate-marker[data-task-id], .role-block[data-task-id]').forEach(block => {
       const id = block.dataset.taskId;
       const h  = block.offsetHeight;
       if (!h) return;
       document.querySelectorAll(
-        `.review-bar[data-task-id="${id}"], .duedate-bar[data-task-id="${id}"], [data-spacer-for="${id}"]`
+        `.review-bar[data-task-id="${id}"], .duedate-bar[data-task-id="${id}"], .role-bar[data-task-id="${id}"], [data-spacer-for="${id}"]`
       ).forEach(el => { el.style.height = h + 'px'; });
     });
     // Re-apply glow after DOM rebuild
@@ -2631,18 +2645,16 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghostInfo, showMonthLabel)
       saveState(); renderCalendar(); if (exportOpen) renderExportPanel();
     } else if (pl.type === 'review') {
       openPanel('create-review', dateStr, null, pl.label || 'Review', null, REVIEW_COLOR);
+    } else if (pl.type === 'person') {
+      // People attach onto existing chips (handled by each chip's own drop), not empty days
+      return;
     } else {
-      // If a people chip (person set) lands on the cell instead of the review block,
-      // and there's a review task on this date, route to add-attendee instead of create
-      if (pl.person) {
-        const proj = getProject(activeProjectId);
-        const reviewOnDate = proj && proj.tasks.find(t => t.isReview && t.date === dateStr);
-        if (reviewOnDate) {
-          openPanel('add-attendee', dateStr, reviewOnDate.id, pl.role, pl.category, pl.color, pl.person);
-          return;
-        }
-      }
-      openPanel('create', dateStr, null, pl.role, pl.category, pl.color, pl.person || null);
+      // Role chip → place a role block immediately; people get dropped onto it after.
+      // Name defaults to the verb form of the role (e.g. Producer → Producing).
+      const proj = getProject(activeProjectId);
+      if (!proj) return;
+      proj.tasks.push({ id: genId(), date: dateStr, role: pl.role, roleCategory: pl.category, color: pl.color, taskName: roleVerb(pl.role), loe: 'low', attendees: [] });
+      saveState(); renderCalendar(); if (exportOpen) renderExportPanel();
     }
   });
 
@@ -2658,12 +2670,183 @@ function isRowStart(dateStr) {
 // Get a short label for continuation bars
 function getContLabel(task) {
   if (task.person && task.taskName) return task.person + ' · ' + task.taskName;
-  return task.person || task.taskName || task.reviewLabel || task.role || '';
+  if (task.person) return task.person;
+  const ppl = (task.attendees || []).map(a => a.person).filter(Boolean);
+  if (task.taskName) return task.taskName + (ppl.length ? ' · ' + ppl[0] : '');
+  return ppl[0] || task.reviewLabel || (task.role ? roleVerb(task.role) : '');
 }
+function getActiveTask(id) { const p = getProject(activeProjectId); return p ? (p.tasks || []).find(t => t.id === id) : null; }
 
 function buildChip(task, dateStr) {
   if (task.isDueDate) return buildDueDateMarker(task, dateStr);
   if (task.isReview) return buildReviewBlock(task, dateStr);
+  return buildRoleBlock(task, dateStr);
+}
+
+// Role tasks are now drop-target blocks (like reviews/key dates): a header plus
+// an attendee list, accepting dropped people from the Role Assignees panel.
+function buildRoleBlock(task, dateStr) {
+  const endDate = task.endDate || task.date;
+  const isStart = task.date === dateStr;
+  const isEnd   = endDate === dateStr;
+  const isMulti = !(isStart && isEnd);
+
+  if (isMulti && !isStart) return buildRoleBar(task, dateStr, isEnd);
+
+  const block = document.createElement('div');
+  block.className = 'role-block' + (isMulti ? ' role-multi-start' : '');
+  block.dataset.taskId = task.id;
+  block.style.borderLeftColor = task.color;
+
+  const hd = document.createElement('div');
+  hd.className = 'review-hd';
+  const badge = document.createElement('span');
+  badge.className = 'review-badge';
+  badge.style.background = task.color;
+  badge.textContent = (task.loe ? LOE_EMOJI[task.loe] + ' ' : '') + (ROLE_ABBR[task.role] || task.role || 'Task');
+  badge.title = task.role || '';
+  const title = document.createElement('span');
+  title.className = 'review-title';
+  title.textContent = task.taskName || roleVerb(task.role);
+  hd.appendChild(badge);
+  hd.appendChild(title);
+  block.appendChild(hd);
+
+  const people = taskPeople(task);
+  if (people.length) {
+    const list = document.createElement('div');
+    list.className = 'review-att-list';
+    people.forEach(p => {
+      const row = document.createElement('div');
+      row.className = 'review-att';
+      const dot = document.createElement('span');
+      dot.className = 'review-att-dot';
+      dot.style.background = p.color || task.color;
+      const name = document.createElement('span');
+      name.className = 'review-att-name';
+      name.textContent = p.person || '';
+      const rm = document.createElement('button');
+      rm.className = 'review-att-rm';
+      rm.textContent = '×';
+      rm.addEventListener('click', e => {
+        e.stopPropagation();
+        if (p.legacy) {
+          const t = getActiveTask(task.id);
+          if (t) { t.person = null; saveState(); renderCalendar(); if (exportOpen) renderExportPanel(); }
+        } else {
+          removeAttendee(task.id, p.id);
+        }
+      });
+      row.appendChild(dot); row.appendChild(name); row.appendChild(rm);
+      list.appendChild(row);
+    });
+    block.appendChild(list);
+  }
+
+  const hint = document.createElement('div');
+  hint.className = 'review-drop-hint';
+  hint.textContent = '+ drop a person';
+  block.appendChild(hint);
+
+  block.addEventListener('click', e => {
+    if (e.target.classList.contains('review-att-rm') || e.target.classList.contains('review-badge')) return;
+    e.stopPropagation();
+    openPanel('edit', task.date, task.id);
+    setSelectedTask(task.id);
+  });
+
+  block.draggable = true;
+  block.addEventListener('dragstart', e => {
+    if (isResizing) { e.preventDefault(); return; }
+    const isCopy = e.altKey;
+    dragPayload = { type: isCopy ? 'copy' : 'move', taskId: task.id, grabDate: dateStr };
+    e.dataTransfer.setData('text', JSON.stringify(dragPayload));
+    e.dataTransfer.effectAllowed = isCopy ? 'copy' : 'move';
+  });
+  block.addEventListener('dragend', () => { dragPayload = null; });
+
+  block.addEventListener('dragover', e => {
+    if (!dragPayload || dragPayload.type !== 'person') return;
+    e.preventDefault(); e.stopPropagation();
+    block.classList.add('drag-accepting');
+  });
+  block.addEventListener('dragleave', e => {
+    if (!block.contains(e.relatedTarget)) block.classList.remove('drag-accepting');
+  });
+  block.addEventListener('drop', e => {
+    e.preventDefault(); e.stopPropagation();
+    block.classList.remove('drag-accepting');
+    let pl = dragPayload;
+    if (!pl) { try { pl = JSON.parse(e.dataTransfer.getData('text')); } catch(_) { return; } }
+    if (!pl || pl.type !== 'person') return;
+    openPanel('add-attendee', task.date, task.id, task.role, task.roleCategory, task.color, pl.person);
+  });
+
+  if (isStart) {
+    const lh = document.createElement('span');
+    lh.className = 'chip-handle-l';
+    lh.textContent = '⋮⋮';
+    lh.addEventListener('mousedown', e => startResize(e, task.id, 'left'));
+    block.appendChild(lh);
+  }
+  if (isEnd) {
+    const rh = document.createElement('span');
+    rh.className = 'chip-handle-r';
+    rh.textContent = '⋮⋮';
+    rh.addEventListener('mousedown', e => startResize(e, task.id, 'right'));
+    block.appendChild(rh);
+  }
+
+  return block;
+}
+
+// Slim continuation bar for mid/end cells of a multi-day role block.
+function buildRoleBar(task, dateStr, isEnd) {
+  const bar = document.createElement('div');
+  bar.className = 'role-bar ' + (isEnd ? 'role-bar-end' : 'role-bar-mid');
+  bar.dataset.taskId = task.id;
+  bar.style.borderColor = task.color;
+
+  bar.addEventListener('click', e => { e.stopPropagation(); openPanel('edit', task.date, task.id); setSelectedTask(task.id); });
+
+  bar.draggable = true;
+  bar.addEventListener('dragstart', e => {
+    if (isResizing) { e.preventDefault(); return; }
+    const isCopy = e.altKey;
+    dragPayload = { type: isCopy ? 'copy' : 'move', taskId: task.id, grabDate: dateStr };
+    e.dataTransfer.setData('text', JSON.stringify(dragPayload));
+    e.dataTransfer.effectAllowed = isCopy ? 'copy' : 'move';
+  });
+  bar.addEventListener('dragend', () => { dragPayload = null; });
+
+  bar.addEventListener('dragover', e => { if (!dragPayload || dragPayload.type !== 'person') return; e.preventDefault(); e.stopPropagation(); bar.classList.add('drag-accepting'); });
+  bar.addEventListener('dragleave', e => { if (!bar.contains(e.relatedTarget)) bar.classList.remove('drag-accepting'); });
+  bar.addEventListener('drop', e => {
+    e.preventDefault(); e.stopPropagation();
+    bar.classList.remove('drag-accepting');
+    let pl = dragPayload;
+    if (!pl) { try { pl = JSON.parse(e.dataTransfer.getData('text')); } catch(_) { return; } }
+    if (!pl || pl.type !== 'person') return;
+    openPanel('add-attendee', task.date, task.id, task.role, task.roleCategory, task.color, pl.person);
+  });
+
+  if (isEnd) {
+    const rh = document.createElement('span');
+    rh.className = 'chip-handle-r';
+    rh.textContent = '⋮⋮';
+    rh.addEventListener('mousedown', e => startResize(e, task.id, 'right'));
+    bar.appendChild(rh);
+  }
+  if (isRowStart(dateStr)) {
+    const lbl = document.createElement('span');
+    lbl.className = 'cont-label';
+    lbl.textContent = getContLabel(task);
+    bar.appendChild(lbl);
+  }
+  return bar;
+}
+
+function _buildSlimChip_DEPRECATED(task, dateStr) {
   const endDate = task.endDate || task.date;
   const isStart = task.date === dateStr;
   const isEnd   = endDate   === dateStr;
@@ -3262,7 +3445,7 @@ function copyTask(taskId, dropDate, grabDate) {
   } else {
     delete copy.endDate;
   }
-  if (orig.isReview && orig.attendees) {
+  if (orig.attendees) {
     copy.attendees = orig.attendees.map(a => Object.assign({}, a, { id: genId() }));
   }
   proj.tasks.push(copy);
@@ -3385,16 +3568,9 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     document.getElementById('panelDateLabel').textContent      = fmtDateLabel(task.date);
     setPanelDateRange(task);
     setSelectedTask(taskId);
-    populatePersonDropdown(task.role);
-    // Restore saved person — if in roster use dropdown, else show Other input
-    const sel = document.getElementById('panelPerson');
-    const otherInp = document.getElementById('panelPersonOther');
-    if (task.person && [...sel.options].some(o => o.value === task.person)) {
-      sel.value = task.person;
-    } else if (task.person) {
-      sel.value = '__other__';
-      otherInp.style.display = ''; otherInp.value = task.person;
-    }
+    // People are managed by dropping them onto the block, so the panel only
+    // edits name + effort now.
+    fieldPerson.style.display = 'none';
     taskInput.value                              = task.taskName || '';
     setPanelLOE(task.loe || 'low');
     document.getElementById('panelDelete').classList.remove('hidden');
@@ -3485,9 +3661,47 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     document.getElementById('panelDelete').classList.remove('hidden');
   }
 
+  renderTaskSuggestions();
   document.getElementById('taskPanel').classList.add('open');
-  const focusId = (mode === 'create-review' || mode === 'edit-review') ? 'panelTask' : 'panelPerson';
+  const focusId = (mode === 'create-review' || mode === 'edit-review' || mode === 'edit') ? 'panelTask' : 'panelPerson';
   setTimeout(() => document.getElementById(focusId).focus(), 220);
+}
+
+// Second panel row: quick-pick task-title chips that fill the Task input.
+function renderTaskSuggestions() {
+  const row = document.getElementById('taskSuggestRow');
+  if (!row) return;
+  row.innerHTML = '';
+  let opts = [];
+  if (panelContext) {
+    const m = panelContext.mode;
+    if (m === 'create' || m === 'edit') {
+      opts = TASK_SUGGESTIONS[panelContext.role] || [];
+    } else if (m === 'create-review') {
+      opts = REVIEW_SUGGESTIONS[panelContext.label] || [];
+    } else if (m === 'edit-review') {
+      const t = getActiveTask(panelContext.taskId);
+      opts = (t && REVIEW_SUGGESTIONS[t.reviewLabel]) || [];
+    }
+  }
+  if (!opts.length) { row.style.display = 'none'; return; }
+  row.style.display = 'flex';
+  const lbl = document.createElement('span');
+  lbl.className = 'task-suggest-label';
+  lbl.textContent = 'Suggestions';
+  row.appendChild(lbl);
+  opts.slice(0, 5).forEach(name => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'task-suggest-chip';
+    chip.textContent = name;
+    chip.addEventListener('click', () => {
+      const input = document.getElementById('panelTask');
+      input.value = name;
+      input.focus();
+    });
+    row.appendChild(chip);
+  });
 }
 
 function closePanel() {
@@ -3496,6 +3710,8 @@ function closePanel() {
   setSelectedTask(null);
   const dr = document.getElementById('panelDateRange');
   if (dr) dr.style.display = 'none';
+  const sr = document.getElementById('taskSuggestRow');
+  if (sr) { sr.style.display = 'none'; sr.innerHTML = ''; }
 }
 
 function getPanelPerson() {
@@ -3534,9 +3750,8 @@ function savePanel() {
     });
 
   } else if (panelContext.mode === 'edit') {
-    if (!person && !taskName) { document.getElementById('panelPerson').focus(); return; }
     const task = proj.tasks.find(t => t.id === panelContext.taskId);
-    if (task) { task.person = person; task.taskName = taskName; task.loe = loe; }
+    if (task) { task.taskName = taskName || roleVerb(task.role); task.loe = loe; }
 
   } else if (panelContext.mode === 'create-review') {
     const lbl  = panelContext.label || 'Review';
@@ -3553,7 +3768,7 @@ function savePanel() {
 
   } else if (panelContext.mode === 'edit-review') {
     const task = proj.tasks.find(t => t.id === panelContext.taskId);
-    if (task) { task.taskName = taskName || 'Review'; }
+    if (task) { task.taskName = taskName || task.reviewLabel || 'Review'; }
 
   } else if (panelContext.mode === 'add-attendee') {
     const task = proj.tasks.find(t => t.id === panelContext.taskId);
@@ -3854,12 +4069,17 @@ function buildHTMLExport() {
         });
       }
     } else {
-      const task    = t.taskName || '(untitled)';
-      const who     = t.person   || (exportOptRoles ? t.role : '');
-      const roleStr = exportOptRoles && t.person ? ` (${t.role})` : '';
-      const body    = `${task}  \u00b7  ${who}${roleStr}`;
-      hLines.push(`${fmtHtml(raw)}${escHtml(sep)}${escHtml(body)}`);
-      pLines.push(`${fmtPlain(raw)}${sep}${body}`);
+      const taskNm = t.taskName || t.role || '(untitled)';
+      const ppl    = taskPeople(t);
+      hLines.push(`${fmtHtml(raw)}${escHtml(sep)}${escHtml(taskNm)}`);
+      pLines.push(`${fmtPlain(raw)}${sep}${taskNm}`);
+      if (exportOptAttendees && ppl.length) {
+        ppl.forEach(p => {
+          const role = exportOptRoles ? ` (${p.role})` : '';
+          hLines.push(`${htmlIndent}\u00b7 ${escHtml(p.person || '')}${escHtml(role)}`);
+          pLines.push(`${plainIndent}\u00b7 ${p.person || ''}${role}`);
+        });
+      }
     }
   });
 
@@ -3893,7 +4113,12 @@ function buildTSV() {
         });
       }
     } else {
-      rows.push([sl, el, esc(t.taskName), esc(t.person), esc(t.role), esc(t.roleCategory), 'Task'].join('\t'));
+      const ppl = taskPeople(t);
+      if (ppl.length) {
+        ppl.forEach(p => rows.push([sl, el, esc(t.taskName), esc(p.person), esc(p.role), esc(p.category), 'Task'].join('\t')));
+      } else {
+        rows.push([sl, el, esc(t.taskName), '', esc(t.role), esc(t.roleCategory), 'Task'].join('\t'));
+      }
     }
   });
   return [header, ...rows].join('\n');
@@ -3953,7 +4178,7 @@ function renderRosterInto(content) {
   topBar.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; padding:0 2px;';
   const topHint = document.createElement('span');
   topHint.style.cssText = 'font-size:11px; color:var(--dim);';
-  topHint.textContent = 'Click a suggestion to assign them to this project. Click an assigned chip to unassign.';
+  topHint.textContent = 'Click a suggestion to add to this project. Drag an assigned name onto any chip in the timeline to assign them. Click a name to unassign.';
   topBar.appendChild(topHint);
   const mgrBtn = document.createElement('button');
   mgrBtn.className = 'btn btn-ghost';
@@ -3963,61 +4188,64 @@ function renderRosterInto(content) {
   topBar.appendChild(mgrBtn);
   wrap.appendChild(topBar);
 
-  const roles = ROLE_CATS.flatMap(cat => cat.roles).filter(r => r !== 'Other');
-
-  roles.forEach(role => {
-    const cat   = ROLE_CATS.find(c => c.roles.includes(role));
-    const names = getRosterNames(role);
-    const suggestions = getHistorySuggestions(role);
+  ROSTER_GROUPS.forEach(group => {
+    const names = getGroupNames(group);
+    const suggestions = getGroupSuggestions(group);
 
     const section = document.createElement('div');
     section.className = 'roster-role';
 
-    // Role label
+    // Group label
     const lbl = document.createElement('div');
     lbl.className = 'roster-role-label';
-    lbl.textContent = role;
-    lbl.style.color = cat ? cat.color : 'var(--dim)';
+    lbl.textContent = group.label;
+    lbl.style.color = group.color;
     section.appendChild(lbl);
 
-    // Current project members — click to unassign from this project
+    // Assigned people — draggable onto timeline chips; click to unassign
     const nameList = document.createElement('div');
     nameList.className = 'roster-names';
     names.forEach(name => {
       const chip = document.createElement('div');
       chip.className = 'roster-name-chip';
-      chip.title = 'Click to unassign from this project';
-      chip.style.cursor = 'pointer';
+      chip.draggable = true;
+      chip.title = 'Drag onto a chip to assign · click to unassign';
+      chip.style.cursor = 'grab';
       const nameSpan = document.createElement('span');
       nameSpan.textContent = name;
       chip.appendChild(nameSpan);
+      chip.addEventListener('dragstart', e => {
+        dragPayload = { type: 'person', person: name, role: group.primary, category: catLabelForRole(group.primary), color: group.color };
+        e.dataTransfer.setData('text', JSON.stringify(dragPayload));
+        e.dataTransfer.effectAllowed = 'copy';
+      });
+      chip.addEventListener('dragend', () => { dragPayload = null; });
       chip.addEventListener('click', e => {
         e.stopPropagation();
-        removeFromRoster(role, name);
+        removeFromGroup(group, name);
         renderExportPanel();
         renderPalette();
-        if (panelContext && panelContext.role === role) populatePersonDropdown(role);
+        renderCalendar();
       });
       nameList.appendChild(chip);
     });
     section.appendChild(nameList);
 
-    // Available people — click to assign to this project
+    // Available people — click to add to this project
     if (suggestions.length) {
       const suggestRow = document.createElement('div');
       suggestRow.className = 'roster-suggestions';
       suggestions.forEach(name => {
         const chip = document.createElement('div');
         chip.className = 'roster-suggest-chip';
-        chip.title = 'Click to assign to this project';
+        chip.title = 'Click to add to this project';
         const addSpan = document.createElement('span');
         addSpan.textContent = '+ ' + name;
         addSpan.addEventListener('click', e => {
           e.stopPropagation();
-          addToRoster(role, name);
+          addToRoster(group.primary, name);
           renderExportPanel();
           renderPalette();
-          if (panelContext && panelContext.role === role) populatePersonDropdown(role);
         });
         chip.appendChild(addSpan);
         suggestRow.appendChild(chip);
@@ -4772,12 +5000,12 @@ function buildPlanyway() {
     const cat = getPlanywayCat(task);
     if (!cat) return;
     const line = (task.loe ? LOE_EMOJI[task.loe] + ' ' : '') + cat;
-    items.push({
-      line,
-      date:    task.date,
-      endDate: task.endDate || null,
-      person:  task.person || task.role
-    });
+    const ppl = taskPeople(task);
+    if (ppl.length) {
+      ppl.forEach(p => items.push({ line, date: task.date, endDate: task.endDate || null, person: p.person || p.role }));
+    } else {
+      items.push({ line, date: task.date, endDate: task.endDate || null, person: task.role });
+    }
   });
   return items;
 }
@@ -4947,7 +5175,7 @@ function exportPNG() {
     let h;
     if (task.isDueDate)     h = (13 + attC * 10) * SC;
     else if (task.isReview) h = (14 + attC * 10) * SC;
-    else                    h = 14 * SC;
+    else                    h = (14 + (exportPNGAttendees ? taskPeople(task).length * 10 : 0)) * SC;
     taskHeights.set(task.id, h);
   });
 
@@ -5132,11 +5360,21 @@ function exportPNG() {
           ctx.clip();
           const loeStr = task.loe ? LOE_EMOJI[task.loe] + ' ' : '';
           const roleStr = exportPNGRoles && task.role ? ` (${task.role})` : '';
-          const title = loeStr + ((task.person || '') + (task.person && task.taskName ? ' · ' : '') + (task.taskName || task.role)) + roleStr;
+          const title = loeStr + (task.taskName || task.role || 'Task') + roleStr;
           ctx.fillStyle = '#fff';
           ctx.font = `${8*SC}px system-ui,sans-serif`;
           ctx.textAlign = 'left';
           ctx.fillText(title, chipX + 5*SC, ty + 10*SC);
+          if (exportPNGAttendees) {
+            taskPeople(task).forEach((p, i) => {
+              const ay = ty + 18*SC + i * 10*SC;
+              ctx.fillStyle = p.color || task.color;
+              ctx.beginPath(); ctx.arc(chipX + 9*SC, ay, 2.5*SC, 0, Math.PI * 2); ctx.fill();
+              ctx.fillStyle = 'rgba(255,255,255,0.9)';
+              ctx.font = `${7*SC}px system-ui,sans-serif`;
+              ctx.fillText(p.person || '', chipX + 14*SC, ay + 4*SC);
+            });
+          }
           ctx.restore();
         } else if (col === 0) {
           ctx.save();
