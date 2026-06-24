@@ -8,10 +8,30 @@
 <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <title>PRE-PRO — Team</title>
 
+<!-- Cache-bust / auto-update: bump PREPRO_BUILD + version.json + the ?v= tokens
+     on each deploy. If the deployed build is newer than this cached page, reload
+     once so users always get the latest without a manual hard refresh. -->
+<script>
+window.PREPRO_BUILD = '20260624a';
+(function () {
+  try {
+    fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (v) {
+        if (v && v.build && v.build !== window.PREPRO_BUILD) {
+          var k = 'prepro_reloaded_' + v.build;
+          if (!sessionStorage.getItem(k)) { sessionStorage.setItem(k, '1'); location.reload(); }
+        }
+      })
+      .catch(function () {});
+  } catch (e) {}
+})();
+</script>
+
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js"></script>
+<script type="module" src="./auth.js?v=20260624a"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js"></script>
+<script src="./xlsx.full.min.js?v=20260624a"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
