@@ -119,6 +119,15 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
 .people-merge select { background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 7px 10px; color: var(--text); font-size: 12px; outline: none; flex: 1; min-width: 120px; }
 .people-merge-arrow { color: var(--dim); font-size: 13px; }
 .data-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+/* ── MERGE TAB ── */
+.merge-select { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; color: var(--text); font-size: 13px; outline: none; transition: border-color .15s; cursor: pointer; }
+.merge-select:focus { border-color: var(--accent); }
+.merge-beta-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.merge-beta-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--border); background: var(--card); cursor: pointer; font-size: 13px; color: var(--text); }
+.merge-beta-row:last-child { border-bottom: none; }
+.merge-beta-row:hover { background: rgba(108,99,255,.08); }
+.merge-beta-row input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; flex-shrink: 0; }
+.merge-beta-meta { margin-left: auto; font-size: 11px; color: var(--dim); white-space: nowrap; }
 .sidebar-tree { flex: 1; overflow-y: auto; padding: 6px 0; }
 
 .tree-node { display: flex; align-items: center; gap: 4px; padding: 5px 8px 5px 0; cursor: pointer; border-radius: 5px; margin: 1px 6px; user-select: none; position: relative; }
@@ -641,6 +650,7 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
       <div class="settings-tabs">
         <div class="settings-tab active" data-settings-tab="data">Data</div>
         <div class="settings-tab" data-settings-tab="people">People</div>
+        <div class="settings-tab" data-settings-tab="merge">Merge</div>
       </div>
       <div class="settings-content" id="settingsContent"></div>
     </div>
@@ -910,6 +920,149 @@ function renderSettingsContent() {
   c.innerHTML = '';
   if (settingsActiveTab === 'data') renderDataSettings(c);
   else if (settingsActiveTab === 'people') renderPeopleSettings(c);
+  else if (settingsActiveTab === 'merge') renderMergeSettings(c);
+}
+
+// Absorb each beta project's schedules, notes, and role assignees into alpha,
+// then delete the beta projects.
+function mergeProjects(alphaId, betaIds) {
+  const alpha = getProject(alphaId);
+  if (!alpha) return;
+  if (!alpha.tasks)  alpha.tasks  = [];
+  if (!alpha.notes)  alpha.notes  = [];
+  if (!alpha.roster) alpha.roster = {};
+  betaIds.forEach(bid => {
+    if (bid === alphaId) return;
+    const beta = getProject(bid);
+    if (!beta) return;
+    const nT = (beta.tasks || []).length, nN = (beta.notes || []).length;
+    // Schedules (tasks)
+    (beta.tasks || []).forEach(t => alpha.tasks.push(t));
+    // Notes
+    (beta.notes || []).forEach(n => alpha.notes.push(n));
+    // Role assignees (union per role)
+    Object.entries(beta.roster || {}).forEach(([role, names]) => {
+      if (!alpha.roster[role]) alpha.roster[role] = [];
+      (names || []).forEach(n => { if (!alpha.roster[role].includes(n)) alpha.roster[role].push(n); });
+    });
+    // Re-parent any subprojects of beta onto alpha so they aren't orphaned
+    state.projects.forEach(p => { if (p.parentId === bid && p.id !== alphaId) p.parentId = alphaId; });
+    // If alpha was itself a child of beta, promote it to beta's parent
+    if (alpha.parentId === bid) alpha.parentId = beta.parentId || null;
+    // Record the merge in alpha's notes, then remove beta
+    addSystemNote(alphaId, 'Merged in project "' + beta.name + '" (' + nT + ' tasks, ' + nN + ' notes)');
+    state.projects = state.projects.filter(p => p.id !== bid);
+  });
+  saveState();
+}
+
+function renderMergeSettings(c) {
+  const title = document.createElement('div');
+  title.className = 'settings-section-title';
+  title.textContent = 'Merge Projects';
+  c.appendChild(title);
+
+  const hint = document.createElement('div');
+  hint.className = 'settings-hint';
+  hint.textContent = 'Pick an Alpha project to keep, then one or more Beta projects to absorb into it. All schedules, notes, and role assignees from the Beta projects move into Alpha, and the Beta projects are deleted. Use Undo (Ctrl/⌘+Z) if you change your mind.';
+  c.appendChild(hint);
+
+  const projects = state.projects.filter(p => !p.isFolder);
+  if (projects.length < 2) {
+    const empty = document.createElement('div');
+    empty.className = 'people-empty';
+    empty.textContent = 'You need at least two projects to merge.';
+    c.appendChild(empty);
+    return;
+  }
+
+  // ── Alpha selector ──
+  const alphaLbl = document.createElement('div');
+  alphaLbl.className = 'settings-section-title';
+  alphaLbl.style.marginTop = '14px';
+  alphaLbl.textContent = 'Alpha — project to keep';
+  c.appendChild(alphaLbl);
+
+  const alphaSel = document.createElement('select');
+  alphaSel.className = 'merge-select';
+  projects.forEach(p => {
+    const o = document.createElement('option');
+    o.value = p.id;
+    o.textContent = p.name + (p.completed ? ' (completed)' : '');
+    alphaSel.appendChild(o);
+  });
+  if (activeProjectId && projects.some(p => p.id === activeProjectId)) alphaSel.value = activeProjectId;
+  c.appendChild(alphaSel);
+
+  // ── Beta list ──
+  const betaLbl = document.createElement('div');
+  betaLbl.className = 'settings-section-title';
+  betaLbl.style.marginTop = '16px';
+  betaLbl.textContent = 'Beta — project(s) to absorb & remove';
+  c.appendChild(betaLbl);
+
+  const betaList = document.createElement('div');
+  betaList.className = 'merge-beta-list';
+  c.appendChild(betaList);
+
+  function renderBetaList() {
+    betaList.innerHTML = '';
+    const alphaId = alphaSel.value;
+    const others = projects.filter(p => p.id !== alphaId);
+    if (!others.length) {
+      const e = document.createElement('div');
+      e.className = 'people-empty';
+      e.textContent = 'No other projects to merge.';
+      betaList.appendChild(e);
+      return;
+    }
+    others.forEach(p => {
+      const row = document.createElement('label');
+      row.className = 'merge-beta-row';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.value = p.id; cb.className = 'merge-beta-cb';
+      const nm = document.createElement('span');
+      nm.textContent = p.name + (p.completed ? ' (completed)' : '');
+      const meta = document.createElement('span');
+      meta.className = 'merge-beta-meta';
+      const nt = (p.tasks || []).length, nn = (p.notes || []).length;
+      meta.textContent = nt + ' task' + (nt === 1 ? '' : 's') + ' · ' + nn + ' note' + (nn === 1 ? '' : 's');
+      row.appendChild(cb); row.appendChild(nm); row.appendChild(meta);
+      betaList.appendChild(row);
+    });
+  }
+  renderBetaList();
+  alphaSel.addEventListener('change', renderBetaList);
+
+  // ── Merge action ──
+  const actions = document.createElement('div');
+  actions.className = 'data-actions';
+  actions.style.marginTop = '18px';
+  const mergeBtn = document.createElement('button');
+  mergeBtn.className = 'settings-btn danger';
+  mergeBtn.textContent = 'Merge selected into Alpha';
+  mergeBtn.addEventListener('click', () => {
+    const alphaId = alphaSel.value;
+    const alpha = getProject(alphaId);
+    if (!alpha) return;
+    const betaIds = [...betaList.querySelectorAll('.merge-beta-cb:checked')].map(cb => cb.value);
+    if (!betaIds.length) { alert('Select at least one Beta project to merge.'); return; }
+    const betaNames = betaIds.map(id => (getProject(id) || {}).name).filter(Boolean);
+    if (!confirm('Merge ' + betaIds.length + ' project' + (betaIds.length === 1 ? '' : 's') +
+      ' (' + betaNames.join(', ') + ') into "' + alpha.name + '"?\n\n' +
+      'All their schedules, notes, and role assignees move into "' + alpha.name + '", and they are deleted.')) return;
+    mergeProjects(alphaId, betaIds);
+    activeProjectId = alphaId;
+    calEarliestDate = null;
+    renderSidebar();
+    renderCalendar();
+    renderPalette();
+    if (exportOpen) renderExportPanel();
+    renderSettingsContent();
+    alert('Merged into "' + alpha.name + '".');
+  });
+  actions.appendChild(mergeBtn);
+  c.appendChild(actions);
 }
 
 function renderDataSettings(c) {
