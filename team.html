@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260624b';
+window.PREPRO_BUILD = '20260624c';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,9 +29,9 @@ window.PREPRO_BUILD = '20260624b';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260624b"></script>
+<script type="module" src="./auth.js?v=20260624c"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260624b"></script>
+<script src="./xlsx.full.min.js?v=20260624c"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -3671,13 +3671,16 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     const task = proj.tasks.find(t => t.id === taskId);
     if (!task) return;
 
-    // If the person is already known, save directly without opening the panel
+    // If the person is already known, save directly without opening the panel.
+    // Dropping them onto a chip also promotes them onto the project roster
+    // (dotted suggestion → solid assignee).
     if (prefillPerson) {
       if (!task.attendees) task.attendees = [];
       task.attendees.push({ id: genId(), role, category, person: prefillPerson, color });
-      recordNameHistory(role, prefillPerson);
+      addToRoster(role, prefillPerson); // adds to roster + records name history
       saveState();
       renderCalendar();
+      renderPalette();
       if (exportOpen) renderExportPanel();
       return;
     }
@@ -3835,6 +3838,7 @@ function savePanel() {
         person: person || panelContext.role,
         color: panelContext.color
       });
+      if (person) addToRoster(panelContext.role, person); // promote to solid roster member
     }
 
   } else if (panelContext.mode === 'edit-duedate') {
