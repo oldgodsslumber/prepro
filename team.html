@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260624g';
+window.PREPRO_BUILD = '20260624h';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,9 +29,9 @@ window.PREPRO_BUILD = '20260624g';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260624g"></script>
+<script type="module" src="./auth.js?v=20260624h"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260624g"></script>
+<script src="./xlsx.full.min.js?v=20260624h"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1231,6 +1231,62 @@ function openMergeConflictModal(alpha, conflicts, onApply) {
   document.body.appendChild(overlay);
 }
 
+// Shared merge runner: computes the field plan, resolves conflicts (modal) or
+// confirms, performs the merge, then re-renders. onDone runs after success.
+function performMerge(alphaId, betaIds, onDone) {
+  const alpha = getProject(alphaId);
+  if (!alpha || !betaIds.length) return;
+  const betas = betaIds.map(id => getProject(id)).filter(Boolean);
+  const plan = computeMergeFieldPlan(alpha, betas);
+  const finish = choices => {
+    mergeProjects(alphaId, betaIds, Object.assign({}, plan.resolved, choices || {}));
+    activeProjectId = alphaId;
+    calEarliestDate = null;
+    renderSidebar();
+    renderCalendar();
+    renderPalette();
+    if (exportOpen) renderExportPanel();
+    if (onDone) onDone();
+  };
+  if (plan.conflicts.length) {
+    openMergeConflictModal(alpha, plan.conflicts, finish);
+  } else {
+    const names = betas.map(b => b.name);
+    if (!confirm('Merge ' + betaIds.length + ' project' + (betaIds.length === 1 ? '' : 's') +
+      ' (' + names.join(', ') + ') into "' + alpha.name + '"?\n\n' +
+      'All their schedules, notes, role assignees, and project info move into "' + alpha.name + '", and they are deleted.')) return;
+    finish({});
+  }
+}
+
+// ── TEMP: auto-detect likely-duplicate projects (same Case ID or matching name) ──
+function projectMergeScore(p) {
+  const filled = PROJECT_INFO_FIELDS.reduce((n, f) => n + ((p[f.key] != null && String(p[f.key]).trim()) ? 1 : 0), 0);
+  return (p.tasks || []).length * 2 + (p.notes || []).length + filled;
+}
+function detectDuplicateGroups() {
+  const projects = state.projects.filter(p => !p.isFolder);
+  const parent = {};
+  projects.forEach(p => parent[p.id] = p.id);
+  const find = x => parent[x] === x ? x : (parent[x] = find(parent[x]));
+  const union = (a, b) => { parent[find(a)] = find(b); };
+  const normName   = p => (p.name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const normTicket = p => (p.ticketId || '').trim().toLowerCase();
+  const linkBy = keyFn => {
+    const m = new Map();
+    projects.forEach(p => { const k = keyFn(p); if (!k) return; (m.get(k) || m.set(k, []).get(k)).push(p.id); });
+    m.forEach(ids => { for (let i = 1; i < ids.length; i++) union(ids[0], ids[i]); });
+  };
+  linkBy(normTicket);
+  linkBy(normName);
+  const clusters = new Map();
+  projects.forEach(p => { const r = find(p.id); (clusters.get(r) || clusters.set(r, []).get(r)).push(p); });
+  // Only groups of 2+, richest project first
+  return [...clusters.values()]
+    .filter(g => g.length >= 2)
+    .map(g => g.slice().sort((a, b) => projectMergeScore(b) - projectMergeScore(a)));
+}
+
 function renderMergeSettings(c) {
   const title = document.createElement('div');
   title.className = 'settings-section-title';
@@ -1373,34 +1429,100 @@ function renderMergeSettings(c) {
     if (!alpha) { alert('Pick an Alpha project to keep.'); return; }
     const betaIds = [...betaSet];
     if (!betaIds.length) { alert('Select at least one Beta project to merge.'); return; }
-    const betas = betaIds.map(id => getProject(id)).filter(Boolean);
-    const betaNames = betas.map(b => b.name);
-    const plan = computeMergeFieldPlan(alpha, betas);
-
-    const finish = choices => {
-      mergeProjects(alphaId, betaIds, Object.assign({}, plan.resolved, choices || {}));
-      activeProjectId = alphaId;
-      calEarliestDate = null;
-      renderSidebar();
-      renderCalendar();
-      renderPalette();
-      if (exportOpen) renderExportPanel();
-      renderSettingsContent();
-      alert('Merged into "' + alpha.name + '".');
-    };
-
-    if (plan.conflicts.length) {
-      // The conflict modal is the explicit confirmation step.
-      openMergeConflictModal(alpha, plan.conflicts, finish);
-    } else {
-      if (!confirm('Merge ' + betaIds.length + ' project' + (betaIds.length === 1 ? '' : 's') +
-        ' (' + betaNames.join(', ') + ') into "' + alpha.name + '"?\n\n' +
-        'All their schedules, notes, role assignees, and project info move into "' + alpha.name + '", and they are deleted.')) return;
-      finish({});
-    }
+    const name = alpha.name;
+    performMerge(alphaId, betaIds, () => { renderSettingsContent(); alert('Merged into "' + name + '".'); });
   });
   actions.appendChild(mergeBtn);
   c.appendChild(actions);
+
+  // ── TEMP: Auto-detect duplicates ──
+  const adTitle = document.createElement('div');
+  adTitle.className = 'settings-section-title';
+  adTitle.style.marginTop = '26px';
+  adTitle.textContent = 'Auto-detect duplicates · temporary';
+  c.appendChild(adTitle);
+
+  const adHint = document.createElement('div');
+  adHint.className = 'settings-hint';
+  adHint.textContent = 'Scans for projects that share a Case ID or have the same name and groups them. Pick the keeper in each group and merge — uses the same conflict resolution as above.';
+  c.appendChild(adHint);
+
+  const adBtn = document.createElement('button');
+  adBtn.className = 'settings-btn';
+  adBtn.textContent = '🔍 Scan for duplicates';
+  c.appendChild(adBtn);
+
+  const adResults = document.createElement('div');
+  adResults.style.marginTop = '12px';
+  c.appendChild(adResults);
+
+  function scanAndRender() {
+    adResults.innerHTML = '';
+    const groups = detectDuplicateGroups();
+    if (!groups.length) {
+      const e = document.createElement('div');
+      e.className = 'merge-empty';
+      e.textContent = 'No duplicate groups found.';
+      adResults.appendChild(e);
+      return;
+    }
+    const summary = document.createElement('div');
+    summary.className = 'settings-hint';
+    summary.style.marginTop = '0';
+    summary.textContent = groups.length + ' group' + (groups.length === 1 ? '' : 's') + ' found.';
+    adResults.appendChild(summary);
+
+    groups.forEach((group, gi) => {
+      // Why grouped: shared Case ID if all share one, else same name
+      const tickets = new Set(group.map(p => (p.ticketId || '').trim().toLowerCase()).filter(Boolean));
+      const why = (tickets.size === 1 && group.every(p => (p.ticketId || '').trim()))
+        ? 'Case ID: ' + group[0].ticketId
+        : 'Same name';
+
+      const card = document.createElement('div');
+      card.className = 'merge-conflict';
+
+      const head = document.createElement('div');
+      head.className = 'merge-conflict-label';
+      head.textContent = 'Group ' + (gi + 1) + ' · ' + why + ' · ' + group.length + ' projects';
+      card.appendChild(head);
+
+      let keeperId = group[0].id; // richest first (sorted in detect)
+      group.forEach(p => {
+        const row = document.createElement('label');
+        row.className = 'merge-conflict-opt';
+        const radio = document.createElement('input');
+        radio.type = 'radio'; radio.name = 'dupKeeper_' + gi; radio.checked = p.id === keeperId;
+        radio.addEventListener('change', () => { keeperId = p.id; });
+        const nm = document.createElement('span');
+        nm.className = 'merge-conflict-val';
+        nm.textContent = p.name + (p.completed ? ' ✓' : '');
+        const meta = document.createElement('span');
+        meta.className = 'merge-conflict-src';
+        meta.textContent = projMeta(p);
+        row.appendChild(radio); row.appendChild(nm); row.appendChild(meta);
+        card.appendChild(row);
+      });
+
+      const gActions = document.createElement('div');
+      gActions.className = 'data-actions';
+      gActions.style.marginTop = '8px';
+      const gBtn = document.createElement('button');
+      gBtn.className = 'settings-btn danger';
+      gBtn.textContent = 'Merge this group';
+      gBtn.addEventListener('click', () => {
+        const betaIds = group.map(p => p.id).filter(id => id !== keeperId);
+        if (!betaIds.length) return;
+        performMerge(keeperId, betaIds, () => scanAndRender());
+      });
+      gActions.appendChild(gBtn);
+      card.appendChild(gActions);
+
+      adResults.appendChild(card);
+    });
+  }
+
+  adBtn.addEventListener('click', scanAndRender);
 }
 
 function renderDataSettings(c) {
