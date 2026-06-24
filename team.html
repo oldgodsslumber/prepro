@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260624d';
+window.PREPRO_BUILD = '20260624e';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,9 +29,9 @@ window.PREPRO_BUILD = '20260624d';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260624d"></script>
+<script type="module" src="./auth.js?v=20260624e"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260624d"></script>
+<script src="./xlsx.full.min.js?v=20260624e"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -2288,6 +2288,30 @@ function moveProjectInTree(movingId, targetId, position) {
 function renderPalette() {
   const pal = document.getElementById('palette');
   pal.innerHTML = '';
+
+  // PTO / Time-Off projects only get the single PTO chip — hide everything else.
+  if (isPtoProject(getProject(activeProjectId))) {
+    const ptoGrp = document.createElement('div');
+    ptoGrp.className = 'pal-cat';
+    const ptoLbl = document.createElement('span');
+    ptoLbl.className = 'pal-label';
+    ptoLbl.textContent = 'Time Off';
+    ptoGrp.appendChild(ptoLbl);
+    const ptoChip = document.createElement('div');
+    ptoChip.className = 'role-chip chip-duedate';
+    ptoChip.draggable = true;
+    ptoChip.textContent = '🏖 PTO';
+    ptoChip.addEventListener('dragstart', e => {
+      dragPayload = { type: 'duedate', defaultLabel: 'PTO' };
+      e.dataTransfer.setData('text', JSON.stringify(dragPayload));
+      e.dataTransfer.effectAllowed = 'copy';
+    });
+    ptoChip.addEventListener('dragend', () => { dragPayload = null; });
+    ptoGrp.appendChild(ptoChip);
+    pal.appendChild(ptoGrp);
+    return;
+  }
+
   // 'Other' is hidden from the palette for now (kept in ROLE_CATS so any
   // existing tasks tagged Other still render).
   ROLE_CATS.filter(cat => cat.label !== 'Other').forEach(cat => {
@@ -2371,8 +2395,7 @@ function renderPalette() {
   keyGrp.appendChild(mkDueChip('Project Due Date', '🏁', 'Project Due Date'));
   keyGrp.appendChild(mkDueChip('Milestone', '🎯', 'Milestone'));
   keyGrp.appendChild(mkDueChip('Delivery', '📦', 'Delivery'));
-  // PTO only appears inside a PTO / Time-Off project
-  if (isPtoProject(getProject(activeProjectId))) keyGrp.appendChild(mkDueChip('PTO', '🏖', 'PTO'));
+  // (PTO lives only inside PTO / Time-Off projects — handled at the top of this function)
   pal.appendChild(keyGrp);
 
   // People are no longer on the top row — they live in the side panel's
