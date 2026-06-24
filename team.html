@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260624a';
+window.PREPRO_BUILD = '20260624b';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,9 +29,9 @@ window.PREPRO_BUILD = '20260624a';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260624a"></script>
+<script type="module" src="./auth.js?v=20260624b"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260624a"></script>
+<script src="./xlsx.full.min.js?v=20260624b"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -213,6 +213,7 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
 .duedate-bar { flex-shrink: 0; width: 100%; position: relative; cursor: pointer; background: #3a3a52; border: 1.5px solid #8080a0; border-left: none; font-size: 0; display: flex; align-items: center; min-height: 30px; box-sizing: border-box; }
 .duedate-bar-mid { border-radius: 0; border-right: none; margin-left: -5px; margin-right: -6px; width: calc(100% + 11px); }
 .duedate-bar-end { border-radius: 0 4px 4px 0; margin-left: -5px; padding-right: 17px; width: calc(100% + 5px); }
+.duedate-bar.drag-accepting { background: #4a4a66; outline: 2px solid rgba(128,128,160,.6); outline-offset: -1px; }
 
 /* ── CALENDAR WRAPPER ── */
 .cal-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 12px 14px 0; min-height: 0; }
@@ -252,16 +253,19 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
 /* Solo chips and full-block events: all 4 sides */
 .task-chip.chip-solo.task-selected,
 .review-block.task-selected,
+.role-block.task-selected,
 .duedate-marker.task-selected { box-shadow: 0 0 0 2px rgba(255,255,255,.9), 0 0 8px 3px rgba(255,255,255,.3); }
 /* Start: left + top + bottom only (no right — abuts the mid chip) */
 .task-chip.chip-start.task-selected { box-shadow: -2px 0 0 0 rgba(255,255,255,.9), 0 -2px 0 0 rgba(255,255,255,.9), 0 2px 0 0 rgba(255,255,255,.9), 0 0 8px 3px rgba(255,255,255,.3); }
 /* Mid: top + bottom only */
 .task-chip.chip-mid.task-selected,
 .review-bar-mid.task-selected,
+.role-bar-mid.task-selected,
 .duedate-bar-mid.task-selected { box-shadow: 0 -2px 0 0 rgba(255,255,255,.9), 0 2px 0 0 rgba(255,255,255,.9), 0 0 8px 3px rgba(255,255,255,.3); }
 /* End: right + top + bottom only (no left — abuts the mid chip) */
 .task-chip.chip-end.task-selected,
 .review-bar-end.task-selected,
+.role-bar-end.task-selected,
 .duedate-bar-end.task-selected { box-shadow: 2px 0 0 0 rgba(255,255,255,.9), 0 -2px 0 0 rgba(255,255,255,.9), 0 2px 0 0 rgba(255,255,255,.9), 0 0 8px 3px rgba(255,255,255,.3); }
 
 /* solo = single day: left handle + text + right handle */
@@ -317,6 +321,8 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
 .review-hd { display: flex; align-items: center; gap: 5px; }
 .review-badge { background: #c0394f; color: #fff; font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 3px; letter-spacing: .06em; text-transform: uppercase; flex-shrink: 0; }
 .review-title { font-size: 11px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+/* Ghosted default name (verb / type label shown when no name has been typed) */
+.review-title.title-default { color: var(--dim); font-style: italic; font-weight: 500; opacity: .8; }
 .review-att-list { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
 .review-att { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text); }
 .review-att-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
@@ -2670,10 +2676,10 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghostInfo, showMonthLabel)
       return;
     } else {
       // Role chip → place a role block immediately; people get dropped onto it after.
-      // Name defaults to the verb form of the role (e.g. Producer → Producing).
+      // taskName stays null so the verb shows as a ghosted, non-stored placeholder.
       const proj = getProject(activeProjectId);
       if (!proj) return;
-      proj.tasks.push({ id: genId(), date: dateStr, role: pl.role, roleCategory: pl.category, color: pl.color, taskName: roleVerb(pl.role), loe: 'low', attendees: [] });
+      proj.tasks.push({ id: genId(), date: dateStr, role: pl.role, roleCategory: pl.category, color: pl.color, taskName: null, loe: 'low', attendees: [] });
       saveState(); renderCalendar(); if (exportOpen) renderExportPanel();
     }
   });
@@ -2733,7 +2739,7 @@ function buildRoleBlock(task, dateStr) {
   badge.textContent = (task.loe ? LOE_EMOJI[task.loe] + ' ' : '') + (ROLE_ABBR[task.role] || task.role || 'Task');
   badge.title = task.role || '';
   const title = document.createElement('span');
-  title.className = 'review-title';
+  title.className = 'review-title' + (task.taskName ? '' : ' title-default');
   title.textContent = task.taskName || roleVerb(task.role);
   hd.appendChild(badge);
   hd.appendChild(title);
@@ -2962,7 +2968,7 @@ function buildDueDateMarker(task, dateStr) {
   badge.title = 'Click to change type';
   badge.addEventListener('click', e => { e.stopPropagation(); openTypeSwitcher(e, task.id, mLabel); });
   const titleSpan = document.createElement('span');
-  titleSpan.className = 'review-title';
+  titleSpan.className = 'review-title' + (task.taskName ? '' : ' title-default');
   titleSpan.textContent = task.taskName || mLabel;
   hd.appendChild(badge);
   hd.appendChild(titleSpan);
@@ -3071,6 +3077,22 @@ function buildDueDateBar(task, dateStr, isEnd) {
   });
   bar.addEventListener('dragend', () => { dragPayload = null; });
 
+  // Accept attendee drops anywhere along a multi-day key date, not just the start
+  bar.addEventListener('dragover', e => {
+    if (!dragPayload || dragPayload.type === 'move' || dragPayload.type === 'copy' || dragPayload.type === 'review' || dragPayload.type === 'duedate' || dragPayload.type === 'dup-project' || dragPayload.type === 'tree-move') return;
+    e.preventDefault(); e.stopPropagation();
+    bar.classList.add('drag-accepting');
+  });
+  bar.addEventListener('dragleave', e => { if (!bar.contains(e.relatedTarget)) bar.classList.remove('drag-accepting'); });
+  bar.addEventListener('drop', e => {
+    e.preventDefault(); e.stopPropagation();
+    bar.classList.remove('drag-accepting');
+    let pl = dragPayload;
+    if (!pl) { try { pl = JSON.parse(e.dataTransfer.getData('text')); } catch(_) { return; } }
+    if (!pl || pl.type === 'move' || pl.type === 'copy' || pl.type === 'review' || pl.type === 'duedate') return;
+    openPanel('add-attendee', task.date, task.id, pl.role, pl.category, pl.color, pl.person || null);
+  });
+
   if (isEnd) {
     const rh = document.createElement('span');
     rh.className = 'chip-handle-r';
@@ -3114,8 +3136,8 @@ function buildReviewBlock(task, dateStr) {
   badge.style.cursor = 'pointer';
   badge.addEventListener('click', e => { e.stopPropagation(); openTypeSwitcher(e, task.id, task.reviewLabel || 'Review'); });
   const title = document.createElement('span');
-  title.className = 'review-title';
-  title.textContent = task.taskName || 'Untitled Review';
+  title.className = 'review-title' + (task.taskName ? '' : ' title-default');
+  title.textContent = task.taskName || task.reviewLabel || 'Review';
   hd.appendChild(badge);
   hd.appendChild(title);
   block.appendChild(hd);
@@ -3600,9 +3622,10 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     setPanelDateRange(task);
     setSelectedTask(taskId);
     // People are managed by dropping them onto the block, so the panel only
-    // edits name + effort now.
+    // edits name + effort now. The verb default shows as a ghosted placeholder.
     fieldPerson.style.display = 'none';
-    taskInput.value                              = task.taskName || '';
+    taskInput.value           = task.taskName || '';
+    taskInput.placeholder     = roleVerb(task.role);
     setPanelLOE(task.loe || 'low');
     document.getElementById('panelDelete').classList.remove('hidden');
 
@@ -3638,7 +3661,7 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     fieldPerson.style.display = 'none';
     fieldLOE.style.display    = 'none';
     taskLabel.textContent     = lbl + ' Name';
-    taskInput.placeholder     = 'e.g. ' + lbl + ' — Apr 1';
+    taskInput.placeholder     = lbl; // ghosted default — type to override
     taskInput.value           = task.taskName || '';
     document.getElementById('panelDelete').classList.remove('hidden');
 
@@ -3687,7 +3710,7 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     fieldPerson.style.display = 'none';
     fieldLOE.style.display    = 'none';
     taskLabel.textContent     = 'Label';
-    taskInput.placeholder     = 'e.g. Final Delivery to Client';
+    taskInput.placeholder     = mLabel2; // ghosted default — type to override
     taskInput.value           = task.taskName || '';
     document.getElementById('panelDelete').classList.remove('hidden');
   }
@@ -3781,25 +3804,25 @@ function savePanel() {
     });
 
   } else if (panelContext.mode === 'edit') {
+    // Blank stays null so the verb shows as a ghosted placeholder (not stored text)
     const task = proj.tasks.find(t => t.id === panelContext.taskId);
-    if (task) { task.taskName = taskName || roleVerb(task.role); task.loe = loe; }
+    if (task) { task.taskName = taskName || null; task.loe = loe; }
 
   } else if (panelContext.mode === 'create-review') {
     const lbl  = panelContext.label || 'Review';
-    const name = taskName || lbl;
     proj.tasks.push({
       id: genId(),
       date: panelContext.date,
       isReview: true,
       reviewLabel: lbl,
-      taskName: name,
+      taskName: taskName || null, // blank → ghosted label default
       color: REVIEW_COLOR,
       attendees: []
     });
 
   } else if (panelContext.mode === 'edit-review') {
     const task = proj.tasks.find(t => t.id === panelContext.taskId);
-    if (task) { task.taskName = taskName || task.reviewLabel || 'Review'; }
+    if (task) { task.taskName = taskName || null; }
 
   } else if (panelContext.mode === 'add-attendee') {
     const task = proj.tasks.find(t => t.id === panelContext.taskId);
@@ -4100,7 +4123,7 @@ function buildHTMLExport() {
         });
       }
     } else {
-      const taskNm = t.taskName || t.role || '(untitled)';
+      const taskNm = t.taskName || roleVerb(t.role) || '(untitled)';
       const ppl    = taskPeople(t);
       hLines.push(`${fmtHtml(raw)}${escHtml(sep)}${escHtml(taskNm)}`);
       pLines.push(`${fmtPlain(raw)}${sep}${taskNm}`);
@@ -4137,18 +4160,20 @@ function buildTSV() {
       const tD = t.milestoneType === 'milestone' ? 'Milestone' : t.milestoneType === 'delivery' ? 'Delivery' : t.milestoneType === 'pto' ? 'PTO' : 'Project Due Date';
       rows.push([sl, sl, tE + ' ' + (t.taskName || tD), '', '', '', 'Due Date'].join('\t'));
     } else if (t.isReview) {
-      rows.push([sl, el, esc(t.taskName), '', 'Review', 'Review', 'Review'].join('\t'));
+      const rName = esc(t.taskName || t.reviewLabel || 'Review');
+      rows.push([sl, el, rName, '', 'Review', 'Review', 'Review'].join('\t'));
       if (t.attendees) {
         t.attendees.forEach(a => {
-          rows.push([sl, el, esc(t.taskName), esc(a.person), esc(a.role), esc(a.category), 'Attendee'].join('\t'));
+          rows.push([sl, el, rName, esc(a.person), esc(a.role), esc(a.category), 'Attendee'].join('\t'));
         });
       }
     } else {
+      const tName = esc(t.taskName || roleVerb(t.role));
       const ppl = taskPeople(t);
       if (ppl.length) {
-        ppl.forEach(p => rows.push([sl, el, esc(t.taskName), esc(p.person), esc(p.role), esc(p.category), 'Task'].join('\t')));
+        ppl.forEach(p => rows.push([sl, el, tName, esc(p.person), esc(p.role), esc(p.category), 'Task'].join('\t')));
       } else {
-        rows.push([sl, el, esc(t.taskName), '', esc(t.role), esc(t.roleCategory), 'Task'].join('\t'));
+        rows.push([sl, el, tName, '', esc(t.role), esc(t.roleCategory), 'Task'].join('\t'));
       }
     }
   });
@@ -5024,7 +5049,7 @@ function buildPlanyway() {
           items.push({ line, date: task.date, endDate: task.endDate || null, person: topProducer || 'Producer' });
         }
       } else {
-        const cat  = getProducerCat(task.taskName);
+        const cat  = getProducerCat(task.taskName || task.reviewLabel);
         const line = LOE_EMOJI[loe] + ' ' + cat;
         if (internalAtts.length) {
           internalAtts.forEach(att => {
@@ -5399,7 +5424,7 @@ function exportPNG() {
           ctx.clip();
           const loeStr = task.loe ? LOE_EMOJI[task.loe] + ' ' : '';
           const roleStr = exportPNGRoles && task.role ? ` (${task.role})` : '';
-          const title = loeStr + (task.taskName || task.role || 'Task') + roleStr;
+          const title = loeStr + (task.taskName || roleVerb(task.role)) + roleStr;
           ctx.fillStyle = '#fff';
           ctx.font = `${8*SC}px system-ui,sans-serif`;
           ctx.textAlign = 'left';
