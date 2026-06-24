@@ -307,10 +307,10 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
 .review-block.drag-accepting .review-drop-hint { display: block; }
 
 /* ── ROLE BLOCK (role tasks: header + attendee list, accepts dropped people) ── */
-.role-block { background: var(--card); border: 1.5px solid var(--border); border-left-width: 3px; border-radius: 5px; padding: 5px 7px; cursor: pointer; flex-shrink: 0; transition: background .12s; position: relative; }
+.role-block { background: var(--card); border: 1.5px solid var(--border); border-radius: 5px; padding: 5px 7px; cursor: pointer; flex-shrink: 0; transition: filter .12s; position: relative; }
 .role-block.role-multi-start { border-radius: 5px 0 0 5px; border-right: none; margin-right: -7px; z-index: 1; }
-.role-block:hover { background: #23232f; }
-.role-block.drag-accepting { background: rgba(108,99,255,.16); outline: 2px solid var(--accent); outline-offset: -1px; }
+.role-block:hover { filter: brightness(1.25); }
+.role-block.drag-accepting { outline: 2px solid var(--accent); outline-offset: -1px; }
 .role-block.drag-accepting .review-drop-hint { display: block; color: var(--accent); }
 .role-block .chip-handle-l,
 .role-block .chip-handle-r { top: 10px; transform: none; }
@@ -717,7 +717,7 @@ const ROLE_VERB    = { 'Producer': 'Producing', 'Editor': 'Editing', 'Animator':
 function roleVerb(role) { return ROLE_VERB[role] || role || 'Task'; }
 // Quick-pick task-title options shown as a second row in the task panel.
 const TASK_SUGGESTIONS = {
-  'Producer':        ['Script Writing', 'Concepting', 'Pre-Production', 'Casting', 'Location Scouting'],
+  'Producer':        ['Script Writing', 'Concepting', 'Pre-Production', 'Post-Producing', 'Casting'],
   'Editor':          ['Rough Cut', 'Editing', 'Revisions', 'Color Correction', 'Final Cut'],
   'Animator':        ['Storyboard', 'Animation', 'Motion Graphics', 'VFX', 'Revisions'],
   'Copywriter':      ['Script Writing', 'Copy Draft', 'Messaging', 'Revisions', 'Proofing'],
@@ -2676,6 +2676,12 @@ function getContLabel(task) {
   return ppl[0] || task.reviewLabel || (task.role ? roleVerb(task.role) : '');
 }
 function getActiveTask(id) { const p = getProject(activeProjectId); return p ? (p.tasks || []).find(t => t.id === id) : null; }
+function hexToRgba(hex, a) {
+  const h = String(hex || '').replace('#', '');
+  if (h.length !== 6) return hex || 'transparent';
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
 
 function buildChip(task, dateStr) {
   if (task.isDueDate) return buildDueDateMarker(task, dateStr);
@@ -2696,7 +2702,8 @@ function buildRoleBlock(task, dateStr) {
   const block = document.createElement('div');
   block.className = 'role-block' + (isMulti ? ' role-multi-start' : '');
   block.dataset.taskId = task.id;
-  block.style.borderLeftColor = task.color;
+  block.style.background  = hexToRgba(task.color, .18);
+  block.style.borderColor = task.color;
 
   const hd = document.createElement('div');
   hd.className = 'review-hd';
@@ -2805,6 +2812,7 @@ function buildRoleBar(task, dateStr, isEnd) {
   const bar = document.createElement('div');
   bar.className = 'role-bar ' + (isEnd ? 'role-bar-end' : 'role-bar-mid');
   bar.dataset.taskId = task.id;
+  bar.style.background  = hexToRgba(task.color, .18);
   bar.style.borderColor = task.color;
 
   bar.addEventListener('click', e => { e.stopPropagation(); openPanel('edit', task.date, task.id); setSelectedTask(task.id); });
@@ -3327,58 +3335,61 @@ function navigateWeeks(delta) {
 function startResize(e, taskId, side) {
   e.preventDefault();
   e.stopPropagation();
-  isResizing = true;
   const proj = getProject(activeProjectId);
   const task = proj && proj.tasks.find(t => t.id === taskId);
   if (!task) return;
-  resizeState = { task, side };
+  isResizing = true;
+  // Remember the original span so we can clamp the moving edge and detect change.
+  resizeState = { task, side, origDate: task.date, origEnd: task.endDate || null, lastDate: null };
+  setSelectedTask(task.id);
   document.addEventListener('mousemove', onResizeMove);
   document.addEventListener('mouseup',   onResizeUp);
 }
 
+// Live preview: mutate the task's span in memory and re-render so the chip
+// actually grows/shrinks under the cursor (committed on mouseup).
 function onResizeMove(e) {
   if (!resizeState) return;
-  document.querySelectorAll('.resize-hover').forEach(el => el.classList.remove('resize-hover'));
   const target = document.elementFromPoint(e.clientX, e.clientY);
   const cell   = target && target.closest('[data-date]');
-  if (cell && cell.dataset.date >= resizeState.task.date) {
-    cell.classList.add('resize-hover');
+  if (!cell || !cell.dataset.date) return;
+  const d = cell.dataset.date;
+  if (d === resizeState.lastDate) return;
+
+  const task = resizeState.task;
+  if (resizeState.side === 'left') {
+    const fixedEnd = resizeState.origEnd || resizeState.origDate; // end stays put
+    if (d > fixedEnd) return;                                     // can't pass the end
+    task.date = d;
+    if (d === fixedEnd) delete task.endDate; else task.endDate = fixedEnd;
+  } else {
+    if (d < resizeState.origDate) return;                         // can't pass the start
+    task.date = resizeState.origDate;
+    if (d === resizeState.origDate) delete task.endDate; else task.endDate = d;
   }
+  resizeState.lastDate = d;
+
+  // Re-render the grid in place, preserving scroll position.
+  const calScroll = document.getElementById('calScroll');
+  const top = calScroll.scrollTop;
+  rebuildCalGrid(false);
+  calScroll.scrollTop = top;
 }
 
-function onResizeUp(e) {
+function onResizeUp() {
   document.removeEventListener('mousemove', onResizeMove);
   document.removeEventListener('mouseup',   onResizeUp);
-  document.querySelectorAll('.resize-hover').forEach(el => el.classList.remove('resize-hover'));
   isResizing = false;
   if (!resizeState) return;
 
-  const target = document.elementFromPoint(e.clientX, e.clientY);
-  const cell   = target && target.closest('[data-date]');
-  if (cell && cell.dataset.date) {
-    const newDate = cell.dataset.date;
-    const task    = resizeState.task;
-    const endDate = task.endDate || task.date;
-
-    if (resizeState.side === 'left') {
-      // Can't drag start past end
-      if (newDate <= endDate) {
-        task.date = newDate;
-        if (task.date === task.endDate) delete task.endDate;
-      }
-    } else {
-      // Can't drag end before start
-      if (newDate >= task.date) {
-        if (newDate === task.date) delete task.endDate;
-        else task.endDate = newDate;
-      }
-    }
-    saveState();
-  }
-
+  const task = resizeState.task;
+  const changed = task.date !== resizeState.origDate || (task.endDate || null) !== resizeState.origEnd;
   resizeState = null;
+  if (changed) {
+    saveState();
+    if (exportOpen) renderExportPanel();
+  }
   renderCalendar();
-  if (exportOpen) renderExportPanel();
 }
 
 // ── MOVE TASK ──
@@ -4231,14 +4242,22 @@ function renderRosterInto(content) {
     });
     section.appendChild(nameList);
 
-    // Available people — click to add to this project
+    // Available people — drag straight onto a chip (no need to add to the
+    // project first), or click to add them to the project roster.
     if (suggestions.length) {
       const suggestRow = document.createElement('div');
       suggestRow.className = 'roster-suggestions';
       suggestions.forEach(name => {
         const chip = document.createElement('div');
         chip.className = 'roster-suggest-chip';
-        chip.title = 'Click to add to this project';
+        chip.title = 'Drag onto a chip to assign · click to add to this project';
+        chip.draggable = true;
+        chip.addEventListener('dragstart', e => {
+          dragPayload = { type: 'person', person: name, role: group.primary, category: catLabelForRole(group.primary), color: group.color };
+          e.dataTransfer.setData('text', JSON.stringify(dragPayload));
+          e.dataTransfer.effectAllowed = 'copy';
+        });
+        chip.addEventListener('dragend', () => { dragPayload = null; });
         const addSpan = document.createElement('span');
         addSpan.textContent = '+ ' + name;
         addSpan.addEventListener('click', e => {
