@@ -2338,8 +2338,8 @@ function handleExcelImport(file) {
         else v = (v == null ? '' : String(v)).trim();
         obj[key] = v;
       });
-      // Combine the producer's First/Last name columns into a single name.
-      obj.producer = [obj.firstName, obj.lastName].filter(Boolean).join(' ').trim();
+      // Lead producer is tracked by first name only.
+      obj.producer = (obj.firstName || '').trim();
       if ((obj.ticketId || '').trim()) candidates.push(obj);
     }
 
