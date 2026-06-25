@@ -461,6 +461,10 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
 .tools-rail-tab .tr-icon { font-size: 16px; line-height: 1; }
 .tools-rail-tab:hover { color: var(--text); background: var(--card); }
 .tools-rail-tab.active { color: var(--accent); border-left-color: var(--accent); background: rgba(108,99,255,.10); }
+.tools-rail-foot { margin-top: auto; display: flex; flex-direction: column; }
+.tools-rail-action { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 9px 2px; font-size: 9px; font-weight: 600; color: var(--dim); cursor: pointer; border-left: 2px solid transparent; transition: color .15s, background .15s; user-select: none; text-align: center; line-height: 1.1; }
+.tools-rail-action .tr-icon { font-size: 16px; line-height: 1; }
+.tools-rail-action:hover { color: var(--text); background: var(--card); }
 
 /* ── TOOLS PANEL (content, collapsible) ── */
 .tools-panel { grid-column: 4; position: relative; width: 360px; background: var(--panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
@@ -616,9 +620,6 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
       </div>
       <a href="ops.html" target="_blank" class="data-mig-btn" title="Ops mode — team workload view">📊 Ops</a>
       <a href="dash.html" target="_blank" class="data-mig-btn" title="Personal dashboard view">📋 Dash</a>
-      <button class="data-mig-btn" id="btnSettings" title="Settings: import/export data, manage people">⚙ Settings</button>
-      <!-- Admin button (auth.js docks the admin-only invite/approve button here for the admin) -->
-      <div id="pp-admin-slot" style="flex:1 0 100%;"></div>
       <input type="file" id="importFileInput" accept=".json" style="display:none">
       <input type="file" id="excelImportInput" accept=".xlsx,.xls" style="display:none">
     </div>
@@ -725,6 +726,12 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
     <div class="tools-rail-tab" data-tab="invites-web"><span class="tr-icon">🌐</span>Invite</div>
     <div class="tools-rail-tab" data-tab="notes"><span class="tr-icon">📝</span>Notes</div>
     <div class="tools-rail-tab" data-tab="cea"><span class="tr-icon">🔗</span>CEA</div>
+    <!-- Bottom-docked actions: Settings sits above the admin button -->
+    <div class="tools-rail-foot">
+      <div class="tools-rail-action" id="btnSettings" title="Settings: import/export data, manage people"><span class="tr-icon">⚙</span>Settings</div>
+      <!-- Admin button (auth.js docks the admin-only invite/approve button here for the admin) -->
+      <div id="pp-admin-slot"></div>
+    </div>
   </div>
 </div>
 
