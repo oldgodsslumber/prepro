@@ -2276,7 +2276,7 @@ function handleLeadProducerBackfill(file) {
       const cells = rows[r], o = {};
       Object.keys(idxToKey).forEach(i => { o[idxToKey[i]] = (cells[i] == null ? '' : String(cells[i])).trim(); });
       const tid = (o.ticketId || '').trim();
-      const producer = [o.firstName, o.lastName].filter(Boolean).join(' ').trim();
+      const producer = (o.firstName || '').trim(); // first name only
       if (tid && producer) producerByTicket[tid] = producer;
     }
 
