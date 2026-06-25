@@ -817,6 +817,12 @@ const ROSTER_GROUPS = [
   { label: 'Stakeholder',     primary: 'Stakeholder',     roles: ['Stakeholder'],                    color: '#e07b39' },
   { label: 'External Vendor', primary: 'External Vendor', roles: ['External Vendor'],                color: '#7c5cbf' }
 ];
+// Roles that make someone part of the internal video team. Used to scope the
+// sidebar name-filter list (no stakeholders / external / vendor people there).
+const VIDEO_TEAM_ROLES = (ROSTER_GROUPS.find(g => g.label === 'Video Team') || {}).roles || ['Producer', 'Editor', 'Animator'];
+function isVideoTeamPerson(person) {
+  return !!(person && person.roles && [...person.roles].some(r => VIDEO_TEAM_ROLES.includes(r)));
+}
 function catLabelForRole(role) { const c = ROLE_CATS.find(c => c.roles.includes(role)); return c ? c.label : ''; }
 function isPtoProject(proj) { return !!(proj && /pto|time\s*off/i.test(proj.name || '')); }
 // Unique people in a roster group (union across its roles, deduped — no repeats).
@@ -2545,7 +2551,7 @@ function subtreeMatchesFilter(proj) {
 function renderSidebar() {
   // Refresh the filter datalist with everyone we know about.
   const dl = document.getElementById('projFilterNames');
-  if (dl) dl.innerHTML = collectAllPeople().map(p => '<option value="' + p.name.replace(/"/g, '&quot;') + '">').join('');
+  if (dl) dl.innerHTML = collectAllPeople().filter(isVideoTeamPerson).map(p => '<option value="' + p.name.replace(/"/g, '&quot;') + '">').join('');
 
   const tree = document.getElementById('sidebarTree');
   tree.innerHTML = '';
