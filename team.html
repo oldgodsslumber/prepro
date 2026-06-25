@@ -1018,6 +1018,9 @@ function collectAllPeople() {
   (state.projects || []).forEach(p => {
     const roster = p.roster || {};
     Object.entries(roster).forEach(([role, names]) => (names || []).forEach(n => touch(n, role)));
+    // Lead producers may exist only as a project field (set via import/drag),
+    // not in any roster — surface them here so they can be merged/managed.
+    if (p.leadProducer) touch(p.leadProducer, 'Producer');
   });
   Object.keys(peopleEmails || {}).forEach(n => touch(n, null));
   return Object.values(people).sort((a,b) => a.name.localeCompare(b.name));
@@ -1036,6 +1039,7 @@ function deletePersonEverywhere(name) {
       if (t.person === name) t.person = '';
       if (Array.isArray(t.attendees)) t.attendees = t.attendees.filter(a => a.person !== name);
     });
+    if (p.leadProducer === name) p.leadProducer = null;
   });
   delete peopleEmails[name];
   if (sunsetPeople[name]) { delete sunsetPeople[name]; saveSunsetPeople(); }
@@ -1074,6 +1078,7 @@ function mergePersonInto(from, into) {
         });
       }
     });
+    if (p.leadProducer === from) p.leadProducer = into;
   });
   if (!peopleEmails[into] && peopleEmails[from]) peopleEmails[into] = peopleEmails[from];
   delete peopleEmails[from];
