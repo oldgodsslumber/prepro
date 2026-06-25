@@ -950,6 +950,14 @@ function getProjectRoster() {
   return proj.roster;
 }
 function getRosterNames(role) { return getProjectRoster()[role] || []; }
+// When a Producer is placed/assigned, auto-fill the project's lead producer if
+// one isn't already set. Manual choices (drag box) still win and aren't clobbered.
+function maybeAutoLeadProducer(proj, role, person) {
+  if (!proj || !person) return;
+  if ((role || '').toLowerCase() !== 'producer') return;
+  if (proj.leadProducer) return;
+  proj.leadProducer = person;
+}
 function addToRoster(role, name) {
   const proj = getProject(activeProjectId);
   if (!proj) return;
@@ -4327,6 +4335,7 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
       if (!task.attendees) task.attendees = [];
       task.attendees.push({ id: genId(), role, category, person: prefillPerson, color });
       addToRoster(role, prefillPerson); // adds to roster + records name history
+      maybeAutoLeadProducer(proj, role, prefillPerson);
       saveState();
       renderCalendar();
       renderPalette();
@@ -4454,6 +4463,7 @@ function savePanel() {
       person, taskName, loe,
       color: panelContext.color
     });
+    if (person) maybeAutoLeadProducer(proj, panelContext.role, person);
 
   } else if (panelContext.mode === 'edit') {
     // Blank stays null so the verb shows as a ghosted placeholder (not stored text)
@@ -4488,6 +4498,7 @@ function savePanel() {
         color: panelContext.color
       });
       if (person) addToRoster(panelContext.role, person); // promote to solid roster member
+      if (person) maybeAutoLeadProducer(proj, panelContext.role, person);
     }
 
   } else if (panelContext.mode === 'edit-duedate') {
