@@ -620,6 +620,9 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
       </div>
       <a href="ops.html" target="_blank" class="data-mig-btn" title="Ops mode — team workload view">📊 Ops</a>
       <a href="dash.html" target="_blank" class="data-mig-btn" title="Personal dashboard view">📋 Dash</a>
+      <!-- TEMP: one-time lead-producer backfill — remove this button + input after use -->
+      <button class="data-mig-btn" id="btnBackfillLP" title="One-time: upload the Excel to set lead producers on all matching projects" style="flex:1 0 100%; color:#e0a93f; border-color:#e0a93f;">⬆ Backfill Lead Producers (temp)</button>
+      <input type="file" id="backfillLPInput" accept=".xlsx,.xls" style="display:none">
       <input type="file" id="importFileInput" accept=".json" style="display:none">
       <input type="file" id="excelImportInput" accept=".xlsx,.xls" style="display:none">
     </div>
@@ -1975,6 +1978,18 @@ function wireSettingsModal() {
       this.value = '';
     });
   }
+  // TEMP: one-time lead-producer backfill — remove this block after use.
+  const blpBtn = document.getElementById('btnBackfillLP');
+  const blpInput = document.getElementById('backfillLPInput');
+  if (blpBtn && blpInput) {
+    blpBtn.addEventListener('click', () => blpInput.click());
+    blpInput.addEventListener('change', function() {
+      const file = this.files[0];
+      if (!file) return;
+      handleLeadProducerBackfill(file);
+      this.value = '';
+    });
+  }
   const xlClose  = document.getElementById('excelReviewClose');
   const xlCancel = document.getElementById('excelReviewCancel');
   const xlOk     = document.getElementById('excelReviewConfirm');
@@ -2232,6 +2247,57 @@ const XL_GRID_COLS = [
 const XL_STATUS_OPTIONS = ['New','Draft','Pending-Approval','Pending-Fulfillment','On Hold','Resolved-COERejected'];
 
 let _xlReviewRows = [];   // candidate rows currently shown in the review overlay
+
+// ── TEMP: one-time lead-producer backfill — remove this whole function after use.
+// Reads the Excel, then sets leadProducer on EVERY existing project whose Case ID
+// matches a row that has a First/Last name (overwrites any current value).
+function handleLeadProducerBackfill(file) {
+  if (typeof XLSX === 'undefined') { alert('Excel parser failed to load (xlsx.full.min.js).'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    let wb;
+    try { wb = XLSX.read(e.target.result, { type: 'array', cellDates: true }); }
+    catch (err) { alert('Could not read that file as Excel.\n' + err); return; }
+    const ws = wb.Sheets['Data'] || wb.Sheets[wb.SheetNames[0]];
+    if (!ws) { alert('No data sheet found in the workbook.'); return; }
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: '' });
+    if (!rows.length) { alert('The sheet appears to be empty.'); return; }
+
+    const header = rows[0];
+    const idxToKey = {};
+    header.forEach((h, i) => { const k = XL_COLUMN_MAP[xlNormHeader(h)]; if (k) idxToKey[i] = k; });
+    if (Object.values(idxToKey).indexOf('ticketId') === -1) {
+      alert('Could not find a "Case ID" column in the sheet.'); return;
+    }
+
+    // Build Case ID → "First Last" map from the file.
+    const producerByTicket = {};
+    for (let r = 1; r < rows.length; r++) {
+      const cells = rows[r], o = {};
+      Object.keys(idxToKey).forEach(i => { o[idxToKey[i]] = (cells[i] == null ? '' : String(cells[i])).trim(); });
+      const tid = (o.ticketId || '').trim();
+      const producer = [o.firstName, o.lastName].filter(Boolean).join(' ').trim();
+      if (tid && producer) producerByTicket[tid] = producer;
+    }
+
+    let updated = 0, matched = 0;
+    state.projects.forEach(p => {
+      const tid = (p.ticketId || '').trim();
+      if (!tid || !producerByTicket[tid]) return;
+      matched++;
+      if (p.leadProducer !== producerByTicket[tid]) { p.leadProducer = producerByTicket[tid]; updated++; }
+    });
+
+    saveState();
+    renderSidebar();
+    if (typeof exportOpen !== 'undefined' && exportOpen) renderExportPanel();
+    alert('Lead-producer backfill complete.\n\n' +
+      Object.keys(producerByTicket).length + ' producer entries in file\n' +
+      matched + ' matching project(s) found\n' +
+      updated + ' project(s) updated.');
+  };
+  reader.readAsArrayBuffer(file);
+}
 
 function handleExcelImport(file) {
   if (typeof XLSX === 'undefined') { alert('Excel parser failed to load (xlsx.full.min.js).'); return; }
