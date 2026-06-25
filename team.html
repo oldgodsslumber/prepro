@@ -83,6 +83,20 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .data-migration { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--border); flex-shrink: 0; }
 .data-mig-btn { flex: 1; font-size: 10px; font-weight: 600; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 5px 4px; cursor: pointer; transition: color .15s, border-color .15s; text-align: center; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
 .data-mig-btn:hover { color: var(--text); border-color: var(--accent); }
+/* ── PROJECT FILTER (sidebar footer) ── */
+.proj-filter { flex: 1 0 100%; display: flex; flex-direction: column; gap: 5px; }
+.proj-filter-row { display: flex; gap: 5px; align-items: center; }
+.proj-filter-input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; color: var(--text); font-size: 11px; outline: none; transition: border-color .15s; }
+.proj-filter-input:focus { border-color: var(--accent); }
+.proj-filter-clear { background: var(--card); border: 1px solid var(--border); border-radius: 6px; color: var(--dim); font-size: 11px; cursor: pointer; padding: 5px 8px; }
+.proj-filter-clear:hover { color: var(--text); border-color: var(--accent); }
+.proj-filter-check { display: flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; color: var(--dim); cursor: pointer; user-select: none; }
+.proj-filter-check input { accent-color: var(--accent); cursor: pointer; }
+/* ── LEAD PRODUCER DROP BOX (Role Assignees) ── */
+.lead-producer-box { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-height: 30px; border: 1.5px dashed var(--border); border-radius: 6px; padding: 5px 8px; transition: border-color .12s, background .12s; }
+.lead-producer-box.drag-over { border-color: var(--accent); border-style: solid; background: rgba(108,99,255,.10); }
+.lead-producer-box .lp-placeholder { font-size: 11px; color: var(--dim); font-style: italic; }
+.lead-producer-box .lp-inferred { font-size: 10px; color: var(--dim); }
 
 /* ── SETTINGS MODAL ── */
 .settings-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 9999; display: flex; align-items: center; justify-content: center; }
@@ -590,10 +604,21 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
       <div class="completed-tree" id="completedTree"></div>
     </div>
     <div class="data-migration">
-      <a href="guide.html" target="_blank" class="data-mig-btn" title="Open guide">❓ Help</a>
+      <div class="proj-filter">
+        <div class="proj-filter-row">
+          <input type="text" id="projFilterName" class="proj-filter-input" placeholder="Filter by name…" list="projFilterNames" autocomplete="off" title="Show only projects this person is attached to">
+          <datalist id="projFilterNames"></datalist>
+          <button class="proj-filter-clear" id="projFilterClear" title="Clear filter">✕</button>
+        </div>
+        <label class="proj-filter-check" title="Show only projects where this person is the lead producer">
+          <input type="checkbox" id="projFilterLeadOnly"> Lead producer only
+        </label>
+      </div>
       <a href="ops.html" target="_blank" class="data-mig-btn" title="Ops mode — team workload view">📊 Ops</a>
       <a href="dash.html" target="_blank" class="data-mig-btn" title="Personal dashboard view">📋 Dash</a>
       <button class="data-mig-btn" id="btnSettings" title="Settings: import/export data, manage people">⚙ Settings</button>
+      <!-- Admin button (auth.js docks the admin-only invite/approve button here for the admin) -->
+      <div id="pp-admin-slot" style="flex:1 0 100%;"></div>
       <input type="file" id="importFileInput" accept=".json" style="display:none">
       <input type="file" id="excelImportInput" accept=".xlsx,.xls" style="display:none">
     </div>
@@ -700,8 +725,6 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
     <div class="tools-rail-tab" data-tab="invites-web"><span class="tr-icon">🌐</span>Invite</div>
     <div class="tools-rail-tab" data-tab="notes"><span class="tr-icon">📝</span>Notes</div>
     <div class="tools-rail-tab" data-tab="cea"><span class="tr-icon">🔗</span>CEA</div>
-    <!-- Admin button (auth.js docks the admin-only invite/approve button here for the admin) -->
-    <div id="pp-admin-slot" style="margin-top:auto;padding:6px 6px 2px;"></div>
   </div>
 </div>
 
@@ -826,6 +849,16 @@ const DOW_WD   = ['Mon','Tue','Wed','Thu','Fri'];
 let state = { projects: [] };
 let activeProjectId = null;
 let viewStart       = null; // YYYY-MM-DD of first visible day
+// Sidebar filter: show only projects a given person is attached to (optionally
+// only those where they are the lead producer). Persisted across reloads.
+let filterPerson   = (() => { try { return localStorage.getItem('prepro_filter_person') || ''; } catch(_) { return ''; } })();
+let filterLeadOnly = (() => { try { return localStorage.getItem('prepro_filter_leadonly') === '1'; } catch(_) { return false; } })();
+function saveFilter() {
+  try {
+    localStorage.setItem('prepro_filter_person', filterPerson);
+    localStorage.setItem('prepro_filter_leadonly', filterLeadOnly ? '1' : '0');
+  } catch(_) {}
+}
 let expandedIds     = (() => {
   try { return new Set(JSON.parse(localStorage.getItem('prepro_expanded_ids') || '[]')); }
   catch(_) { return new Set(); }
@@ -1875,6 +1908,31 @@ function renderPeopleSettings(c) {
 function wireSettingsModal() {
   const btn = document.getElementById('btnSettings');
   if (btn) btn.addEventListener('click', () => openSettings('data'));
+
+  // ── Sidebar project filter ──
+  const filterInput    = document.getElementById('projFilterName');
+  const filterLeadCb   = document.getElementById('projFilterLeadOnly');
+  const filterClearBtn = document.getElementById('projFilterClear');
+  if (filterInput)  filterInput.value = filterPerson;
+  if (filterLeadCb) filterLeadCb.checked = filterLeadOnly;
+  if (filterInput) filterInput.addEventListener('input', () => {
+    filterPerson = filterInput.value;
+    saveFilter();
+    renderSidebar();
+  });
+  if (filterLeadCb) filterLeadCb.addEventListener('change', () => {
+    filterLeadOnly = filterLeadCb.checked;
+    saveFilter();
+    renderSidebar();
+  });
+  if (filterClearBtn) filterClearBtn.addEventListener('click', () => {
+    filterPerson = '';
+    filterLeadOnly = false;
+    if (filterInput)  filterInput.value = '';
+    if (filterLeadCb) filterLeadCb.checked = false;
+    saveFilter();
+    renderSidebar();
+  });
   const closeBtn = document.getElementById('settingsClose');
   if (closeBtn) closeBtn.addEventListener('click', closeSettings);
   const overlay = document.getElementById('settingsOverlay');
@@ -2104,7 +2162,8 @@ function buildProjectFromRow(row) {
 
   return {
     id: genId(), name, parentId: null, tasks, roster, dueDate: null, notes,
-    ticketId: ticketId || null, ticketUrl: null, leadProducer: null,
+    ticketId: ticketId || null, ticketUrl: null,
+    leadProducer: (row.producer || '').trim() || null,
     function: null, videoType: (row.videoType || '').trim() || null,
     targetAudience: (row.targetAudience || '').trim() || null, budget: null,
     synopsis: (row.synopsis || '').trim() || null,
@@ -2134,7 +2193,9 @@ const XL_COLUMN_MAP = {
   'targetaudience':            'targetAudience',
   'targetaudiencedescription': 'audienceDescription',
   'casestatus':                'caseStatus',
-  'createdatetime':            'createDate'
+  'createdatetime':            'createDate',
+  'firstname':                 'firstName',
+  'lastname':                  'lastName'
 };
 function xlNormHeader(h) { return String(h == null ? '' : h).toLowerCase().replace(/[^a-z0-9]/g, ''); }
 
@@ -2142,6 +2203,7 @@ function xlNormHeader(h) { return String(h == null ? '' : h).toLowerCase().repla
 const XL_GRID_COLS = [
   { key: 'ticketId',            label: 'Case ID',     type: 'text' },
   { key: 'caseStatus',          label: 'Status',      type: 'status' },
+  { key: 'producer',            label: 'Lead Producer', type: 'text' },
   { key: 'label',               label: 'Label',       type: 'text' },
   { key: 'dueDateRaw',          label: 'Due Date',    type: 'date' },
   { key: 'videoType',           label: 'Type',        type: 'text' },
@@ -2192,25 +2254,45 @@ function handleExcelImport(file) {
         else v = (v == null ? '' : String(v)).trim();
         obj[key] = v;
       });
+      // Combine the producer's First/Last name columns into a single name.
+      obj.producer = [obj.firstName, obj.lastName].filter(Boolean).join(' ').trim();
       if ((obj.ticketId || '').trim()) candidates.push(obj);
     }
 
     // Cross-check against existing projects (dedup by Case ID / ticketId).
-    const existing = new Set(state.projects.map(p => (p.ticketId || '').trim()).filter(Boolean));
+    const byTicket = {};
+    state.projects.forEach(p => { const t = (p.ticketId || '').trim(); if (t) byTicket[t] = p; });
     const newRows = [], skipped = [];
-    candidates.forEach(o => { (existing.has(o.ticketId.trim()) ? skipped : newRows).push(o); });
+    let backfilled = 0;
+    candidates.forEach(o => {
+      const existing = byTicket[o.ticketId.trim()];
+      if (existing) {
+        // Already imported — but backfill the lead producer if we now have one
+        // from the Excel and the project doesn't have one set yet.
+        if (o.producer && !existing.leadProducer) { existing.leadProducer = o.producer; backfilled++; }
+        skipped.push(o);
+      } else {
+        newRows.push(o);
+      }
+    });
+    if (backfilled) {
+      saveState();
+      renderSidebar();
+      if (exportOpen) renderExportPanel();
+    }
 
-    openExcelReview(newRows, candidates.length, skipped.length);
+    openExcelReview(newRows, candidates.length, skipped.length, backfilled);
   };
   reader.readAsArrayBuffer(file);
 }
 
-function openExcelReview(newRows, totalRows, skippedCount) {
+function openExcelReview(newRows, totalRows, skippedCount, backfilledCount) {
   _xlReviewRows = newRows.map(o => Object.assign({ _selected: true }, o));
 
   const summary = document.getElementById('excelReviewSummary');
   summary.innerHTML = '<b>' + totalRows + '</b> rows in file · <b>' + skippedCount +
-    '</b> already in app (skipped) · <b>' + _xlReviewRows.length + '</b> new';
+    '</b> already in app (skipped) · <b>' + _xlReviewRows.length + '</b> new' +
+    (backfilledCount ? ' · <b>' + backfilledCount + '</b> lead producer' + (backfilledCount === 1 ? '' : 's') + ' backfilled' : '');
 
   const wrap = document.getElementById('excelReviewGridWrap');
   wrap.innerHTML = '';
@@ -2419,13 +2501,51 @@ function deleteNote(projectId, noteId) {
 let completedOpen = false;
 
 // ── SIDEBAR ──
+// Is `name` the lead producer of this project? Uses the explicit lead producer
+// when set, otherwise the inferred most-used producer.
+function isLeadProducer(proj, name) {
+  const lead = getMostUsedProducer(proj);
+  return !!lead && lead.toLowerCase() === name;
+}
+// Is `name` attached to this project at all — roster member, task person/attendee,
+// or lead producer?
+function isPersonOnProject(proj, name) {
+  const roster = proj.roster || {};
+  for (const role in roster) {
+    if ((roster[role] || []).some(x => (x || '').toLowerCase() === name)) return true;
+  }
+  for (const t of (proj.tasks || [])) {
+    if ((t.person || '').toLowerCase() === name) return true;
+    for (const a of (t.attendees || [])) {
+      if ((a.person || '').toLowerCase() === name) return true;
+    }
+  }
+  return isLeadProducer(proj, name);
+}
+// Does this project match the active sidebar filter? (No filter → always true.)
+function projectMatchesFilter(proj) {
+  const q = filterPerson.trim().toLowerCase();
+  if (!q) return true;
+  return filterLeadOnly ? isLeadProducer(proj, q) : isPersonOnProject(proj, q);
+}
+// A project stays visible if it OR any descendant matches (so parents of a match
+// aren't hidden and the tree path is preserved).
+function subtreeMatchesFilter(proj) {
+  if (projectMatchesFilter(proj)) return true;
+  return getChildren(proj.id).some(child => subtreeMatchesFilter(child));
+}
+
 function renderSidebar() {
+  // Refresh the filter datalist with everyone we know about.
+  const dl = document.getElementById('projFilterNames');
+  if (dl) dl.innerHTML = collectAllPeople().map(p => '<option value="' + p.name.replace(/"/g, '&quot;') + '">').join('');
+
   const tree = document.getElementById('sidebarTree');
   tree.innerHTML = '';
   renderTreeLevel(null, 0, tree);
 
   // Completed section
-  const completed = state.projects.filter(p => p.completed && (!p.parentId || !isEffectivelyCompleted(p.parentId)));
+  const completed = state.projects.filter(p => p.completed && (!p.parentId || !isEffectivelyCompleted(p.parentId)) && projectMatchesFilter(p));
   const section   = document.getElementById('completedSection');
   const ctree     = document.getElementById('completedTree');
   const count     = document.getElementById('completedCount');
@@ -2460,7 +2580,7 @@ function renderSidebar() {
 }
 
 function renderTreeLevel(parentId, depth, container) {
-  getChildren(parentId).filter(p => !isEffectivelyCompleted(p.id)).forEach(proj => {
+  getChildren(parentId).filter(p => !isEffectivelyCompleted(p.id) && subtreeMatchesFilter(p)).forEach(proj => {
     const hasKids     = getChildren(proj.id).length > 0;
     const isCollapsed = !expandedIds.has(proj.id);
 
@@ -4693,6 +4813,86 @@ function renderRosterInto(content) {
   topBar.appendChild(mgrBtn);
   wrap.appendChild(topBar);
 
+  // ── Lead Producer drop box ──
+  // Drag any assigned/suggested name (or a name from another role) into this box
+  // to mark them as the lead producer for the project.
+  const proj = getProject(activeProjectId);
+  if (proj) {
+    const lpSection = document.createElement('div');
+    lpSection.className = 'roster-role';
+    lpSection.style.flexBasis = '100%';
+
+    const lpLbl = document.createElement('div');
+    lpLbl.className = 'roster-role-label';
+    lpLbl.textContent = 'Lead Producer';
+    lpSection.appendChild(lpLbl);
+
+    const box = document.createElement('div');
+    box.className = 'lead-producer-box';
+
+    const renderLPBox = () => {
+      box.innerHTML = '';
+      if (proj.leadProducer) {
+        const chip = document.createElement('div');
+        chip.className = 'roster-name-chip';
+        chip.title = 'Click to clear the lead producer';
+        const nm = document.createElement('span');
+        nm.textContent = proj.leadProducer;
+        chip.appendChild(nm);
+        const x = document.createElement('span');
+        x.className = 'remove-x';
+        x.textContent = '✕';
+        chip.appendChild(x);
+        chip.addEventListener('click', e => {
+          e.stopPropagation();
+          proj.leadProducer = null;
+          saveState();
+          renderExportPanel();
+          renderSidebar();
+        });
+        box.appendChild(chip);
+      } else {
+        const ph = document.createElement('span');
+        ph.className = 'lp-placeholder';
+        ph.textContent = 'Drag a name here to set the lead producer';
+        box.appendChild(ph);
+        const inferred = getMostUsedProducer(proj);
+        if (inferred) {
+          const note = document.createElement('span');
+          note.className = 'lp-inferred';
+          note.textContent = '(currently inferred: ' + inferred + ')';
+          box.appendChild(note);
+        }
+      }
+    };
+    renderLPBox();
+
+    box.addEventListener('dragover', e => {
+      if (dragPayload && dragPayload.type === 'person') {
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+        box.classList.add('drag-over');
+      }
+    });
+    box.addEventListener('dragleave', e => {
+      if (e.relatedTarget && box.contains(e.relatedTarget)) return;
+      box.classList.remove('drag-over');
+    });
+    box.addEventListener('drop', e => {
+      box.classList.remove('drag-over');
+      if (!dragPayload || dragPayload.type !== 'person' || !dragPayload.person) return;
+      e.preventDefault();
+      proj.leadProducer = dragPayload.person;
+      dragPayload = null;
+      saveState();
+      renderExportPanel();
+      renderSidebar();
+    });
+
+    lpSection.appendChild(box);
+    wrap.appendChild(lpSection);
+  }
+
   ROSTER_GROUPS.forEach(group => {
     const names = getGroupNames(group);
     const suggestions = getGroupSuggestions(group);
@@ -5114,6 +5314,21 @@ function openCEA(proj) {
     .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16)))
     .replace(/&amp;/gi, '&');
   window.open(url, '_blank');
+}
+
+// Build the deep-link to a specific video's CreateVideo case in CEA, derived from
+// the project's Case ID (the V-code, e.g. "V-701355"). Falls back to the general
+// CampaignExecution landing page if no V-code is present.
+const CEA_BASE = 'https://corporateexpress.pegacloud.io/prweb/sso/app/CampaignExecution';
+function ceaVideoUrl(proj) {
+  const id = (proj && proj.ticketId != null) ? String(proj.ticketId) : '';
+  const m = id.match(/V-?\s*(\d+)/i);
+  return m ? CEA_BASE + '/CreateVideo/V-' + m[1] : CEA_BASE;
+}
+
+// The side-rail CEA button routes straight to this project's CreateVideo case.
+function openCEAVideo(proj) {
+  window.open(ceaVideoUrl(proj), '_blank');
 }
 
 // First tab: the key ticket data (top) merged with Role Assignees (bottom).
@@ -6179,7 +6394,7 @@ function setupInitListeners() {
   railTabs.forEach(tab => {
     tab.addEventListener('click', () => {
       const name = tab.dataset.tab;
-      if (name === 'cea') { openCEA(getProject(activeProjectId)); return; }
+      if (name === 'cea') { openCEAVideo(getProject(activeProjectId)); return; }
       if (exportOpen && exportTabActive === name) { collapseTools(); return; }
       openToolsTab(name);
     });
