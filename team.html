@@ -3270,7 +3270,10 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghostInfo, showMonthLabel)
       // taskName stays null so the verb shows as a ghosted, non-stored placeholder.
       const proj = getProject(activeProjectId);
       if (!proj) return;
-      proj.tasks.push({ id: genId(), date: dateStr, role: pl.role, roleCategory: pl.category, color: pl.color, taskName: null, loe: 'low', attendees: [] });
+      // A new Producer block defaults its assignee to the project's lead producer
+      // (when one is set) so producing chips aren't blank. Other roles stay empty.
+      const autoPerson = (pl.role || '').toLowerCase() === 'producer' ? (proj.leadProducer || null) : null;
+      proj.tasks.push({ id: genId(), date: dateStr, role: pl.role, roleCategory: pl.category, color: pl.color, person: autoPerson, taskName: null, loe: 'low', attendees: [] });
       saveState(); renderCalendar(); if (exportOpen) renderExportPanel();
     }
   });
