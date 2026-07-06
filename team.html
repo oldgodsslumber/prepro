@@ -210,6 +210,10 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
 .completed-tree.visible { display: block; }
 .tree-node.done .tree-label { text-decoration: line-through; opacity: .55; }
 .tree-node.done.active .tree-label { opacity: 1; }
+.tree-node.onhold .tree-label { opacity: .6; }
+.tree-node.onhold.active .tree-label { opacity: 1; }
+.tree-node.cancelled .tree-label { text-decoration: line-through; opacity: .45; font-style: italic; }
+.tree-node.cancelled.active .tree-label { opacity: 1; }
 .tree-node.ghost .tree-label { opacity: .45; font-style: italic; }
 .tree-node.ghost .tree-label::after { content: ' 👻'; font-style: normal; }
 .tree-node.ghost.active .tree-label { opacity: 1; }
@@ -606,6 +610,22 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
         <span class="completed-count" id="completedCount">0</span>
       </div>
       <div class="completed-tree" id="completedTree"></div>
+    </div>
+    <div class="completed-section" id="onHoldSection" style="display:none">
+      <div class="completed-toggle" id="onHoldToggle">
+        <span class="chev">▲</span>
+        <span>On Hold</span>
+        <span class="completed-count" id="onHoldCount">0</span>
+      </div>
+      <div class="completed-tree" id="onHoldTree"></div>
+    </div>
+    <div class="completed-section" id="cancelledSection" style="display:none">
+      <div class="completed-toggle" id="cancelledToggle">
+        <span class="chev">▲</span>
+        <span>Cancelled</span>
+        <span class="completed-count" id="cancelledCount">0</span>
+      </div>
+      <div class="completed-tree" id="cancelledTree"></div>
     </div>
     <div class="data-migration">
       <div class="proj-filter">
@@ -1174,13 +1194,22 @@ function mergeProjects(alphaId, betaIds, fieldChoices) {
   if (!alpha.tasks)  alpha.tasks  = [];
   if (!alpha.notes)  alpha.notes  = [];
   if (!alpha.roster) alpha.roster = {};
-  const wasCompleted = !!alpha.completed;
+  // Track the strongest inactive status across everything being merged, so the
+  // result inherits it. Precedence: completed > on-hold > cancelled.
+  const STATUS_PRECEDENCE = ['completed', 'onhold', 'cancelled'];
+  const wasStatus = projStatus(alpha);
+  let mergedStatus = wasStatus;
+  const strongerStatus = (a, b) => {
+    const ia = a === 'active' ? Infinity : STATUS_PRECEDENCE.indexOf(a);
+    const ib = b === 'active' ? Infinity : STATUS_PRECEDENCE.indexOf(b);
+    return ia <= ib ? a : b;
+  };
   betaIds.forEach(bid => {
     if (bid === alphaId) return;
     const beta = getProject(bid);
     if (!beta) return;
-    // If any project in the merge is complete, the merged result is complete too.
-    if (beta.completed) alpha.completed = true;
+    // Merged result inherits the strongest inactive status of any project in the merge.
+    mergedStatus = strongerStatus(mergedStatus, projStatus(beta));
     const nT = (beta.tasks || []).length, nN = (beta.notes || []).length;
     // Schedules (tasks)
     (beta.tasks || []).forEach(t => alpha.tasks.push(t));
@@ -1203,7 +1232,13 @@ function mergeProjects(alphaId, betaIds, fieldChoices) {
   if (fieldChoices) Object.entries(fieldChoices).forEach(([k, v]) => {
     if (v != null && v !== '') alpha[k] = v;
   });
-  if (!wasCompleted && alpha.completed) addSystemNote(alphaId, 'Marked complete — merged in a completed project');
+  // Apply the inherited status to the merged result.
+  alpha.completed = mergedStatus === 'completed';
+  alpha.onHold    = mergedStatus === 'onhold';
+  alpha.cancelled = mergedStatus === 'cancelled';
+  if (mergedStatus !== wasStatus && mergedStatus !== 'active') {
+    addSystemNote(alphaId, STATUS_META[mergedStatus].mark + ' ' + STATUS_META[mergedStatus].label + ' — inherited from a merged-in project');
+  }
   saveState();
 }
 
@@ -1427,7 +1462,7 @@ function renderMergeSettings(c) {
       radio.type = 'radio'; radio.name = 'mergeAlphaPick'; radio.checked = alphaId === p.id;
       radio.addEventListener('change', () => { alphaId = p.id; betaSet.delete(p.id); renderAlpha(); renderBeta(); });
       const nm = document.createElement('span'); nm.className = 'mname';
-      nm.textContent = p.name + (p.completed ? ' (completed)' : '');
+      nm.textContent = p.name + statusTag(p);
       const meta = document.createElement('span'); meta.className = 'merge-meta'; meta.textContent = projMeta(p);
       row.appendChild(radio); row.appendChild(nm); row.appendChild(meta);
       alphaCol.grid.appendChild(row);
@@ -1453,7 +1488,7 @@ function renderMergeSettings(c) {
         renderBeta(); renderAlpha();
       });
       const nm = document.createElement('span'); nm.className = 'mname';
-      nm.textContent = p.name + (p.completed ? ' (completed)' : '');
+      nm.textContent = p.name + statusTag(p);
       const meta = document.createElement('span'); meta.className = 'merge-meta'; meta.textContent = projMeta(p);
       row.appendChild(cb); row.appendChild(nm); row.appendChild(meta);
       betaCol.grid.appendChild(row);
@@ -1555,7 +1590,7 @@ function renderMergeSettings(c) {
         radio.addEventListener('change', () => { keeperId = p.id; });
         const nm = document.createElement('span');
         nm.className = 'merge-conflict-val';
-        nm.textContent = p.name + (p.completed ? ' ✓' : '');
+        nm.textContent = p.name + (projStatus(p) !== 'active' ? ' ' + STATUS_META[projStatus(p)].mark : '');
         const meta = document.createElement('span');
         meta.className = 'merge-conflict-src';
         meta.textContent = projMeta(p);
@@ -2458,39 +2493,64 @@ function deleteProject(id) {
   saveState();
 }
 
-function isEffectivelyCompleted(id) {
+// ── PROJECT STATUS ──
+// A project can be active, or one of three inactive states: completed, on-hold,
+// cancelled. Inactive projects are hidden from the active tree/calendar and live
+// in their own collapsible sidebar section.
+const STATUS_META = {
+  completed: { flag: 'completed', label: 'Completed', tag: '(completed)', mark: '✓', cls: 'done',      verb: 'marked as complete' },
+  onhold:    { flag: 'onHold',    label: 'On Hold',   tag: '(on hold)',   mark: '⏸', cls: 'onhold',    verb: 'put on hold' },
+  cancelled: { flag: 'cancelled', label: 'Cancelled', tag: '(cancelled)', mark: '⊘', cls: 'cancelled', verb: 'cancelled' },
+};
+function isInactive(proj) { return !!(proj && (proj.completed || proj.onHold || proj.cancelled)); }
+function projStatus(proj) {
+  if (!proj) return 'active';
+  if (proj.completed) return 'completed';
+  if (proj.onHold)    return 'onhold';
+  if (proj.cancelled) return 'cancelled';
+  return 'active';
+}
+function statusTag(proj) {
+  const s = projStatus(proj);
+  return s === 'active' ? '' : ' ' + STATUS_META[s].tag;
+}
+function isEffectivelyInactive(id) {
   const proj = getProject(id);
   if (!proj) return false;
-  if (proj.completed) return true;
-  if (proj.parentId) return isEffectivelyCompleted(proj.parentId);
+  if (isInactive(proj)) return true;
+  if (proj.parentId) return isEffectivelyInactive(proj.parentId);
   return false;
 }
-function getActiveRootProjects() { return getRootProjects().filter(p => !p.completed); }
+// Back-compat alias (some callers still ask specifically "is this hidden?").
+function isEffectivelyCompleted(id) { return isEffectivelyInactive(id); }
+function getActiveRootProjects() { return getRootProjects().filter(p => !isInactive(p)); }
 
-function completeProject(id) {
-  // Mark project + all descendants as completed
+// Move a project (and its whole subtree) to `status` ('completed' | 'onhold' |
+// 'cancelled' | 'active'). Restoring to 'active' also clears any inactive
+// ancestors so the tree stays reachable.
+function setProjectStatus(id, status) {
   const all = [id, ...getDescendantIds(id)];
-  all.forEach(pid => { const p = getProject(pid); if (p) p.completed = true; });
-  addSystemNote(id, 'Project marked as complete');
-  if (activeProjectId && all.includes(activeProjectId)) {
+  if (status === 'active') {
+    let cur = getProject(id);
+    while (cur && cur.parentId) {
+      cur = getProject(cur.parentId);
+      if (cur && isInactive(cur)) all.push(cur.id);
+    }
+  }
+  all.forEach(pid => {
+    const p = getProject(pid);
+    if (!p) return;
+    p.completed = status === 'completed';
+    p.onHold    = status === 'onhold';
+    p.cancelled = status === 'cancelled';
+  });
+  addSystemNote(id, status === 'active' ? 'Project restored to active' : 'Project ' + STATUS_META[status].verb);
+  if (status === 'active') {
+    activeProjectId = id;
+  } else if (activeProjectId && all.includes(activeProjectId)) {
     const r = getActiveRootProjects();
     activeProjectId = r.length ? r[0].id : null;
   }
-  saveState();
-}
-
-function restoreProject(id) {
-  // Restore project + all descendants (and any completed ancestors needed)
-  const all = [id, ...getDescendantIds(id)];
-  // Also restore any completed ancestors so the tree is valid
-  let cur = getProject(id);
-  while (cur && cur.parentId) {
-    cur = getProject(cur.parentId);
-    if (cur && cur.completed) all.push(cur.id);
-  }
-  all.forEach(pid => { const p = getProject(pid); if (p) p.completed = false; });
-  addSystemNote(id, 'Project restored from completed');
-  activeProjectId = id;
   saveState();
 }
 
@@ -2524,7 +2584,7 @@ function deleteNote(projectId, noteId) {
   if (exportOpen) renderExportPanel();
 }
 
-let completedOpen = false;
+let completedOpen = false, onHoldOpen = false, cancelledOpen = false;
 
 // ── SIDEBAR ──
 // Is `name` the lead producer of this project? Uses the explicit lead producer
@@ -2570,22 +2630,33 @@ function renderSidebar() {
   tree.innerHTML = '';
   renderTreeLevel(null, 0, tree);
 
-  // Completed section
-  const completed = state.projects.filter(p => p.completed && (!p.parentId || !isEffectivelyCompleted(p.parentId)) && projectMatchesFilter(p));
-  const section   = document.getElementById('completedSection');
-  const ctree     = document.getElementById('completedTree');
-  const count     = document.getElementById('completedCount');
-  section.style.display = completed.length ? '' : 'none';
-  count.textContent = completed.length;
-  ctree.innerHTML = '';
-  completed.forEach(proj => {
+  // Inactive sections (Completed / On Hold / Cancelled)
+  renderStatusSection('completed', 'completedSection', 'completedTree', 'completedCount');
+  renderStatusSection('onhold',    'onHoldSection',    'onHoldTree',    'onHoldCount');
+  renderStatusSection('cancelled', 'cancelledSection', 'cancelledTree', 'cancelledCount');
+}
+
+function renderStatusSection(status, sectionId, treeId, countId) {
+  const meta = STATUS_META[status];
+  // Top-most nodes of this status (whose parent isn't itself inactive).
+  const list = state.projects.filter(p =>
+    projStatus(p) === status &&
+    (!p.parentId || !isEffectivelyInactive(p.parentId)) &&
+    projectMatchesFilter(p));
+  const section = document.getElementById(sectionId);
+  const tree    = document.getElementById(treeId);
+  const count   = document.getElementById(countId);
+  section.style.display = list.length ? '' : 'none';
+  count.textContent = list.length;
+  tree.innerHTML = '';
+  list.forEach(proj => {
     const node = document.createElement('div');
-    node.className = 'tree-node done' + (proj.id === activeProjectId ? ' active' : '');
+    node.className = 'tree-node ' + meta.cls + (proj.id === activeProjectId ? ' active' : '');
     node.style.paddingLeft = '8px';
     node.dataset.id = proj.id;
     const lbl = document.createElement('span');
     lbl.className = 'tree-label';
-    lbl.textContent = '✓ ' + proj.name;
+    lbl.textContent = meta.mark + ' ' + proj.name;
     const more = document.createElement('button');
     more.className = 'tree-more';
     more.textContent = '···';
@@ -2601,7 +2672,7 @@ function renderSidebar() {
       if (exportOpen) renderExportPanel();
     });
     node.addEventListener('contextmenu', e => { e.preventDefault(); openContextMenu(e, proj.id); });
-    ctree.appendChild(node);
+    tree.appendChild(node);
   });
 }
 
@@ -2946,7 +3017,7 @@ function buildGhostInfo() {
   };
 
   state.projects.forEach(p => {
-    if (p.id === activeProjectId || p.completed || p.ghost) return;
+    if (p.id === activeProjectId || isInactive(p) || p.ghost) return;
     (p.tasks || []).forEach(t => {
       if (t.isDueDate && t.milestoneType !== 'pto') return; // allow PTO through
       const endDate = t.endDate || t.date;
@@ -4467,21 +4538,29 @@ function openContextMenu(e, projectId) {
   const menu = document.getElementById('ctxMenu');
   menu.innerHTML = '';
   const proj = getProject(projectId);
-  const isDone = isEffectivelyCompleted(projectId);
-  const items = isDone
-    ? [
-        { label: '↩ Restore',  action: 'restore' },
-        { label: 'Delete',     action: 'delete', danger: true }
-      ]
-    : [
-        { label: 'Rename',         action: 'rename' },
-        { label: 'Duplicate',      action: 'duplicate' },
-        { label: 'Add Subproject', action: 'addSub' },
-        { label: 'Add Subfolder',  action: 'addSubFolder' },
-        { label: proj.ghost ? '👁 Show in Ops' : '👻 Ghost (hide from Ops)', action: 'ghost' },
-        { label: '✓ Complete',     action: 'complete' },
-        { label: 'Delete',         action: 'delete', danger: true }
-      ];
+  const status = projStatus(proj);
+  const isDone = isEffectivelyInactive(projectId);
+  let items;
+  if (isDone) {
+    // Inactive project: undo back to active, or switch between inactive states.
+    items = [{ label: '↩ Undo — Restore to Active', action: 'restore' }];
+    ['completed', 'onhold', 'cancelled'].forEach(s => {
+      if (s !== status) items.push({ label: STATUS_META[s].mark + ' Move to ' + STATUS_META[s].label, action: 'status:' + s });
+    });
+    items.push({ label: 'Delete', action: 'delete', danger: true });
+  } else {
+    items = [
+      { label: 'Rename',         action: 'rename' },
+      { label: 'Duplicate',      action: 'duplicate' },
+      { label: 'Add Subproject', action: 'addSub' },
+      { label: 'Add Subfolder',  action: 'addSubFolder' },
+      { label: proj.ghost ? '👁 Show in Ops' : '👻 Ghost (hide from Ops)', action: 'ghost' },
+      { label: STATUS_META.completed.mark + ' Complete', action: 'status:completed' },
+      { label: STATUS_META.onhold.mark    + ' On Hold',  action: 'status:onhold' },
+      { label: STATUS_META.cancelled.mark + ' Cancel',   action: 'status:cancelled' },
+      { label: 'Delete',         action: 'delete', danger: true }
+    ];
+  }
   items.forEach(({ label, action, danger }) => {
     const item = document.createElement('div');
     item.className = 'ctx-item' + (danger ? ' danger' : '');
@@ -4489,8 +4568,8 @@ function openContextMenu(e, projectId) {
     item.addEventListener('click', () => { closeContextMenu(); handleContextAction(action, projectId); });
     menu.appendChild(item);
   });
-  menu.style.left = Math.min(e.clientX, window.innerWidth  - 160) + 'px';
-  menu.style.top  = Math.min(e.clientY, window.innerHeight - 110) + 'px';
+  menu.style.left = Math.min(e.clientX, window.innerWidth  - 200) + 'px';
+  menu.style.top  = Math.min(e.clientY, window.innerHeight - (items.length * 30 + 16)) + 'px';
   menu.classList.remove('hidden');
 }
 
@@ -4565,14 +4644,14 @@ function convertTask(taskId, newType) {
 }
 
 function handleContextAction(action, projectId) {
-  if (action === 'complete') {
-    completeProject(projectId);
+  if (action.startsWith('status:')) {
+    setProjectStatus(projectId, action.slice(7));
     calEarliestDate = null;
     renderSidebar();
     renderCalendar();
     if (exportOpen) renderExportPanel();
   } else if (action === 'restore') {
-    restoreProject(projectId);
+    setProjectStatus(projectId, 'active');
     calEarliestDate = null;
     renderSidebar();
     renderCalendar();
@@ -6391,12 +6470,17 @@ function setupInitListeners() {
   // ── SETTINGS MODAL ──
   wireSettingsModal();
 
-  // Completed section toggle
-  document.getElementById('completedToggle').addEventListener('click', () => {
-    completedOpen = !completedOpen;
-    document.getElementById('completedToggle').classList.toggle('open', completedOpen);
-    document.getElementById('completedTree').classList.toggle('visible', completedOpen);
-  });
+  // Inactive-section toggles (Completed / On Hold / Cancelled)
+  const wireStatusToggle = (toggleId, treeId, get, set) => {
+    document.getElementById(toggleId).addEventListener('click', () => {
+      set(!get());
+      document.getElementById(toggleId).classList.toggle('open', get());
+      document.getElementById(treeId).classList.toggle('visible', get());
+    });
+  };
+  wireStatusToggle('completedToggle', 'completedTree', () => completedOpen, v => completedOpen = v);
+  wireStatusToggle('onHoldToggle',    'onHoldTree',    () => onHoldOpen,    v => onHoldOpen = v);
+  wireStatusToggle('cancelledToggle', 'cancelledTree', () => cancelledOpen, v => cancelledOpen = v);
 
   // Dismiss context menu + type switcher
   document.addEventListener('click', e => {
