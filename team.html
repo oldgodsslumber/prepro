@@ -214,6 +214,8 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
 .tree-node.onhold.active .tree-label { opacity: 1; }
 .tree-node.cancelled .tree-label { text-decoration: line-through; opacity: .45; font-style: italic; }
 .tree-node.cancelled.active .tree-label { opacity: 1; }
+.tree-node.draft .tree-label { opacity: .6; font-style: italic; }
+.tree-node.draft.active .tree-label { opacity: 1; }
 .tree-node.ghost .tree-label { opacity: .45; font-style: italic; }
 .tree-node.ghost .tree-label::after { content: ' 👻'; font-style: normal; }
 .tree-node.ghost.active .tree-label { opacity: 1; }
@@ -626,6 +628,14 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
         <span class="completed-count" id="cancelledCount">0</span>
       </div>
       <div class="completed-tree" id="cancelledTree"></div>
+    </div>
+    <div class="completed-section" id="draftSection" style="display:none">
+      <div class="completed-toggle" id="draftToggle">
+        <span class="chev">▲</span>
+        <span>Draft</span>
+        <span class="completed-count" id="draftCount">0</span>
+      </div>
+      <div class="completed-tree" id="draftTree"></div>
     </div>
     <div class="data-migration">
       <div class="proj-filter">
@@ -1196,7 +1206,7 @@ function mergeProjects(alphaId, betaIds, fieldChoices) {
   if (!alpha.roster) alpha.roster = {};
   // Track the strongest inactive status across everything being merged, so the
   // result inherits it. Precedence: completed > on-hold > cancelled.
-  const STATUS_PRECEDENCE = ['completed', 'onhold', 'cancelled'];
+  const STATUS_PRECEDENCE = ['completed', 'onhold', 'cancelled', 'draft'];
   const wasStatus = projStatus(alpha);
   let mergedStatus = wasStatus;
   const strongerStatus = (a, b) => {
@@ -1236,6 +1246,7 @@ function mergeProjects(alphaId, betaIds, fieldChoices) {
   alpha.completed = mergedStatus === 'completed';
   alpha.onHold    = mergedStatus === 'onhold';
   alpha.cancelled = mergedStatus === 'cancelled';
+  alpha.draft     = mergedStatus === 'draft';
   if (mergedStatus !== wasStatus && mergedStatus !== 'active') {
     addSystemNote(alphaId, STATUS_META[mergedStatus].mark + ' ' + STATUS_META[mergedStatus].label + ' — inherited from a merged-in project');
   }
@@ -2494,20 +2505,22 @@ function deleteProject(id) {
 }
 
 // ── PROJECT STATUS ──
-// A project can be active, or one of three inactive states: completed, on-hold,
-// cancelled. Inactive projects are hidden from the active tree/calendar and live
-// in their own collapsible sidebar section.
+// A project can be active, or one of four inactive states: draft, completed,
+// on-hold, cancelled. Inactive projects are hidden from the active tree/calendar
+// and live in their own collapsible sidebar section.
 const STATUS_META = {
   completed: { flag: 'completed', label: 'Completed', tag: '(completed)', mark: '✓', cls: 'done',      verb: 'marked as complete' },
   onhold:    { flag: 'onHold',    label: 'On Hold',   tag: '(on hold)',   mark: '⏸', cls: 'onhold',    verb: 'put on hold' },
   cancelled: { flag: 'cancelled', label: 'Cancelled', tag: '(cancelled)', mark: '⊘', cls: 'cancelled', verb: 'cancelled' },
+  draft:     { flag: 'draft',     label: 'Draft',     tag: '(draft)',     mark: '✎', cls: 'draft',     verb: 'moved to draft' },
 };
-function isInactive(proj) { return !!(proj && (proj.completed || proj.onHold || proj.cancelled)); }
+function isInactive(proj) { return !!(proj && (proj.completed || proj.onHold || proj.cancelled || proj.draft)); }
 function projStatus(proj) {
   if (!proj) return 'active';
   if (proj.completed) return 'completed';
   if (proj.onHold)    return 'onhold';
   if (proj.cancelled) return 'cancelled';
+  if (proj.draft)     return 'draft';
   return 'active';
 }
 function statusTag(proj) {
@@ -2526,8 +2539,8 @@ function isEffectivelyCompleted(id) { return isEffectivelyInactive(id); }
 function getActiveRootProjects() { return getRootProjects().filter(p => !isInactive(p)); }
 
 // Move a project (and its whole subtree) to `status` ('completed' | 'onhold' |
-// 'cancelled' | 'active'). Restoring to 'active' also clears any inactive
-// ancestors so the tree stays reachable.
+// 'cancelled' | 'draft' | 'active'). Restoring to 'active' also clears any
+// inactive ancestors so the tree stays reachable.
 function setProjectStatus(id, status) {
   const all = [id, ...getDescendantIds(id)];
   if (status === 'active') {
@@ -2543,6 +2556,7 @@ function setProjectStatus(id, status) {
     p.completed = status === 'completed';
     p.onHold    = status === 'onhold';
     p.cancelled = status === 'cancelled';
+    p.draft     = status === 'draft';
   });
   addSystemNote(id, status === 'active' ? 'Project restored to active' : 'Project ' + STATUS_META[status].verb);
   if (status === 'active') {
@@ -2584,7 +2598,7 @@ function deleteNote(projectId, noteId) {
   if (exportOpen) renderExportPanel();
 }
 
-let completedOpen = false, onHoldOpen = false, cancelledOpen = false;
+let completedOpen = false, onHoldOpen = false, cancelledOpen = false, draftOpen = false;
 
 // ── SIDEBAR ──
 // Is `name` the lead producer of this project? Uses the explicit lead producer
@@ -2634,6 +2648,7 @@ function renderSidebar() {
   renderStatusSection('completed', 'completedSection', 'completedTree', 'completedCount');
   renderStatusSection('onhold',    'onHoldSection',    'onHoldTree',    'onHoldCount');
   renderStatusSection('cancelled', 'cancelledSection', 'cancelledTree', 'cancelledCount');
+  renderStatusSection('draft',     'draftSection',     'draftTree',     'draftCount');
 }
 
 function renderStatusSection(status, sectionId, treeId, countId) {
@@ -4544,7 +4559,7 @@ function openContextMenu(e, projectId) {
   if (isDone) {
     // Inactive project: undo back to active, or switch between inactive states.
     items = [{ label: '↩ Undo — Restore to Active', action: 'restore' }];
-    ['completed', 'onhold', 'cancelled'].forEach(s => {
+    ['completed', 'onhold', 'cancelled', 'draft'].forEach(s => {
       if (s !== status) items.push({ label: STATUS_META[s].mark + ' Move to ' + STATUS_META[s].label, action: 'status:' + s });
     });
     items.push({ label: 'Delete', action: 'delete', danger: true });
@@ -4555,6 +4570,7 @@ function openContextMenu(e, projectId) {
       { label: 'Add Subproject', action: 'addSub' },
       { label: 'Add Subfolder',  action: 'addSubFolder' },
       { label: proj.ghost ? '👁 Show in Ops' : '👻 Ghost (hide from Ops)', action: 'ghost' },
+      { label: STATUS_META.draft.mark     + ' Draft',    action: 'status:draft' },
       { label: STATUS_META.completed.mark + ' Complete', action: 'status:completed' },
       { label: STATUS_META.onhold.mark    + ' On Hold',  action: 'status:onhold' },
       { label: STATUS_META.cancelled.mark + ' Cancel',   action: 'status:cancelled' },
@@ -6481,6 +6497,7 @@ function setupInitListeners() {
   wireStatusToggle('completedToggle', 'completedTree', () => completedOpen, v => completedOpen = v);
   wireStatusToggle('onHoldToggle',    'onHoldTree',    () => onHoldOpen,    v => onHoldOpen = v);
   wireStatusToggle('cancelledToggle', 'cancelledTree', () => cancelledOpen, v => cancelledOpen = v);
+  wireStatusToggle('draftToggle',     'draftTree',     () => draftOpen,     v => draftOpen = v);
 
   // Dismiss context menu + type switcher
   document.addEventListener('click', e => {
