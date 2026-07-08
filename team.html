@@ -222,7 +222,7 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
 .rename-input { background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; padding: 1px 6px; color: var(--text); font-size: 13px; outline: none; flex: 1; min-width: 0; }
 
 /* ── RIGHT COLUMN ── */
-.right-col { grid-column: 3; display: flex; flex-direction: column; min-height: 0; background: var(--bg); }
+.right-col { grid-column: 3; display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--bg); }
 
 /* ── PROJECT NAME (above the role palette) ── */
 .project-name-bar { font-size: 22px; font-weight: 700; color: var(--text); letter-spacing: .01em; padding: 12px 16px 8px; flex-shrink: 0; background: var(--panel); border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -522,6 +522,12 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
 .roster-suggest-chip:hover { color: var(--accent); border-color: var(--accent); }
 .roster-suggest-rm { font-size: 10px; color: var(--border); line-height: 1; padding: 0 1px; cursor: pointer; }
 .roster-suggest-rm:hover { color: var(--danger); }
+.roster-add { margin-bottom: 5px; }
+.roster-filter { width: 100%; box-sizing: border-box; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 4px 8px; color: var(--text); font-size: 11px; outline: none; transition: border-color .12s; }
+.roster-filter:focus { border-color: var(--accent); }
+.roster-suggest-chip.roster-add-new { border-style: solid; border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.roster-suggest-chip.roster-add-new:hover { background: var(--accent); color: var(--bg); }
+.roster-empty-hint { font-size: 10px; color: var(--dim); font-style: italic; padding: 1px 2px; }
 
 /* ── HELP / OPS BUTTONS — now inline in data-migration ── */
 
@@ -4930,7 +4936,7 @@ function renderRosterInto(content) {
   topBar.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; padding:0 2px;';
   const topHint = document.createElement('span');
   topHint.style.cssText = 'font-size:11px; color:var(--dim);';
-  topHint.textContent = 'Click a suggestion to add to this project. Drag an assigned name onto any chip in the timeline to assign them. Click a name to unassign.';
+  topHint.textContent = 'Type in a group’s box to filter its list or add a brand-new person. Click a suggestion to add them to this project. Drag an assigned name onto any chip in the timeline to assign them; click a name to unassign.';
   topBar.appendChild(topHint);
   const mgrBtn = document.createElement('button');
   mgrBtn.className = 'btn btn-ghost';
@@ -5064,34 +5070,101 @@ function renderRosterInto(content) {
     section.appendChild(nameList);
 
     // Available people — drag straight onto a chip (no need to add to the
-    // project first), or click to add them to the project roster.
-    if (suggestions.length) {
-      const suggestRow = document.createElement('div');
-      suggestRow.className = 'roster-suggestions';
-      suggestions.forEach(name => {
-        const chip = document.createElement('div');
-        chip.className = 'roster-suggest-chip';
-        chip.title = 'Drag onto a chip to assign · click to add to this project';
-        chip.draggable = true;
-        chip.addEventListener('dragstart', e => {
-          dragPayload = { type: 'person', person: name, role: group.primary, category: catLabelForRole(group.primary), color: group.color };
-          e.dataTransfer.setData('text', JSON.stringify(dragPayload));
-          e.dataTransfer.effectAllowed = 'copy';
-        });
-        chip.addEventListener('dragend', () => { dragPayload = null; });
-        const addSpan = document.createElement('span');
-        addSpan.textContent = '+ ' + name;
-        addSpan.addEventListener('click', e => {
-          e.stopPropagation();
-          addToRoster(group.primary, name);
-          renderExportPanel();
-          renderPalette();
-        });
-        chip.appendChild(addSpan);
-        suggestRow.appendChild(chip);
+    // project first), or click to add them to the project roster. A filter box
+    // keeps long lists (e.g. stakeholders at a big company) navigable, and lets
+    // you add a brand-new person on the fly without opening Manage People.
+    const addPerson = name => {
+      const nm = (name || '').trim();
+      if (!nm) return;
+      addToRoster(group.primary, nm);
+      renderExportPanel();
+      renderPalette();
+    };
+
+    const filterWrap = document.createElement('div');
+    filterWrap.className = 'roster-add';
+    const filterInput = document.createElement('input');
+    filterInput.type = 'text';
+    filterInput.className = 'roster-filter';
+    filterInput.placeholder = 'Filter or add ' + group.label.toLowerCase() + '…';
+    filterInput.autocomplete = 'off';
+    filterWrap.appendChild(filterInput);
+    section.appendChild(filterWrap);
+
+    const suggestRow = document.createElement('div');
+    suggestRow.className = 'roster-suggestions';
+
+    const chipEls = [];
+    suggestions.forEach(name => {
+      const chip = document.createElement('div');
+      chip.className = 'roster-suggest-chip';
+      chip.title = 'Drag onto a chip to assign · click to add to this project';
+      chip.draggable = true;
+      chip.addEventListener('dragstart', e => {
+        dragPayload = { type: 'person', person: name, role: group.primary, category: catLabelForRole(group.primary), color: group.color };
+        e.dataTransfer.setData('text', JSON.stringify(dragPayload));
+        e.dataTransfer.effectAllowed = 'copy';
       });
-      section.appendChild(suggestRow);
-    }
+      chip.addEventListener('dragend', () => { dragPayload = null; });
+      const addSpan = document.createElement('span');
+      addSpan.textContent = '+ ' + name;
+      addSpan.addEventListener('click', e => {
+        e.stopPropagation();
+        addPerson(name);
+      });
+      chip.appendChild(addSpan);
+      suggestRow.appendChild(chip);
+      chipEls.push({ name: name, lc: name.toLowerCase(), el: chip });
+    });
+
+    // "+ Add “name”" chip — shown only when the typed name matches no existing
+    // suggestion, so brand-new people can be added straight from the panel.
+    const addNewChip = document.createElement('div');
+    addNewChip.className = 'roster-suggest-chip roster-add-new';
+    addNewChip.title = 'Add a new person to this project';
+    addNewChip.style.display = 'none';
+    const addNewSpan = document.createElement('span');
+    addNewChip.appendChild(addNewSpan);
+    addNewChip.addEventListener('click', e => { e.stopPropagation(); addPerson(filterInput.value); });
+    suggestRow.appendChild(addNewChip);
+
+    // Empty-state hint when a group has no suggestions yet.
+    const emptyHint = document.createElement('span');
+    emptyHint.className = 'roster-empty-hint';
+    emptyHint.textContent = 'No saved names — type above to add one.';
+    emptyHint.style.display = suggestions.length ? 'none' : '';
+    suggestRow.appendChild(emptyHint);
+
+    const applyFilter = () => {
+      const raw = filterInput.value.trim();
+      const q = raw.toLowerCase();
+      let anyExact = false;
+      chipEls.forEach(c => {
+        const match = !q || c.lc.includes(q);
+        c.el.style.display = match ? '' : 'none';
+        if (c.lc === q) anyExact = true;
+      });
+      if (q && !anyExact) {
+        addNewSpan.textContent = '+ Add “' + raw + '”';
+        addNewChip.style.display = '';
+      } else {
+        addNewChip.style.display = 'none';
+      }
+      emptyHint.style.display = (!q && !suggestions.length) ? '' : 'none';
+    };
+    filterInput.addEventListener('input', applyFilter);
+    filterInput.addEventListener('keydown', e => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const q = filterInput.value.trim().toLowerCase();
+      const exact = chipEls.find(c => c.lc === q);
+      const visible = chipEls.filter(c => !q || c.lc.includes(q));
+      if (exact) addPerson(exact.name);
+      else if (q && visible.length === 1) addPerson(visible[0].name);
+      else if (q) addPerson(filterInput.value);
+    });
+
+    section.appendChild(suggestRow);
 
     wrap.appendChild(section);
   });
