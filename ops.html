@@ -25,6 +25,11 @@ window._fbReady.then(({ db, ref, onValue }) => {
     const data = snapshot.val();
     if (data) { window._fbPeopleEmails = data; if (window._opsReloadPeopleEmails) window._opsReloadPeopleEmails(data); }
   }, err => console.error('ops peopleEmails firebase error:', err));
+
+  onValue(ref(db, 'prepro/sunsetPeople'), snapshot => {
+    window._fbSunsetPeople = snapshot.val() || {};
+    if (window._opsReloadSunsetPeople) window._opsReloadSunsetPeople(window._fbSunsetPeople);
+  }, err => console.error('ops sunsetPeople firebase error:', err));
 });
 </script>
 <style>
@@ -564,8 +569,16 @@ window._opsReloadPeopleEmails = function(data) {
   if (data && typeof data === 'object') peopleEmails = data;
   if (document.getElementById('settingsOverlay') && document.getElementById('settingsOverlay').style.display === 'flex') renderSettingsContent();
 };
+// Sunset people are hidden from every selection/roster surface (mirrors team.html).
+let sunsetPeople = {};
+function isSunset(name) { return !!sunsetPeople[name]; }
+window._opsReloadSunsetPeople = function(data) {
+  sunsetPeople = (data && typeof data === 'object') ? data : {};
+  if (typeof reloadState === 'function' && state) reloadState();
+};
 if (window._fbNameHistory) window._opsReloadNameHistory(window._fbNameHistory);
 if (window._fbPeopleEmails) window._opsReloadPeopleEmails(window._fbPeopleEmails);
+if (window._fbSunsetPeople) window._opsReloadSunsetPeople(window._fbSunsetPeople);
 
 function collectAllPeople() {
   const people = {};
@@ -1045,7 +1058,7 @@ function getPtoEntries() {
       if (!t.isDueDate || t.milestoneType !== 'pto') return;
       const end = t.endDate || t.date;
       (t.attendees || []).forEach(a => {
-        if (!a.person) return;
+        if (!a.person || isSunset(a.person)) return;
         out.push({ person: a.person, date: t.date, endDate: end, projectName: proj.name, isPTO: true });
       });
     });
@@ -1056,7 +1069,7 @@ function getPtoEntries() {
 // ── PEOPLE LIST ──
 function getAllPeople() {
   const people = new Set();
-  getOpsEntries().forEach(e => { if (e.person) people.add(e.person); });
+  getOpsEntries().forEach(e => { if (e.person && !isSunset(e.person)) people.add(e.person); });
   const alpha = [...people].sort();
   if (!personOrder.length) return alpha;
   // Saved order first (only those still present), then any new people alphabetically
@@ -1918,12 +1931,13 @@ function getTeamHeadsUp() {
     for (const [role, names] of Object.entries(roster)) {
       if (!INTERNAL_ROLES.has(role)) continue;
       (names || []).forEach(name => {
+        if (isSunset(name)) return;
         if (!peopleProjects.has(name)) peopleProjects.set(name, new Set());
         peopleProjects.get(name).add(proj.id);
       });
     }
     (proj.tasks || []).forEach(t => {
-      if (t.person && INTERNAL_ROLES.has(t.role)) {
+      if (t.person && !isSunset(t.person) && INTERNAL_ROLES.has(t.role)) {
         if (!peopleProjects.has(t.person)) peopleProjects.set(t.person, new Set());
         peopleProjects.get(t.person).add(proj.id);
       }
@@ -1979,7 +1993,7 @@ function getTeamHeadsUp() {
       // PTO
       if (task.isDueDate && task.milestoneType === 'pto') {
         (task.attendees || []).forEach(a => {
-          if (!a.person) return;
+          if (!a.person || isSunset(a.person)) return;
           // Find which projects this person is on
           const theirProjects = peopleProjects.get(a.person);
           if (!theirProjects || !theirProjects.size) return;
@@ -2460,6 +2474,7 @@ function getPeopleRoles() {
   });
   const result = new Map();
   counts.forEach((roles, person) => {
+    if (isSunset(person)) return;
     const top = Object.entries(roles).sort((a, b) => b[1] - a[1])[0];
     if (top) result.set(person, top[0]);
   });
