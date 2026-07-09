@@ -572,6 +572,8 @@ window._opsReloadPeopleEmails = function(data) {
 // Sunset people are hidden from every selection/roster surface (mirrors team.html).
 let sunsetPeople = {};
 function isSunset(name) { return !!sunsetPeople[name]; }
+// A project is inactive if it's completed, on hold, cancelled, or draft (mirrors team.html).
+function isInactive(proj) { return !!(proj && (proj.completed || proj.onHold || proj.cancelled || proj.draft)); }
 window._opsReloadSunsetPeople = function(data) {
   sunsetPeople = (data && typeof data === 'object') ? data : {};
   if (typeof reloadState === 'function' && state) reloadState();
@@ -2813,7 +2815,7 @@ function renderProjectGantt() {
 
   const today = todayStr();
   const data = (state.projects || [])
-    .filter(p => !p.completed && !p.ghost)
+    .filter(p => !isInactive(p) && !p.ghost)
     .map(proj => {
       const tasks = (proj.tasks || []).filter(t => t.date);
       if (!tasks.length) return null;
