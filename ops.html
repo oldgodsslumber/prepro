@@ -280,6 +280,8 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .tl-task-bar { position: absolute; border-radius: 3px; color: #fff; display: flex; align-items: center; overflow: visible; cursor: grab; user-select: none; }
 .tl-task-bar:active { cursor: grabbing; }
 .tl-task-bar.dragging { opacity: .6; z-index: 50 !important; }
+.tl-pto-bar { cursor: default; background: repeating-linear-gradient(45deg, #3a8fb7 0, #3a8fb7 6px, #2e7396 6px, #2e7396 12px); border: 1px solid #57b0d4; }
+.tl-pto-bar .tl-bar-name { font-weight: 700; opacity: 1; }
 .tl-resize-handle { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; z-index: 3; }
 .tl-resize-handle.left  { left: -3px; }
 .tl-resize-handle.right { right: -3px; }
@@ -979,16 +981,21 @@ function getProducerCat(name) {
   return 'Producing';
 }
 
+// Map a role name (+ task name for producers) to an ops category.
+function getRoleCat(role, taskName) {
+  const r = (role || '').toLowerCase();
+  if (r === 'editor')   return 'Editing';
+  if (r === 'animator') return 'Animation';
+  if (r === 'producer') return getProducerCat(taskName);
+  return null;
+}
+
 function getTaskCat(task) {
   if (task.isReview) {
     if (SHOOT_LABELS.includes(task.reviewLabel)) return 'Production';
     return getProducerCat(task.taskName);
   }
-  const role = (task.role || '').toLowerCase();
-  if (role === 'editor')   return 'Editing';
-  if (role === 'animator') return 'Animation';
-  if (role === 'producer') return getProducerCat(task.taskName);
-  return null;
+  return getRoleCat(task.role, task.taskName);
 }
 
 // ── COLLECT ALL OPS TASKS ──
@@ -1010,14 +1017,40 @@ function getOpsEntries() {
         }
         return;
       }
-      if (task.roleCategory !== 'Internal Team') return;
-      const cat = getTaskCat(task);
-      if (!cat) return;
-      const color = CAT_COLORS[cat] || '#6c63ff';
-      entries.push({ date: task.date, endDate: task.endDate || task.date, person: task.person || task.role, cat, taskName: task.taskName || '(untitled)', loe, color, projectName: proj.name, projectId: proj.id, taskId: task.id });
+      // Everyone on a role task is an attendee now; the legacy single
+      // task.person/role is kept for back-compat. Emit one entry per person.
+      const roster = [];
+      if (task.person) roster.push({ person: task.person, role: task.role, category: task.roleCategory, isPrimary: true });
+      (task.attendees || []).forEach((a, i) => roster.push({ person: a.person, role: a.role, category: a.category, attIdx: i }));
+      const rosterSeen = new Set();
+      roster.forEach(p => {
+        if (p.category !== 'Internal Team') return;
+        if (p.person) { if (rosterSeen.has(p.person)) return; rosterSeen.add(p.person); }
+        const cat = getRoleCat(p.role, task.taskName);
+        if (!cat) return;
+        const color = CAT_COLORS[cat] || '#6c63ff';
+        entries.push({ date: task.date, endDate: task.endDate || task.date, person: p.person || p.role, cat, taskName: task.taskName || '(untitled)', loe, color, projectName: proj.name, projectId: proj.id, taskId: task.id, isPrimary: p.isPrimary || false, attIdx: p.attIdx });
+      });
     });
   });
   return entries;
+}
+
+// Per-person PTO periods, sourced from PTO milestones' attendees.
+// Returned as timeline-shaped entries (date/endDate/person) flagged isPTO.
+function getPtoEntries() {
+  const out = [];
+  (state.projects || []).filter(p => !p.completed && !p.ghost).forEach(proj => {
+    (proj.tasks || []).forEach(t => {
+      if (!t.isDueDate || t.milestoneType !== 'pto') return;
+      const end = t.endDate || t.date;
+      (t.attendees || []).forEach(a => {
+        if (!a.person) return;
+        out.push({ person: a.person, date: t.date, endDate: end, projectName: proj.name, isPTO: true });
+      });
+    });
+  });
+  return out;
 }
 
 // ── PEOPLE LIST ──
@@ -1413,8 +1446,8 @@ function startTlDrag(e, entry, bar, personRow) {
     // Apply person reassignment
     const targetPerson = getPersonRowAtY(ev.clientY);
     if (targetPerson && targetPerson !== entry.person) {
-      if (entry.isReview) {
-        // Reassign the attendee
+      if (entry.attIdx != null) {
+        // Reassign the attendee (reviews and role tasks alike)
         const att = (task.attendees || [])[entry.attIdx];
         if (att) att.person = targetPerson;
       } else {
@@ -1569,7 +1602,11 @@ function renderTimeline() {
   rows.innerHTML = '';
 
   const allEntries = getOpsEntries();
+  const ptoAll     = getPtoEntries();
   const people     = getAllPeople();
+  // Surface people who are only on PTO (no work entries) so their PTO still shows.
+  const peopleSet = new Set(people);
+  ptoAll.forEach(e => { if (e.person && !peopleSet.has(e.person)) { peopleSet.add(e.person); people.push(e.person); } });
   const personColor = {};
   allEntries.forEach(e => { if (e.person && !personColor[e.person]) personColor[e.person] = e.color; });
 
@@ -1581,10 +1618,11 @@ function renderTimeline() {
   }
 
   people.forEach(person => {
-    const entries = allEntries.filter(e => e.person === person);
-    if (!entries.length) return;
+    const entries    = allEntries.filter(e => e.person === person);
+    const ptoEntries = ptoAll.filter(e => e.person === person);
+    if (!entries.length && !ptoEntries.length) return;
 
-    const laned    = assignLanes(entries);
+    const laned    = assignLanes([...entries, ...ptoEntries]);
     const numLanes = Math.max(...laned.map(e => e.lane)) + 1;
     const trackH   = TL_PAD * 2 + numLanes * TL_LANE_H;
 
@@ -1647,6 +1685,24 @@ function renderTimeline() {
       const left  = startCol * tlColW + 2;
       const width = Math.max(TL_BAR_H, (endCol - startCol + 1) * tlColW - 4);
       const top   = TL_PAD + entry.lane * TL_LANE_H;
+
+      // PTO renders as a read-only chip (no drag/resize/reassign, no LoE dot).
+      if (entry.isPTO) {
+        const pto = document.createElement('div');
+        pto.className = 'tl-task-bar tl-pto-bar';
+        pto.style.cssText = `left:${left}px;width:${width}px;top:${top}px;height:${TL_BAR_H}px;z-index:2;`;
+        pto.title = `${entry.person} · PTO\n${entry.date}${entry.endDate && entry.endDate !== entry.date ? ' → ' + entry.endDate : ''} (${entry.projectName})`;
+        const pInner = document.createElement('div');
+        pInner.className = 'tl-bar-inner';
+        pInner.style.pointerEvents = 'none';
+        const pLbl = document.createElement('span');
+        pLbl.className = 'tl-bar-name';
+        pLbl.textContent = '🏖 PTO';
+        pInner.appendChild(pLbl);
+        pto.appendChild(pInner);
+        track.appendChild(pto);
+        return;
+      }
 
       const bar = document.createElement('div');
       bar.className = 'tl-task-bar';
