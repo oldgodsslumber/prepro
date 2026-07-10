@@ -52,6 +52,23 @@ window._fbReady.then(({ db, ref, onValue }) => {
   --cat-shoot: #c0394f;
 }
 
+/* ── LIGHT THEME ── */
+:root[data-theme="light"] {
+  --bg:      #eceef4;
+  --panel:   #ffffff;
+  --card:    #f6f7fb;
+  --border:  #d3d6e0;
+  --text:    #1b1c26;
+  --dim:     #61637a;
+  --accent:  #5a51e6;
+}
+:root[data-theme="light"] .m-gantt-track,
+:root[data-theme="light"] .m-cat-bar { background: #e2e4ee; }
+
+/* ── THEME TOGGLE BUTTON ── */
+.theme-toggle { font-size: 14px; line-height: 1; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 6px; width: 30px; height: 28px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: color .15s, border-color .15s; flex-shrink: 0; user-select: none; }
+.theme-toggle:hover { color: var(--text); border-color: var(--accent); }
+
 body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-system,sans-serif; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
 
 /* ── HEADER ── */
@@ -342,6 +359,26 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .people-merge-arrow { color: var(--dim); font-size: 13px; }
 .data-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 </style>
+<script>
+// ── LIGHT / DARK THEME (shared across ops, team, dash via 'prepro_theme') ──
+(function () {
+  const KEY = 'prepro_theme';
+  const apply = t => document.documentElement.setAttribute('data-theme', t);
+  apply(localStorage.getItem(KEY) === 'light' ? 'light' : 'dark');
+  document.addEventListener('DOMContentLoaded', function () {
+    const btn = document.getElementById('themeToggle');
+    if (!btn) return;
+    const sync = () => { btn.textContent = document.documentElement.getAttribute('data-theme') === 'light' ? '🌙' : '☀'; };
+    sync();
+    btn.addEventListener('click', function () {
+      const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+      localStorage.setItem(KEY, next);
+      apply(next);
+      sync();
+    });
+  });
+})();
+</script>
 </head>
 <body>
 
@@ -366,6 +403,7 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
   </div>
   <button class="ops-wknd-btn" id="wkndBtn">Show Weekends</button>
   <button class="ops-wknd-btn" id="refreshBtn" title="Reload latest data from the scheduler">↺ Refresh</button>
+  <button class="theme-toggle" id="themeToggle" title="Toggle light / dark mode">☀</button>
 </div>
 
 <!-- SETTINGS MODAL -->
