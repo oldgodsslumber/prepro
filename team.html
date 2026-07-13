@@ -132,6 +132,12 @@ table.xl-review-table textarea { min-width: 220px; height: 30px; }
 table.xl-review-table input:focus, table.xl-review-table select:focus, table.xl-review-table textarea:focus { border-color: var(--accent); outline: none; }
 table.xl-review-table td.xl-check { text-align: center; }
 table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
+table.xl-review-table td.xl-kind { text-align: center; }
+.xl-kind-badge { display: inline-block; font-size: 9px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 7px; border-radius: 10px; white-space: nowrap; }
+.xl-kind-badge.new    { background: rgba(108,99,255,.18); color: var(--accent); }
+.xl-kind-badge.update { background: rgba(224,169,59,.20); color: #e0a93b; }
+table.xl-review-table tr.xl-update-row td { background: rgba(224,169,59,.06); }
+table.xl-review-table tr.xl-update-row.xl-unchecked td { background: transparent; }
 .settings-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--card); border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .settings-title { font-weight: 700; font-size: 14px; color: var(--text); }
 .settings-close { background: transparent; color: var(--dim); border: none; font-size: 16px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
@@ -2391,40 +2397,80 @@ function handleExcelImport(file) {
       if ((obj.ticketId || '').trim()) candidates.push(obj);
     }
 
-    // Cross-check against existing projects (dedup by Case ID / ticketId).
+    // Cross-check against existing projects by Case ID. New tickets become
+    // "New" rows; already-present tickets whose Case Status changed (or that can
+    // finally get a lead producer) become "Updated" rows. Unchanged matches are
+    // skipped silently.
     const byTicket = {};
     state.projects.forEach(p => { const t = (p.ticketId || '').trim(); if (t) byTicket[t] = p; });
-    const newRows = [], skipped = [];
-    let backfilled = 0;
+    const newRows = [], updateRows = [], skipped = [];
     candidates.forEach(o => {
       const existing = byTicket[o.ticketId.trim()];
-      if (existing) {
-        // Already imported — but backfill the lead producer if we now have one
-        // from the Excel and the project doesn't have one set yet.
-        if (o.producer && !existing.leadProducer) { existing.leadProducer = o.producer; backfilled++; }
-        skipped.push(o);
+      if (!existing) { newRows.push(o); return; }
+      const newStatus     = (o.caseStatus || '').trim();
+      const statusChanged = !!newStatus && newStatus !== ((existing.caseStatus || '').trim());
+      const producerFill  = !!(o.producer || '').trim() && !((existing.leadProducer || '').trim());
+      if (statusChanged || producerFill) {
+        updateRows.push(Object.assign({}, o, {
+          _update: true, _existingId: existing.id, _oldStatus: existing.caseStatus || ''
+        }));
       } else {
-        newRows.push(o);
+        skipped.push(o);
       }
     });
-    if (backfilled) {
-      saveState();
-      renderSidebar();
-      if (exportOpen) renderExportPanel();
-    }
 
-    openExcelReview(newRows, candidates.length, skipped.length, backfilled);
+    openExcelReview(newRows, updateRows, candidates.length, skipped.length);
   };
   reader.readAsArrayBuffer(file);
 }
 
-function openExcelReview(newRows, totalRows, skippedCount, backfilledCount) {
-  _xlReviewRows = newRows.map(o => Object.assign({ _selected: true }, o));
+// Map a Pega Case Status string to the app's status "section". Pattern-based so
+// it survives new Pega status strings. Returns null when unrecognised (leave the
+// project's section unchanged).
+function caseStatusToAppStatus(caseStatus) {
+  const s = String(caseStatus || '').trim().toLowerCase();
+  if (!s) return null;
+  if (/hold/.test(s))                        return 'onhold';
+  if (/draft/.test(s))                       return 'draft';
+  if (/reject|cancel|withdraw/.test(s))      return 'cancelled';
+  if (/resolved|closed|complete/.test(s))    return 'completed';
+  if (/^new\b|pending|approval|fulfill|active|in\s*progress/.test(s)) return 'active';
+  return null;
+}
 
+// Apply an "Updated" review row onto its existing project: refresh Case Status,
+// backfill lead producer only when empty, and move the project into the section
+// its new status maps to. Everything else (schedule, roster, attendees, notes)
+// is left intact.
+function applyTicketUpdate(row) {
+  const proj = getProject(row._existingId);
+  if (!proj) return false;
+  const prod      = (row.producer || '').trim();
+  const newStatus = (row.caseStatus || '').trim();
+  if (prod && !((proj.leadProducer || '').trim())) proj.leadProducer = prod;
+  if (newStatus) proj.caseStatus = newStatus;
+  addSystemNote(proj.id, 'Updated from Excel (Case ' + (proj.ticketId || '—') + ')' + (newStatus ? ' · status: ' + newStatus : ''));
+  const appStatus = caseStatusToAppStatus(newStatus);
+  if (appStatus && projStatus(proj) !== appStatus) {
+    // setProjectStatus handles the flag flip, the audit note, and re-homing the
+    // active project if this one just left the regular window.
+    setProjectStatus(proj.id, appStatus);
+  }
+  return true;
+}
+
+function openExcelReview(newRows, updateRows, totalRows, skippedCount) {
+  updateRows = updateRows || [];
+  // Updated tickets first (more notable), then new ones. Both default to selected.
+  _xlReviewRows = [
+    ...updateRows.map(o => Object.assign({ _selected: true }, o)),
+    ...newRows.map(o => Object.assign({ _selected: true }, o))
+  ];
+
+  const nNew = newRows.length, nUpd = updateRows.length;
   const summary = document.getElementById('excelReviewSummary');
   summary.innerHTML = '<b>' + totalRows + '</b> rows in file · <b>' + skippedCount +
-    '</b> already in app (skipped) · <b>' + _xlReviewRows.length + '</b> new' +
-    (backfilledCount ? ' · <b>' + backfilledCount + '</b> lead producer' + (backfilledCount === 1 ? '' : 's') + ' backfilled' : '');
+    '</b> already in app (unchanged) · <b>' + nNew + '</b> new · <b>' + nUpd + '</b> updated';
 
   const wrap = document.getElementById('excelReviewGridWrap');
   wrap.innerHTML = '';
@@ -2432,7 +2478,7 @@ function openExcelReview(newRows, totalRows, skippedCount, backfilledCount) {
   if (!_xlReviewRows.length) {
     const empty = document.createElement('div');
     empty.style.cssText = 'padding:28px; text-align:center; color:var(--dim);';
-    empty.textContent = 'No new tickets to import — everything in this file is already in the app.';
+    empty.textContent = 'Nothing to import — every ticket in this file is already in the app and unchanged.';
     wrap.appendChild(empty);
   } else {
     wrap.appendChild(buildExcelReviewTable());
@@ -2462,6 +2508,7 @@ function buildExcelReviewTable() {
   });
   thCheck.appendChild(selAll);
   hrow.appendChild(thCheck);
+  const thKind = document.createElement('th'); thKind.textContent = ''; hrow.appendChild(thKind);
   XL_GRID_COLS.forEach(col => {
     const th = document.createElement('th'); th.textContent = col.label; hrow.appendChild(th);
   });
@@ -2470,6 +2517,7 @@ function buildExcelReviewTable() {
   const tbody = table.createTBody();
   _xlReviewRows.forEach(row => {
     const tr = tbody.insertRow();
+    if (row._update) tr.classList.add('xl-update-row');
 
     const cCell = tr.insertCell();
     cCell.className = 'xl-check';
@@ -2481,6 +2529,15 @@ function buildExcelReviewTable() {
       updateExcelConfirmLabel();
     });
     cCell.appendChild(cb);
+
+    // Kind tag: New vs Updated
+    const kCell = tr.insertCell();
+    kCell.className = 'xl-kind';
+    const badge = document.createElement('span');
+    badge.className = 'xl-kind-badge ' + (row._update ? 'update' : 'new');
+    badge.textContent = row._update ? 'Updated' : 'New';
+    if (row._update && row._oldStatus) badge.title = 'Was: ' + row._oldStatus;
+    kCell.appendChild(badge);
 
     XL_GRID_COLS.forEach(col => {
       const td = tr.insertCell();
@@ -2510,7 +2567,7 @@ function buildExcelReviewTable() {
 function updateExcelConfirmLabel() {
   const n = _xlReviewRows.filter(r => r._selected !== false).length;
   const btn = document.getElementById('excelReviewConfirm');
-  if (btn) { btn.textContent = 'Add ' + n + ' selected ticket' + (n === 1 ? '' : 's'); btn.disabled = n === 0; }
+  if (btn) { btn.textContent = 'Import ' + n + ' selected ticket' + (n === 1 ? '' : 's'); btn.disabled = n === 0; }
 }
 
 function closeExcelReview() {
@@ -2521,13 +2578,25 @@ function closeExcelReview() {
 function confirmExcelImport() {
   const chosen = _xlReviewRows.filter(r => r._selected !== false);
   if (!chosen.length) { closeExcelReview(); return; }
-  chosen.forEach(row => { state.projects.push(buildProjectFromRow(row)); });
+  let added = 0, updated = 0;
+  chosen.forEach(row => {
+    if (row._update && row._existingId) {
+      if (applyTicketUpdate(row)) updated++;
+    } else {
+      state.projects.push(buildProjectFromRow(row));
+      added++;
+    }
+  });
   saveState();
   if (typeof renderSidebar === 'function') renderSidebar();
   if (typeof renderCalendar === 'function') renderCalendar();
-  const n = chosen.length;
+  if (exportOpen && typeof renderExportPanel === 'function') renderExportPanel();
   closeExcelReview();
-  alert('Added ' + n + ' ticket' + (n === 1 ? '' : 's') + ' from Excel.');
+  const parts = [];
+  if (added)   parts.push(added   + ' new');
+  if (updated) parts.push(updated + ' updated');
+  alert('Imported ' + chosen.length + ' ticket' + (chosen.length === 1 ? '' : 's') + ' from Excel' +
+        (parts.length ? ' (' + parts.join(', ') + ').' : '.'));
 }
 
 function duplicateProject(id) {
