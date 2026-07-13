@@ -404,6 +404,23 @@ table.xl-review-table input[type="checkbox"] { accent-color: var(--accent); widt
 .role-bar.drag-accepting { background: rgba(108,99,255,.18); }
 .role-bar .cont-label { font-size: 10px; opacity: .55; padding-left: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* ── MULTI-DAY ROW-EDGE CAPS ──
+   A span that wraps across a week boundary has no neighbour to bleed into on the
+   exposed edge. Restore that edge's border + rounded corner and drop the bleed
+   margin so each wrapped segment reads as a whole chip, not a sliced-open one.
+   Placed after the bleed rules so equal-specificity ties resolve here. */
+.review-block.seg-row-end,
+.review-bar.seg-row-end   { border-right: 1.5px solid rgba(192,57,79,.6); border-top-right-radius: 5px; border-bottom-right-radius: 5px; margin-right: 0; }
+.review-bar.seg-row-start { border-left: 1.5px solid rgba(192,57,79,.6); border-top-left-radius: 5px; border-bottom-left-radius: 5px; margin-left: 0; }
+
+.role-block.seg-row-end,
+.role-bar.seg-row-end   { border-right-width: 1.5px; border-right-style: solid; border-top-right-radius: 5px; border-bottom-right-radius: 5px; margin-right: 0; }
+.role-bar.seg-row-start { border-left-width: 1.5px; border-left-style: solid; border-top-left-radius: 5px; border-bottom-left-radius: 5px; margin-left: 0; }
+
+.duedate-marker.seg-row-end,
+.duedate-bar.seg-row-end   { border-right: 1.5px solid #8080a0; border-top-right-radius: 4px; border-bottom-right-radius: 4px; margin-right: 0; width: auto; }
+.duedate-bar.seg-row-start { border-left: 1.5px solid #8080a0; border-top-left-radius: 4px; border-bottom-left-radius: 4px; margin-left: 0; width: auto; }
+
 /* ── EMPTY STATE ── */
 .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 8px; color: var(--dim); text-align: center; }
 .empty-state h2 { font-size: 15px; font-weight: 600; }
@@ -1003,7 +1020,6 @@ function loadNameHistory() {
 }
 function saveNameHistory() {
   if (!window._fb) return;
-  _suppressRemoteRender++;
   const { db, ref, set } = window._fb;
   set(ref(db, 'prepro/nameHistory'), nameHistory).catch(err => console.error('saveNameHistory:', err));
 }
@@ -1059,7 +1075,6 @@ function loadPeopleEmails() {
 }
 function savePeopleEmails() {
   if (!window._fb) return;
-  _suppressRemoteRender++;
   const { db, ref, set } = window._fb;
   set(ref(db, 'prepro/peopleEmails'), peopleEmails).catch(err => console.error('savePeopleEmails:', err));
 }
@@ -1076,7 +1091,6 @@ function getPersonEmail(name) { return peopleEmails[name] || ''; }
 let sunsetPeople = {}; // name -> true
 function saveSunsetPeople() {
   if (!window._fb) return;
-  _suppressRemoteRender++;
   const { db, ref, set } = window._fb;
   set(ref(db, 'prepro/sunsetPeople'), sunsetPeople).catch(err => console.error('saveSunsetPeople:', err));
 }
@@ -2110,7 +2124,9 @@ function wireSettingsModal() {
 }
 
 // ── PERSISTENCE (Firebase Realtime Database) ──
-let _suppressRemoteRender = 0; // avoid double-render when we wrote the change ourselves (counter)
+// Own-write echoes are recognised by value-equality in applyRemoteState (not by
+// a suppression counter), so a coalesced/duplicated Firebase callback can never
+// desync us into dropping a real remote update.
 
 function loadState() { /* no-op — data arrives via onValue listener */ }
 
@@ -2142,7 +2158,6 @@ function recordHistory() {
 
 function _pushStateToFirebase() {
   if (!window._fb) return;
-  _suppressRemoteRender++;
   const { db, ref, set } = window._fb;
   set(ref(db, 'prepro/state'), state).catch(err => console.error('saveState:', err));
 }
@@ -3414,6 +3429,21 @@ function isRowStart(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
   return showWeekends ? d.getDay() === 0 : d.getDay() === 1;
 }
+// Check if a date is the last column of a calendar row (Saturday for 7-day, Friday for weekday mode)
+function isRowEnd(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return showWeekends ? d.getDay() === 6 : d.getDay() === 5;
+}
+// Multi-day spans bleed left/right into neighbouring cells to read as one chip.
+// At a week-row boundary there's no neighbour to bleed into, so cap the exposed
+// edge (restore its border + rounded corner) — otherwise a wrapped segment looks
+// like a sliced-open chip instead of a whole one.
+function applyRowCaps(el, task, dateStr) {
+  const isStart = task.date === dateStr;
+  const isEnd   = (task.endDate || task.date) === dateStr;
+  if (!isStart && isRowStart(dateStr)) el.classList.add('seg-row-start');
+  if (!isEnd   && isRowEnd(dateStr))   el.classList.add('seg-row-end');
+}
 
 // Get a short label for continuation bars
 function getContLabel(task) {
@@ -3449,6 +3479,7 @@ function buildRoleBlock(task, dateStr) {
 
   const block = document.createElement('div');
   block.className = 'role-block' + (isMulti ? ' role-multi-start' : '');
+  applyRowCaps(block, task, dateStr);
   block.dataset.taskId = task.id;
   block.style.background  = hexToRgba(task.color, .18);
   block.style.borderColor = task.color;
@@ -3559,6 +3590,7 @@ function buildRoleBlock(task, dateStr) {
 function buildRoleBar(task, dateStr, isEnd) {
   const bar = document.createElement('div');
   bar.className = 'role-bar ' + (isEnd ? 'role-bar-end' : 'role-bar-mid');
+  applyRowCaps(bar, task, dateStr);
   bar.dataset.taskId = task.id;
   bar.style.background  = hexToRgba(task.color, .18);
   bar.style.borderColor = task.color;
@@ -3674,6 +3706,7 @@ function buildDueDateMarker(task, dateStr) {
 
   const el = document.createElement('div');
   el.className = 'duedate-marker' + (isMulti ? ' duedate-multi-start' : '');
+  applyRowCaps(el, task, dateStr);
   el.dataset.taskId = task.id;
   el.title = 'Click to edit · Drag to move · Drop a role to add attendee';
 
@@ -3785,6 +3818,7 @@ function buildDueDateMarker(task, dateStr) {
 function buildDueDateBar(task, dateStr, isEnd) {
   const bar = document.createElement('div');
   bar.className = 'duedate-bar ' + (isEnd ? 'duedate-bar-end' : 'duedate-bar-mid');
+  applyRowCaps(bar, task, dateStr);
   bar.dataset.taskId = task.id;
 
   bar.addEventListener('click', e => { e.stopPropagation(); openPanel('edit-duedate', null, task.id); setSelectedTask(task.id); });
@@ -3847,6 +3881,7 @@ function buildReviewBlock(task, dateStr) {
 
   const block = document.createElement('div');
   block.className = 'review-block' + (isMulti ? ' review-multi-start' : '');
+  applyRowCaps(block, task, dateStr);
   block.dataset.taskId = task.id;
 
   const hd = document.createElement('div');
@@ -3955,6 +3990,7 @@ function buildReviewBlock(task, dateStr) {
 function buildReviewBar(task, dateStr, isEnd) {
   const bar = document.createElement('div');
   bar.className = 'review-bar ' + (isEnd ? 'review-bar-end' : 'review-bar-mid');
+  applyRowCaps(bar, task, dateStr);
   bar.dataset.taskId = task.id;
 
   bar.addEventListener('click', e => { e.stopPropagation(); openPanel('edit-review', task.date, task.id); setSelectedTask(task.id); });
@@ -5426,6 +5462,11 @@ function renderInvitesPanel() {
   content.appendChild(list);
 }
 
+// In-progress note being composed. Held here (not in the DOM) so live re-renders
+// — Firebase echoes of our own writes, or teammate edits — don't wipe an unsaved
+// note the user is still typing. Restored by renderNotesTab on every rebuild.
+let _noteDraft = null; // { type, text, sel, projectId }
+
 function renderNotesTab(container) {
   const proj = getProject(activeProjectId);
   if (!proj) return;
@@ -5488,12 +5529,27 @@ function renderNotesTab(container) {
   }
 
   container.appendChild(feed);
+
+  // Reopen an in-progress compose box so a live re-render mid-typing doesn't
+  // discard the note. Only restore for the project the draft belongs to.
+  if (_noteDraft && _noteDraft.projectId === activeProjectId) {
+    const nt = NOTE_TYPES.find(t => t.key === _noteDraft.type);
+    if (nt) showNoteCompose(container, nt, addBar);
+    else _noteDraft = null;
+  }
 }
 
 function showNoteCompose(container, noteType, addBar) {
   // Remove any existing compose
   const existing = container.querySelector('.notes-compose');
   if (existing) existing.remove();
+
+  // Carry over text/caret if we're restoring (or reopening) the same draft;
+  // otherwise start fresh. Either way this becomes the live draft.
+  const resume = _noteDraft && _noteDraft.type === noteType.key && _noteDraft.projectId === activeProjectId;
+  const initialText = resume ? _noteDraft.text : '';
+  const initialSel  = resume && typeof _noteDraft.sel === 'number' ? _noteDraft.sel : initialText.length;
+  _noteDraft = { type: noteType.key, text: initialText, sel: initialSel, projectId: activeProjectId };
 
   const compose = document.createElement('div');
   compose.className = 'notes-compose';
@@ -5506,6 +5562,11 @@ function showNoteCompose(container, noteType, addBar) {
   const textarea = document.createElement('textarea');
   textarea.placeholder = noteType.desc + '...';
   textarea.rows = 3;
+  textarea.value = initialText;
+  const syncDraft = () => { if (_noteDraft) { _noteDraft.text = textarea.value; _noteDraft.sel = textarea.selectionStart; } };
+  textarea.addEventListener('input', syncDraft);
+  textarea.addEventListener('keyup', syncDraft);
+  textarea.addEventListener('click', syncDraft);
   compose.appendChild(textarea);
 
   const actions = document.createElement('div');
@@ -5519,6 +5580,7 @@ function showNoteCompose(container, noteType, addBar) {
     if (!textarea.value.trim()) return;
     // Use the selected person from dashboard localStorage, or 'Team'
     const person = localStorage.getItem('dash_selected_person') || 'Team';
+    _noteDraft = null; // clear before re-render so the compose box doesn't reopen
     addNote(activeProjectId, noteType.key, textarea.value.trim(), person);
     renderExportPanel();
   });
@@ -5527,7 +5589,7 @@ function showNoteCompose(container, noteType, addBar) {
   cancelBtn.className = 'btn btn-ghost';
   cancelBtn.textContent = 'Cancel';
   cancelBtn.style.fontSize = '11px';
-  cancelBtn.addEventListener('click', () => { compose.remove(); });
+  cancelBtn.addEventListener('click', () => { _noteDraft = null; compose.remove(); });
 
   actions.appendChild(saveBtn);
   actions.appendChild(cancelBtn);
@@ -5536,6 +5598,7 @@ function showNoteCompose(container, noteType, addBar) {
   // Insert compose area after the add bar
   addBar.after(compose);
   textarea.focus();
+  try { textarea.setSelectionRange(initialSel, initialSel); } catch (_) {}
 }
 
 // Open the CEA (Pega CampaignExecution) ticket URL in a new tab, sanitising any
@@ -6387,31 +6450,50 @@ function normalizeState(s) {
   return s;
 }
 
+// Apply a remote snapshot, but only the slices that genuinely differ from what
+// we already hold. Returns true if anything actually changed — the caller only
+// re-renders when it did. Comparing against local (rather than counting our own
+// writes) means we never silently drop a real remote update, and our own echoed
+// writes are recognised as no-ops instead of triggering a clobbering re-apply.
 function applyRemoteState(snapshot) {
   const data = snapshot.val();
-  if (!data) return;
+  if (!data) return false;
+  let changed = false;
 
   if (data.state) {
-    state = normalizeState(data.state);
-    // A change arrived from outside our own writes — rebase undo history on it.
-    resetHistoryBaseline();
-    updateUndoRedoButtons();
+    // Normalize before comparing: Firebase strips nulls/empty arrays, so a raw
+    // echo of our own write won't be byte-identical until normalized.
+    const incoming = normalizeState(data.state);
+    if (JSON.stringify(incoming) !== _stateSnapshot()) {
+      state = incoming;
+      // A change arrived from outside our own writes — rebase undo history on it.
+      resetHistoryBaseline();
+      updateUndoRedoButtons();
+      changed = true;
+    }
   }
 
-  if (data.nameHistory) {
+  if (data.nameHistory && JSON.stringify(data.nameHistory) !== JSON.stringify(nameHistory)) {
     nameHistory = data.nameHistory;
     // Seed defaults for any role not yet in history
     Object.entries(DEFAULT_NAME_HISTORY).forEach(([role, names]) => {
       if (!nameHistory[role]) nameHistory[role] = [];
       names.forEach(n => { if (!nameHistory[role].includes(n)) nameHistory[role].push(n); });
     });
+    changed = true;
   }
 
-  if (data.peopleEmails) {
+  if (data.peopleEmails && JSON.stringify(data.peopleEmails) !== JSON.stringify(peopleEmails)) {
     peopleEmails = data.peopleEmails;
+    changed = true;
   }
 
-  sunsetPeople = data.sunsetPeople || {};
+  if (JSON.stringify(data.sunsetPeople || {}) !== JSON.stringify(sunsetPeople)) {
+    sunsetPeople = data.sunsetPeople || {};
+    changed = true;
+  }
+
+  return changed;
 }
 
 function initFirebase() {
@@ -6423,8 +6505,7 @@ function initFirebase() {
 
     // One-time initial load, then subscribe for live updates
     onValue(rootRef, snapshot => {
-      if (_suppressRemoteRender > 0) { _suppressRemoteRender--; return; }
-      applyRemoteState(snapshot);
+      const changed = applyRemoteState(snapshot);
       setFbStatus(true);
 
       // First load: boot the UI
@@ -6444,8 +6525,9 @@ function initFirebase() {
         renderCalendar();
         renderExportPanel();
         setupInitListeners();
-      } else {
-        // Subsequent live updates from teammates
+      } else if (changed) {
+        // A genuine remote change (teammate edit) — refresh. Our own echoed
+        // writes compare equal in applyRemoteState, so they don't reach here.
         renderSidebar();
         renderCalendar();
         renderPalette();
