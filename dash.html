@@ -261,6 +261,56 @@ a.today-card-project:hover { color: var(--accent); }
 .gantt-bar.clipped-right { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .gantt-empty { padding: 24px; text-align: center; color: var(--dim); font-style: italic; font-size: 12px; }
 
+/* ── MY PROJECTS PANEL ── */
+.mp-list { display: flex; flex-direction: column; gap: 8px; }
+.mp-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.mp-card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.mp-name { font-size: 13px; font-weight: 700; color: var(--text); text-decoration: none; }
+a.mp-name:hover { color: var(--accent); }
+.mp-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 10px; color: var(--dim); }
+.mp-meta-next { color: var(--text); }
+.mp-open-badge { font-size: 9px; font-weight: 700; padding: 1px 7px; border-radius: 10px; background: rgba(108,99,255,.15); color: var(--accent); }
+
+/* ── NEEDS ATTENTION (OVERDUE) PANEL ── */
+.od-list { display: flex; flex-direction: column; gap: 2px; }
+.od-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px; border-top: 1px solid var(--border); }
+.od-row:first-child { border-top: none; }
+.od-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.od-project { font-size: 9px; color: var(--dim); }
+.od-late { font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 8px; background: rgba(192,57,79,.2); color: #e07070; white-space: nowrap; flex-shrink: 0; }
+.od-empty { color: var(--dim); font-size: 12px; font-style: italic; padding: 12px 0; }
+
+/* ── MY CHECKLIST PANEL ── */
+.ck-group { margin-bottom: 12px; }
+.ck-group:last-child { margin-bottom: 0; }
+.ck-group-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+.ck-group-task { font-size: 12px; font-weight: 600; color: var(--text); }
+.ck-group-project { font-size: 9px; color: var(--dim); }
+.ck-group-count { font-size: 9px; color: var(--dim); margin-left: auto; flex-shrink: 0; }
+.ck-empty { color: var(--dim); font-size: 12px; font-style: italic; padding: 12px 0; }
+
+/* ── WORKLOAD OUTLOOK PANEL ── */
+.ol-chart { display: flex; align-items: flex-end; gap: 3px; height: 96px; padding: 4px 0; }
+.ol-day { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 3px; }
+.ol-bar-wrap { width: 100%; flex: 1; display: flex; align-items: flex-end; justify-content: center; }
+.ol-bar { width: 70%; min-height: 2px; border-radius: 2px 2px 0 0; transition: opacity .15s; }
+.ol-bar.weekend { opacity: .3; }
+.ol-day-label { font-size: 8px; color: var(--dim); white-space: nowrap; }
+.ol-day.today .ol-day-label { color: var(--accent); font-weight: 700; }
+.ol-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; font-size: 9px; color: var(--dim); }
+.ol-legend-item { display: flex; align-items: center; gap: 4px; }
+.ol-legend-swatch { width: 8px; height: 8px; border-radius: 2px; }
+
+/* ── RECENT ACTIVITY PANEL ── */
+.act-list { display: flex; flex-direction: column; gap: 6px; }
+.act-item { display: flex; gap: 10px; align-items: flex-start; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+.act-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+.act-body { flex: 1; min-width: 0; }
+.act-text { font-size: 12px; color: var(--text); line-height: 1.45; }
+.act-meta { font-size: 10px; color: var(--dim); margin-top: 2px; }
+.act-project { color: var(--text); }
+.act-empty { color: var(--dim); font-size: 12px; font-style: italic; padding: 12px 0; }
+
 /* ── CUSTOMIZABLE PANELS ── */
 .op-panel { position: relative; margin-bottom: 24px; }
 .op-panel > .today-hero, .op-panel > .dash-section, .op-panel > .effort-bar { margin-bottom: 0; }
@@ -1266,21 +1316,34 @@ function updateDateLabel() {
 // New panels added to DASH_PANELS appear automatically.
 // ══════════════════════════════════════════════════════════════════
 const DASH_PANELS = [
-  { id: 'effort',   label: 'Weekly Effort', render: renderEffortBar },
-  { id: 'today',    label: 'Today',         render: renderTodaySection },
-  { id: 'headsup',  label: 'Heads Up',      render: renderHeadsUpSection },
-  { id: 'comingup', label: 'Coming Up',     render: renderComingUpSection },
+  { id: 'effort',     label: 'Weekly Effort',    render: renderEffortBar },
+  { id: 'today',      label: 'Today',            render: renderTodaySection },
+  { id: 'headsup',    label: 'Heads Up',         render: renderHeadsUpSection },
+  { id: 'comingup',   label: 'Coming Up',        render: renderComingUpSection },
+  { id: 'myProjects', label: 'My Projects',      render: renderMyProjectsPanel },
+  { id: 'overdue',    label: 'Needs Attention',  render: renderOverduePanel },
+  { id: 'checklist',  label: 'My Checklist',     render: renderChecklistPanel, defaultHidden: true },
+  { id: 'outlook',    label: 'Workload Outlook', render: renderOutlookPanel,   defaultHidden: true },
+  { id: 'activity',   label: 'Recent Activity',  render: renderActivityPanel,  defaultHidden: true },
 ];
 const DASH_LAYOUT_KEY = 'dash_panel_layout';
 let _dashPanelDrag = null;
 
 function getDashLayout() {
   const all = DASH_PANELS.map(p => p.id);
-  let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(DASH_LAYOUT_KEY) || '{}'); } catch (_) {}
-  const order = Array.isArray(saved.order) ? saved.order.filter(id => all.includes(id)) : [];
-  const hidden = new Set(Array.isArray(saved.hidden) ? saved.hidden.filter(id => all.includes(id)) : []);
-  all.forEach(id => { if (!order.includes(id)) order.push(id); }); // new panels appear automatically
+  const raw = localStorage.getItem(DASH_LAYOUT_KEY);
+  let saved = null;
+  try { saved = raw ? JSON.parse(raw) : null; } catch (_) { saved = null; }
+  const order = saved && Array.isArray(saved.order) ? saved.order.filter(id => all.includes(id)) : [];
+  const hidden = new Set(saved && Array.isArray(saved.hidden) ? saved.hidden.filter(id => all.includes(id)) : []);
+  // Any registry panel not present in the saved order is "new" to this browser
+  // (first run, or a freshly shipped panel). Append it, honoring defaultHidden.
+  all.forEach(id => {
+    if (order.includes(id)) return;
+    order.push(id);
+    const def = dashPanelDef(id);
+    if (def && def.defaultHidden) hidden.add(id);
+  });
   return { order, hidden };
 }
 function saveDashLayout(layout) {
@@ -2485,6 +2548,372 @@ function renderComingUpSection() {
   });
 
   section.appendChild(chart);
+  return section;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ── NEW CUSTOM PANELS ──
+// ══════════════════════════════════════════════════════════════════
+
+function mkPanelSection(titleText) {
+  const section = document.createElement('div');
+  section.className = 'dash-section';
+  const title = document.createElement('div');
+  title.className = 'dash-section-title';
+  title.textContent = titleText;
+  section.appendChild(title);
+  return section;
+}
+
+// Shared helper: is task t assigned to / attended by the selected person?
+function taskIsForSelected(t) {
+  const lp = (selectedPerson || '').toLowerCase();
+  if (t.person === selectedPerson) return true;
+  if ((t.attendees || []).some(a => a.person === selectedPerson)) return true;
+  if (t.isDueDate && t.milestoneType === 'pto') {
+    if ((t.attendees || []).some(a => a.person && a.person.toLowerCase() === lp)) return true;
+    if (t.taskName && t.taskName.toLowerCase().includes(lp)) return true;
+  }
+  return false;
+}
+
+// ── PANEL: MY PROJECTS ──
+function renderMyProjectsPanel() {
+  const section = mkPanelSection('My Projects');
+  const peopleMap = getAllPeople();
+  const info = peopleMap.get(selectedPerson);
+  const today = todayStr();
+
+  if (!info || !info.projects.size) {
+    const empty = document.createElement('div');
+    empty.className = 'od-empty';
+    empty.textContent = 'Not on any active projects.';
+    section.appendChild(empty);
+    return section;
+  }
+
+  const list = document.createElement('div');
+  list.className = 'mp-list';
+
+  // Sort projects by soonest upcoming key date, then name.
+  const rows = [...info.projects.values()].map(pref => {
+    const proj = (state.projects || []).find(p => p.id === pref.id);
+    const tasks = (proj && proj.tasks) || [];
+    const openCount = tasks.filter(t => taskIsForSelected(t) && !t.isDueDate && !t.isReview && !isTaskDone(t.id)).length;
+    const next = tasks
+      .filter(t => taskIsForSelected(t) && (t.date || '') >= today)
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''))[0] || null;
+    return { proj, pref, openCount, next };
+  }).filter(r => r.proj);
+
+  rows.sort((a, b) => {
+    const ad = a.next ? a.next.date : '9999';
+    const bd = b.next ? b.next.date : '9999';
+    return ad.localeCompare(bd) || a.proj.name.localeCompare(b.proj.name);
+  });
+
+  rows.forEach(({ proj, pref, openCount, next }) => {
+    const card = document.createElement('div');
+    card.className = 'mp-card';
+
+    const head = document.createElement('div');
+    head.className = 'mp-card-head';
+    const nameLink = document.createElement('a');
+    nameLink.className = 'mp-name';
+    nameLink.href = 'team.html#project=' + encodeURIComponent(proj.id);
+    nameLink.target = '_blank';
+    nameLink.textContent = proj.name;
+    head.appendChild(nameLink);
+
+    [...pref.roles].sort().forEach(role => {
+      const tag = document.createElement('span');
+      tag.className = 'role-tag';
+      tag.style.background = getRoleColor(role);
+      tag.textContent = role;
+      head.appendChild(tag);
+    });
+
+    head.appendChild(buildStatusSeg(proj.id));
+    card.appendChild(head);
+
+    const meta = document.createElement('div');
+    meta.className = 'mp-meta';
+    if (openCount) {
+      const b = document.createElement('span');
+      b.className = 'mp-open-badge';
+      b.textContent = openCount + ' open';
+      meta.appendChild(b);
+    }
+    const nextSpan = document.createElement('span');
+    if (next) {
+      nextSpan.className = 'mp-meta-next';
+      nextSpan.textContent = 'Next: ' + (next.taskName || next.reviewLabel || 'Key date') + ' · ' + fmtDayShort(next.date, today);
+    } else {
+      nextSpan.textContent = 'No upcoming dates';
+    }
+    meta.appendChild(nextSpan);
+    card.appendChild(meta);
+
+    list.appendChild(card);
+  });
+
+  section.appendChild(list);
+  return section;
+}
+
+// ── PANEL: NEEDS ATTENTION (overdue, incomplete) ──
+function renderOverduePanel() {
+  const section = mkPanelSection('Needs Attention');
+  const today = todayStr();
+
+  const overdue = [];
+  (state.projects || []).filter(p => !p.completed && !p.ghost).forEach(proj => {
+    (proj.tasks || []).forEach(t => {
+      if (t.isDueDate || t.isReview) return;
+      if (!taskIsForSelected(t) || isTaskDone(t.id)) return;
+      const end = t.endDate || t.date;
+      if (!end || end >= today) return;
+      overdue.push({ task: t, end, projectName: proj.name, projectId: proj.id });
+    });
+  });
+
+  if (!overdue.length) {
+    const empty = document.createElement('div');
+    empty.className = 'od-empty';
+    empty.textContent = '✓ Nothing overdue — all caught up.';
+    section.appendChild(empty);
+    return section;
+  }
+
+  overdue.sort((a, b) => a.end.localeCompare(b.end)); // most overdue first
+
+  const list = document.createElement('div');
+  list.className = 'od-list';
+  overdue.forEach(({ task, end, projectName }) => {
+    const row = document.createElement('div');
+    row.className = 'od-row';
+
+    const check = document.createElement('button');
+    check.className = 'task-check';
+    check.title = 'Mark complete';
+    check.addEventListener('click', () => toggleTaskDone(task.id));
+    row.appendChild(check);
+
+    const name = document.createElement('div');
+    name.className = 'od-name';
+    const loe = task.loe ? (LOE_EMOJI[task.loe] || '') + ' ' : '';
+    name.innerHTML = loe + esc(task.taskName || '(untitled)') + ' <span class="od-project">· ' + esc(projectName) + '</span>';
+    row.appendChild(name);
+
+    const days = daysBetween(end, today);
+    const late = document.createElement('span');
+    late.className = 'od-late';
+    late.textContent = days + 'd late';
+    row.appendChild(late);
+
+    list.appendChild(row);
+  });
+  section.appendChild(list);
+  return section;
+}
+
+// ── PANEL: MY CHECKLIST (open subtasks across all my tasks) ──
+function buildTaskLookup() {
+  const map = new Map(); // taskId -> { task, projectName }
+  (state.projects || []).filter(p => !p.completed && !p.ghost).forEach(proj => {
+    (proj.tasks || []).forEach(t => { if (t.id) map.set(t.id, { task: t, projectName: proj.name }); });
+  });
+  return map;
+}
+
+function renderChecklistPanel() {
+  const section = mkPanelSection('My Checklist');
+  const lookup = buildTaskLookup();
+
+  const groups = [];
+  Object.entries(dashData.subtasks || {}).forEach(([taskId, subs]) => {
+    if (!Array.isArray(subs) || !subs.length) return;
+    const entry = lookup.get(taskId);
+    if (!entry || !taskIsForSelected(entry.task)) return;
+    if (!subs.some(s => !s.done)) return; // hide fully-completed lists
+    groups.push({ taskId, subs, task: entry.task, projectName: entry.projectName });
+  });
+
+  if (!groups.length) {
+    const empty = document.createElement('div');
+    empty.className = 'ck-empty';
+    empty.textContent = 'No open subtasks. Add them under a task in the Today panel.';
+    section.appendChild(empty);
+    return section;
+  }
+
+  groups.sort((a, b) => (a.task.date || '').localeCompare(b.task.date || ''));
+
+  groups.forEach(({ taskId, subs, task, projectName }) => {
+    const group = document.createElement('div');
+    group.className = 'ck-group';
+
+    const head = document.createElement('div');
+    head.className = 'ck-group-head';
+    const tn = document.createElement('span');
+    tn.className = 'ck-group-task';
+    tn.textContent = task.taskName || '(untitled)';
+    head.appendChild(tn);
+    const pn = document.createElement('span');
+    pn.className = 'ck-group-project';
+    pn.textContent = projectName;
+    head.appendChild(pn);
+    const done = subs.filter(s => s.done).length;
+    const count = document.createElement('span');
+    count.className = 'ck-group-count';
+    count.textContent = done + ' of ' + subs.length + ' done';
+    head.appendChild(count);
+    group.appendChild(head);
+
+    subs.forEach(sub => {
+      const row = document.createElement('div');
+      row.className = 'subtask-row';
+      const check = document.createElement('button');
+      check.className = 'subtask-check' + (sub.done ? ' checked' : '');
+      check.innerHTML = sub.done ? '✓' : '';
+      check.addEventListener('click', () => toggleSubtask(taskId, sub.id));
+      row.appendChild(check);
+      const text = document.createElement('span');
+      text.className = 'subtask-text' + (sub.done ? ' done' : '');
+      text.textContent = sub.text;
+      row.appendChild(text);
+      group.appendChild(row);
+    });
+
+    section.appendChild(group);
+  });
+  return section;
+}
+
+// ── PANEL: WORKLOAD OUTLOOK (next ~15 business days) ──
+function renderOutlookPanel() {
+  const section = mkPanelSection('Workload Outlook');
+  const today = todayStr();
+
+  // 15 business days starting from the selected date.
+  const days = [];
+  let cursor = selectedDate;
+  while (days.length < 15) {
+    if (!isWeekend(cursor)) days.push(cursor);
+    cursor = addDays(cursor, 1);
+  }
+
+  const yMax = 5; // workload meter tops out at "Overloaded"
+  const chart = document.createElement('div');
+  chart.className = 'ol-chart';
+
+  days.forEach(d => {
+    const pts = getDayWorkload(selectedPerson, d);
+    const info = workloadInfo(pts);
+    const dObj = new Date(d + 'T00:00:00');
+
+    const day = document.createElement('div');
+    day.className = 'ol-day' + (d === today ? ' today' : '');
+
+    const barWrap = document.createElement('div');
+    barWrap.className = 'ol-bar-wrap';
+    const bar = document.createElement('div');
+    bar.className = 'ol-bar';
+    bar.style.height = Math.max(2, Math.min(pts, yMax) / yMax * 100) + '%';
+    bar.style.background = info.color;
+    bar.title = fmtDateShort(d) + ': ' + info.label + ' (' + pts + ' pts)';
+    barWrap.appendChild(bar);
+    day.appendChild(barWrap);
+
+    const label = document.createElement('div');
+    label.className = 'ol-day-label';
+    label.textContent = DOW_SHORT[dObj.getDay()][0] + dObj.getDate();
+    day.appendChild(label);
+
+    chart.appendChild(day);
+  });
+  section.appendChild(chart);
+
+  const legend = document.createElement('div');
+  legend.className = 'ol-legend';
+  [
+    { label: 'Light', color: '#4cba6a' },
+    { label: 'Manageable', color: '#9ab84c' },
+    { label: 'Busy', color: '#e07b39' },
+    { label: 'Very Busy', color: '#c0394f' },
+    { label: 'Overloaded', color: '#8b1a2a' }
+  ].forEach(t => {
+    const item = document.createElement('div');
+    item.className = 'ol-legend-item';
+    const sw = document.createElement('span');
+    sw.className = 'ol-legend-swatch';
+    sw.style.background = t.color;
+    item.appendChild(sw);
+    item.appendChild(document.createTextNode(t.label));
+    legend.appendChild(item);
+  });
+  section.appendChild(legend);
+  return section;
+}
+
+// ── PANEL: RECENT ACTIVITY (latest notes on my projects) ──
+function renderActivityPanel() {
+  const section = mkPanelSection('Recent Activity');
+  const today = todayStr();
+  const peopleMap = getAllPeople();
+  const info = peopleMap.get(selectedPerson);
+  const myProjectIds = new Set(info ? info.projects.keys() : []);
+
+  const notes = [];
+  (state.projects || []).filter(p => !p.completed && !p.ghost && myProjectIds.has(p.id)).forEach(proj => {
+    (proj.notes || []).forEach(n => {
+      if (!n || !n.date) return;
+      notes.push({ note: n, projectName: proj.name });
+    });
+  });
+
+  notes.sort((a, b) => {
+    const ak = a.note.date + (a.note.time || '');
+    const bk = b.note.date + (b.note.time || '');
+    return bk.localeCompare(ak); // newest first
+  });
+
+  if (!notes.length) {
+    const empty = document.createElement('div');
+    empty.className = 'act-empty';
+    empty.textContent = 'No notes logged on your projects yet.';
+    section.appendChild(empty);
+    return section;
+  }
+
+  const list = document.createElement('div');
+  list.className = 'act-list';
+  notes.slice(0, 8).forEach(({ note, projectName }) => {
+    const item = document.createElement('div');
+    item.className = 'act-item';
+
+    const icon = document.createElement('span');
+    icon.className = 'act-icon';
+    const nt = NOTE_TYPES.find(t => t.key === note.type);
+    icon.textContent = note.emoji || (nt && nt.emoji) || '\u{1F4CB}';
+    item.appendChild(icon);
+
+    const body = document.createElement('div');
+    body.className = 'act-body';
+    const text = document.createElement('div');
+    text.className = 'act-text';
+    text.textContent = note.body || '';
+    body.appendChild(text);
+    const meta = document.createElement('div');
+    meta.className = 'act-meta';
+    const who = note.person || 'Team';
+    meta.innerHTML = '<span class="act-project">' + esc(projectName) + '</span> · ' + esc(who) + ' · ' + esc(fmtDayShort(note.date, today));
+    body.appendChild(meta);
+    item.appendChild(body);
+
+    list.appendChild(item);
+  });
+  section.appendChild(list);
   return section;
 }
 
