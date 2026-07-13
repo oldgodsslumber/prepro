@@ -179,6 +179,27 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .hu-metric-label { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; margin-top: 6px; }
 .hu-metric-sub { font-size: 10px; color: var(--dim); margin-top: 2px; }
 
+/* ── OPS DASHBOARD EXTRA PANELS ── */
+.opsx-list { display: flex; flex-direction: column; gap: 6px; }
+.opsx-row { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 12px; }
+.opsx-name { font-weight: 700; color: var(--text); flex-shrink: 0; }
+.opsx-role { font-size: 9px; color: var(--dim); }
+.opsx-trend { margin-left: auto; font-size: 11px; color: var(--dim); white-space: nowrap; flex-shrink: 0; }
+.opsx-trend b { color: var(--text); font-weight: 700; }
+.opsx-when { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; white-space: nowrap; flex-shrink: 0; }
+.opsx-when.open { background: rgba(76,186,106,.16); color: #4cba6a; }
+.opsx-when.hot  { background: rgba(192,57,79,.18); color: #e07070; }
+.opsx-badge { font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 8px; white-space: nowrap; flex-shrink: 0; color: #fff; }
+.opsx-sub { font-size: 10px; color: var(--dim); }
+.opsx-empty { color: var(--dim); font-size: 12px; font-style: italic; padding: 10px 0; }
+.opsx-item { display: flex; gap: 10px; align-items: flex-start; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+.opsx-item-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+.opsx-item-body { flex: 1; min-width: 0; }
+.opsx-item-text { font-size: 12px; color: var(--text); line-height: 1.45; }
+.opsx-item-meta { font-size: 10px; color: var(--dim); margin-top: 2px; }
+.opsx-item-meta b { color: var(--text); font-weight: 600; }
+.opsx-group-title { font-size: 10px; font-weight: 700; color: var(--dim); margin: 4px 0 2px; }
+
 /* ── CUSTOMIZABLE PANELS (Ops Dashboard + Metrics) ── */
 .op-panel { position: relative; margin-bottom: 24px; }
 .op-panel > .hu-section, .op-panel > .m-section { margin-bottom: 0; }
@@ -2220,6 +2241,12 @@ const DASH_PANELS = [
   { id: 'milestones',    label: 'Milestones',                 render: () => renderHuGroup('milestone', 'Milestones') },
   { id: 'pto',           label: 'Team PTO',                   render: () => renderHuGroup('pto', 'Team PTO') },
   { id: 'projectHealth', label: 'Project Health · Most Late', render: renderHealthPanel },
+  { id: 'openingUp',     label: 'Opening Up · Availability',  render: renderOpeningUpPanel },
+  { id: 'overloaded',    label: 'Overloaded · Needs Rebalancing', render: renderOverloadedPanel },
+  { id: 'unassigned',    label: 'Unassigned Work',            render: renderUnassignedPanel },
+  { id: 'teamActivity',  label: 'Team Activity',              render: renderTeamActivityPanel, defaultHidden: true },
+  { id: 'coverageGaps',  label: 'Coverage Gaps',              render: renderCoverageGapsPanel, defaultHidden: true },
+  { id: 'deliveries',    label: 'Deliveries & Deadlines',     render: renderDeliveriesPanel,    defaultHidden: true },
 ];
 const METRICS_PANELS = [
   { id: 'snapshot',     label: 'Snapshot',              render: renderMetricsTiles },
@@ -2238,12 +2265,21 @@ let _panelDrag = null;
 
 function getLayout(view) {
   const def = PANEL_VIEWS[view];
-  const all = def.panels().map(p => p.id);
-  let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(def.key) || '{}'); } catch (_) {}
-  const order = Array.isArray(saved.order) ? saved.order.filter(id => all.includes(id)) : [];
-  const hidden = new Set(Array.isArray(saved.hidden) ? saved.hidden.filter(id => all.includes(id)) : []);
-  all.forEach(id => { if (!order.includes(id)) order.push(id); }); // new panels appear automatically
+  const panels = def.panels();
+  const all = panels.map(p => p.id);
+  const raw = localStorage.getItem(def.key);
+  let saved = null;
+  try { saved = raw ? JSON.parse(raw) : null; } catch (_) { saved = null; }
+  const order = saved && Array.isArray(saved.order) ? saved.order.filter(id => all.includes(id)) : [];
+  const hidden = new Set(saved && Array.isArray(saved.hidden) ? saved.hidden.filter(id => all.includes(id)) : []);
+  // Any registry panel not in the saved order is "new" to this browser (first
+  // run, or a freshly shipped panel). Append it, honoring defaultHidden.
+  all.forEach(id => {
+    if (order.includes(id)) return;
+    order.push(id);
+    const p = panels.find(x => x.id === id);
+    if (p && p.defaultHidden) hidden.add(id);
+  });
   return { order, hidden };
 }
 function saveLayout(view, layout) {
@@ -2618,6 +2654,345 @@ function renderHealthPanel() {
     phSection.appendChild(phTable);
   }
   return phSection;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ── NEW OPS DASHBOARD PANELS ──
+// ══════════════════════════════════════════════════════════════════
+
+// Business days (Mon–Fri) starting from startStr, inclusive.
+function opsBizDays(startStr, count) {
+  const out = [];
+  let cursor = startStr;
+  while (out.length < count) {
+    const dow = new Date(cursor + 'T00:00:00').getDay();
+    if (dow !== 0 && dow !== 6) out.push(cursor);
+    cursor = addDays(cursor, 1);
+  }
+  return out;
+}
+function opsRelDay(dateStr, today) {
+  const n = daysBetweenDates(today, dateStr);
+  if (n === 0) return 'today';
+  if (n === 1) return 'tomorrow';
+  if (n === -1) return 'yesterday';
+  if (n > 1 && n <= 7) return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' });
+  if (n < 0) return Math.abs(n) + 'd ago';
+  return fmtDateShort(dateStr);
+}
+function fmtPts(n) { return Number.isInteger(n) ? String(n) : n.toFixed(1); }
+
+function mkOpsSection(titleText) {
+  const section = document.createElement('div');
+  section.className = 'hu-section';
+  const title = document.createElement('div');
+  title.className = 'hu-section-title';
+  title.textContent = titleText;
+  section.appendChild(title);
+  return section;
+}
+function mkOpsEmpty(text) {
+  const d = document.createElement('div');
+  d.className = 'opsx-empty';
+  d.textContent = text;
+  return d;
+}
+// A row with a left node and a right-aligned cluster of nodes.
+function opsRow(leftNode, rightNodes) {
+  const row = document.createElement('div');
+  row.className = 'opsx-row';
+  row.appendChild(leftNode);
+  const right = document.createElement('div');
+  right.style.marginLeft = 'auto';
+  right.style.display = 'flex';
+  right.style.alignItems = 'center';
+  right.style.gap = '10px';
+  right.style.flexShrink = '0';
+  (rightNodes || []).forEach(n => n && right.appendChild(n));
+  row.appendChild(right);
+  return row;
+}
+function mkOpsName(text) {
+  const s = document.createElement('span');
+  s.className = 'opsx-name';
+  s.textContent = text;
+  return s;
+}
+
+// ── PANEL: OPENING UP · AVAILABILITY ──
+// Flags a person when they have a run of >= MIN consecutive business days with
+// daily load under THRESHOLD pts (PTO days break the run). That gives producers
+// an assignable window — long enough for a multi-day task, but because every day
+// in the run is already under 2 it can't spike mid-window.
+const OPENING_THRESHOLD = 2;   // "available" when a day's load is under this
+const OPENING_MIN_DAYS  = 2;   // window must be at least this many consecutive biz days
+const OPENING_SCAN_DAYS = 10;  // business days to look ahead
+
+function renderOpeningUpPanel() {
+  const section = mkOpsSection('Opening Up · Availability');
+  const today = todayStr();
+  const days = opsBizDays(today, OPENING_SCAN_DAYS);
+  const rows = [];
+
+  getAllPeople().forEach(person => {
+    const load = days.map(d => ({ d, pto: isPersonPTO(person, d), pts: getDayWorkload(person, d) }));
+    // earliest maximal run of available days (not PTO, load < threshold) of length >= MIN
+    let startIdx = -1, len = 0;
+    let i = 0;
+    while (i < load.length) {
+      if (load[i].pto || load[i].pts >= OPENING_THRESHOLD) { i++; continue; }
+      let j = i;
+      while (j < load.length && !load[j].pto && load[j].pts < OPENING_THRESHOLD) j++;
+      if (j - i >= OPENING_MIN_DAYS) { startIdx = i; len = j - i; break; }
+      i = j;
+    }
+    if (startIdx < 0) return;
+    const winAvg = load.slice(startIdx, startIdx + len).reduce((s, x) => s + x.pts, 0) / len;
+    rows.push({ person, startIdx, len, leadPts: load[0].pts, winStart: load[startIdx].d, winAvg });
+  });
+
+  if (!rows.length) {
+    section.appendChild(mkOpsEmpty('No open capacity windows in the next ' + OPENING_SCAN_DAYS + ' work days.'));
+    return section;
+  }
+
+  // soonest window first, then longer, then lighter
+  rows.sort((a, b) => a.startIdx - b.startIdx || b.len - a.len || a.winAvg - b.winAvg);
+
+  const list = document.createElement('div');
+  list.className = 'opsx-list';
+  rows.forEach(r => {
+    const when = document.createElement('span');
+    when.className = 'opsx-when open';
+    const lenTxt = r.len >= OPENING_SCAN_DAYS ? OPENING_SCAN_DAYS + '+ days' : r.len + ' day' + (r.len > 1 ? 's' : '');
+    when.textContent = (r.startIdx === 0 ? 'now' : 'opens ' + opsRelDay(r.winStart, today)) + ' · ' + lenTxt;
+
+    const trend = document.createElement('span');
+    trend.className = 'opsx-trend';
+    const winPts = Math.round(r.winAvg * 10) / 10;
+    if (r.startIdx > 0 && r.leadPts >= OPENING_THRESHOLD) {
+      trend.innerHTML = 'now <b>' + fmtPts(r.leadPts) + '</b> → <b>' + fmtPts(winPts) + '</b>';
+    } else {
+      trend.innerHTML = 'load <b>' + fmtPts(winPts) + '</b>';
+    }
+    list.appendChild(opsRow(mkOpsName(r.person), [trend, when]));
+  });
+  section.appendChild(list);
+  return section;
+}
+
+// ── PANEL: OVERLOADED · NEEDS REBALANCING ──
+const OVERLOAD_THRESHOLD = 4; // Very Busy / Overloaded
+function renderOverloadedPanel() {
+  const section = mkOpsSection('Overloaded · Needs Rebalancing');
+  const today = todayStr();
+  const days = opsBizDays(today, 5);
+  const rows = [];
+  getAllPeople().forEach(person => {
+    let peakPts = -1, peakDay = null;
+    days.forEach(d => {
+      if (isPersonPTO(person, d)) return;
+      const pts = getDayWorkload(person, d);
+      if (pts > peakPts) { peakPts = pts; peakDay = d; }
+    });
+    if (peakPts >= OVERLOAD_THRESHOLD) rows.push({ person, peakPts, peakDay });
+  });
+
+  if (!rows.length) {
+    section.appendChild(mkOpsEmpty('No one is overloaded this week.'));
+    return section;
+  }
+  rows.sort((a, b) => b.peakPts - a.peakPts);
+
+  const list = document.createElement('div');
+  list.className = 'opsx-list';
+  rows.forEach(r => {
+    const info = workloadInfo(r.peakPts);
+    const badge = document.createElement('span');
+    badge.className = 'opsx-badge';
+    badge.style.background = info.color;
+    badge.textContent = (info.emoji ? info.emoji + ' ' : '') + info.label;
+    const trend = document.createElement('span');
+    trend.className = 'opsx-trend';
+    trend.innerHTML = 'peak <b>' + fmtPts(r.peakPts) + '</b> · ' + opsRelDay(r.peakDay, today);
+    list.appendChild(opsRow(mkOpsName(r.person), [trend, badge]));
+  });
+  section.appendChild(list);
+  return section;
+}
+
+// ── PANEL: UNASSIGNED WORK ──
+function renderUnassignedPanel() {
+  const section = mkOpsSection('Unassigned Work');
+  const today = todayStr();
+  const horizon = opsBizDays(today, 10);
+  const windowEnd = horizon[horizon.length - 1];
+
+  const byProject = new Map();
+  (state.projects || []).filter(p => !isInactive(p) && !p.ghost).forEach(proj => {
+    (proj.tasks || []).forEach(t => {
+      if (t.isDueDate || t.isReview) return;
+      const start = t.date, end = t.endDate || t.date;
+      if (!start || end < today || start > windowEnd) return; // overlaps [today, windowEnd]
+      const hasPerson = !!t.person || (t.attendees || []).some(a => a.person);
+      if (hasPerson) return;
+      if (!byProject.has(proj.id)) byProject.set(proj.id, { name: proj.name, id: proj.id, tasks: [] });
+      byProject.get(proj.id).tasks.push(t);
+    });
+  });
+
+  if (!byProject.size) {
+    section.appendChild(mkOpsEmpty('All upcoming work is assigned.'));
+    return section;
+  }
+
+  const groups = [...byProject.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const list = document.createElement('div');
+  list.className = 'opsx-list';
+  groups.forEach(g => {
+    const gt = document.createElement('div');
+    gt.className = 'opsx-group-title';
+    gt.textContent = g.name;
+    list.appendChild(gt);
+    g.tasks.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    g.tasks.forEach(t => {
+      const start = t.date, end = t.endDate || t.date;
+      const dateTxt = start === end ? fmtDateShort(start) : fmtDateShort(start) + ' – ' + fmtDateShort(end);
+      const loe = t.loe ? (HU_LOE_EMOJI[t.loe] || '') + ' ' : '';
+      const name = mkOpsName(loe + (t.taskName || '(untitled)'));
+      name.style.fontWeight = '600';
+      const when = document.createElement('span');
+      when.className = 'opsx-sub';
+      when.textContent = dateTxt;
+      list.appendChild(opsRow(name, [when]));
+    });
+  });
+  section.appendChild(list);
+  return section;
+}
+
+// ── PANEL: TEAM ACTIVITY (recent notes across active projects) ──
+function renderTeamActivityPanel() {
+  const section = mkOpsSection('Team Activity');
+  const today = todayStr();
+  const notes = [];
+  (state.projects || []).filter(p => !isInactive(p) && !p.ghost).forEach(proj => {
+    (proj.notes || []).forEach(n => { if (n && n.date) notes.push({ n, projectName: proj.name }); });
+  });
+  notes.sort((a, b) => (b.n.date + (b.n.time || '')).localeCompare(a.n.date + (a.n.time || '')));
+
+  if (!notes.length) {
+    section.appendChild(mkOpsEmpty('No notes logged across active projects yet.'));
+    return section;
+  }
+
+  const list = document.createElement('div');
+  list.className = 'opsx-list';
+  notes.slice(0, 10).forEach(({ n, projectName }) => {
+    const item = document.createElement('div');
+    item.className = 'opsx-item';
+    const icon = document.createElement('span');
+    icon.className = 'opsx-item-icon';
+    icon.textContent = n.emoji || '\u{1F4CB}';
+    item.appendChild(icon);
+    const body = document.createElement('div');
+    body.className = 'opsx-item-body';
+    const text = document.createElement('div');
+    text.className = 'opsx-item-text';
+    text.textContent = n.body || '';
+    body.appendChild(text);
+    const meta = document.createElement('div');
+    meta.className = 'opsx-item-meta';
+    meta.innerHTML = '<b>' + esc(projectName) + '</b> · ' + esc(n.person || 'Team') + ' · ' + esc(opsRelDay(n.date, today));
+    body.appendChild(meta);
+    item.appendChild(body);
+    list.appendChild(item);
+  });
+  section.appendChild(list);
+  return section;
+}
+
+// ── PANEL: COVERAGE GAPS (missing producer / stalled projects) ──
+function renderCoverageGapsPanel() {
+  const section = mkOpsSection('Coverage Gaps');
+  const today = todayStr();
+  const gaps = [];
+  (state.projects || []).filter(p => !isInactive(p) && !p.ghost).forEach(proj => {
+    const producer = getPrimaryProducer(proj);
+    const workTasks = (proj.tasks || []).filter(t => !t.isDueDate && !t.isReview && t.date);
+    const hasUpcoming = workTasks.some(t => (t.endDate || t.date) >= today);
+    const reasons = [];
+    if (!producer) reasons.push('No producer');
+    if (!hasUpcoming) reasons.push(workTasks.length ? 'No upcoming work' : 'No tasks scheduled');
+    if (reasons.length) gaps.push({ proj, reasons });
+  });
+
+  if (!gaps.length) {
+    section.appendChild(mkOpsEmpty('Every active project has a producer and upcoming work.'));
+    return section;
+  }
+  gaps.sort((a, b) => a.proj.name.localeCompare(b.proj.name));
+
+  const list = document.createElement('div');
+  list.className = 'opsx-list';
+  gaps.forEach(({ proj, reasons }) => {
+    const name = document.createElement('a');
+    name.className = 'opsx-name';
+    name.style.textDecoration = 'none';
+    name.href = 'team.html#project=' + encodeURIComponent(proj.id);
+    name.target = '_blank';
+    name.textContent = proj.name;
+    const sub = document.createElement('span');
+    sub.className = 'opsx-trend';
+    sub.innerHTML = reasons.map(r => '<b style="color:#e07070">' + esc(r) + '</b>').join(' · ');
+    list.appendChild(opsRow(name, [sub]));
+  });
+  section.appendChild(list);
+  return section;
+}
+
+// ── PANEL: DELIVERIES & DEADLINES (upcoming due-dates across projects) ──
+function renderDeliveriesPanel() {
+  const section = mkOpsSection('Deliveries & Deadlines');
+  const today = todayStr();
+  const horizonEnd = addDays(today, 21);
+  const items = [];
+  (state.projects || []).filter(p => !isInactive(p) && !p.ghost).forEach(proj => {
+    (proj.tasks || []).forEach(t => {
+      if (!t.isDueDate || t.milestoneType === 'pto') return;
+      if (!t.date || t.date < today || t.date > horizonEnd) return;
+      items.push({ t, date: t.date, projectName: proj.name, producer: getPrimaryProducer(proj) });
+    });
+  });
+
+  if (!items.length) {
+    section.appendChild(mkOpsEmpty('No deliveries or deadlines in the next 3 weeks.'));
+    return section;
+  }
+  items.sort((a, b) => a.date.localeCompare(b.date));
+
+  const list = document.createElement('div');
+  list.className = 'opsx-list';
+  items.forEach(({ t, date, projectName, producer }) => {
+    const body = document.createElement('div');
+    body.style.flex = '1';
+    body.style.minWidth = '0';
+    const name = mkOpsName(t.taskName || 'Due date');
+    body.appendChild(name);
+    const sub = document.createElement('div');
+    sub.className = 'opsx-sub';
+    sub.textContent = projectName + (producer ? ' · ' + producer : '');
+    body.appendChild(sub);
+
+    const days = daysBetweenDates(today, date);
+    const when = document.createElement('span');
+    when.className = 'opsx-when ' + (days <= 3 ? 'hot' : 'open');
+    when.textContent = days === 0 ? 'today' : (days === 1 ? 'tomorrow' : 'in ' + days + 'd');
+
+    list.appendChild(opsRow(body, [when]));
+  });
+  section.appendChild(list);
+  return section;
 }
 
 function computeOpsMetrics() {
