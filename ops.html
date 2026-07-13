@@ -1051,6 +1051,11 @@ function getTaskCat(task) {
   return getRoleCat(task.role, task.taskName);
 }
 
+// Default label for an un-named task — mirrors Team, where an empty name shows
+// the role's general verb (Producer → "Producing") rather than a placeholder.
+const ROLE_VERB = { 'Producer': 'Producing', 'Editor': 'Editing', 'Animator': 'Animating', 'Copywriter': 'Copywriting', 'Designer': 'Designing', 'Stakeholder': 'Reviewing', 'External Vendor': 'Vendor Work', 'Other': 'Working' };
+function roleVerb(role) { return ROLE_VERB[role] || role || 'Task'; }
+
 // ── COLLECT ALL OPS TASKS ──
 // Returns flat list of { date, endDate, person, cat, taskName, loe, color, projectName }
 function getOpsEntries() {
@@ -1082,7 +1087,7 @@ function getOpsEntries() {
         const cat = getRoleCat(p.role, task.taskName);
         if (!cat) return;
         const color = CAT_COLORS[cat] || '#6c63ff';
-        entries.push({ date: task.date, endDate: task.endDate || task.date, person: p.person || p.role, cat, taskName: task.taskName || '(untitled)', loe, color, projectName: proj.name, projectId: proj.id, taskId: task.id, isPrimary: p.isPrimary || false, attIdx: p.attIdx });
+        entries.push({ date: task.date, endDate: task.endDate || task.date, person: p.person || p.role, cat, taskName: task.taskName || roleVerb(p.role), loe, color, projectName: proj.name, projectId: proj.id, taskId: task.id, isPrimary: p.isPrimary || false, attIdx: p.attIdx });
       });
     });
   });

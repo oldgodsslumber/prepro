@@ -876,9 +876,9 @@ const ROLE_CATS = [
 ];
 const REVIEW_COLOR = '#c0394f';
 const LOE_EMOJI    = { low: '🟢', medium: '🟡', high: '🔴' };
-const ROLE_ABBR    = { 'Producer': 'PRD', 'Editor': 'EDT', 'Animator': 'ANM', 'Copywriter': 'CPY', 'Designer': 'DSN', 'Stakeholder': 'STK', 'External Vendor': 'VND', 'Other': 'OTH' };
+const ROLE_ABBR    = { 'Producer': 'PRD', 'Editor': 'EDT', 'Animator': 'ANM', 'Copywriter': 'CPY', 'Designer': 'DSN', 'Stakeholder': 'STK', 'External Vendor': 'VND', 'Other': 'OTH', 'Administrative': 'ADMIN', 'Team/Other Event': 'EVENT' };
 // Verb form a role-task name defaults to when left blank.
-const ROLE_VERB    = { 'Producer': 'Producing', 'Editor': 'Editing', 'Animator': 'Animating', 'Copywriter': 'Copywriting', 'Designer': 'Designing', 'Stakeholder': 'Reviewing', 'External Vendor': 'Vendor Work', 'Other': 'Working' };
+const ROLE_VERB    = { 'Producer': 'Producing', 'Editor': 'Editing', 'Animator': 'Animating', 'Copywriter': 'Copywriting', 'Designer': 'Designing', 'Stakeholder': 'Reviewing', 'External Vendor': 'Vendor Work', 'Other': 'Working', 'Administrative': 'Administrative', 'Team/Other Event': 'Team Event' };
 function roleVerb(role) { return ROLE_VERB[role] || role || 'Task'; }
 // Quick-pick task-title options shown as a second row in the task panel.
 const TASK_SUGGESTIONS = {
@@ -914,6 +914,9 @@ function isVideoTeamPerson(person) {
 }
 function catLabelForRole(role) { const c = ROLE_CATS.find(c => c.roles.includes(role)); return c ? c.label : ''; }
 function isPtoProject(proj) { return !!(proj && /pto|time\s*off/i.test(proj.name || '')); }
+// Administrative is a special project too: its palette carries only the admin /
+// team-event attendee chips (used to track outings, off-sites, admin blocks).
+function isAdminProject(proj) { return !!(proj && (/administrative/i.test(proj.name || '') || /\badmin\b/i.test(proj.name || ''))); }
 // Unique people in a roster group (union across its roles, deduped — no repeats).
 function getGroupNames(group) {
   const seen = new Set(), out = [];
@@ -2940,6 +2943,38 @@ function renderPalette() {
     return;
   }
 
+  // Administrative projects: only the admin + team-event attendee chips, no
+  // regular role/review/key-date chips. Both create the standard role-block
+  // (attendee) task — drop people onto them like any other role block.
+  if (isAdminProject(getProject(activeProjectId))) {
+    const admGrp = document.createElement('div');
+    admGrp.className = 'pal-cat';
+    const admLbl = document.createElement('span');
+    admLbl.className = 'pal-label';
+    admLbl.textContent = 'Administrative';
+    admGrp.appendChild(admLbl);
+    [
+      { role: 'Administrative',   color: '#4cba6a' }, // the re-enabled "Other" green, renamed
+      { role: 'Team/Other Event', color: '#7ed99a' }  // a lighter green for fun team outings
+    ].forEach(spec => {
+      const chip = document.createElement('div');
+      chip.className = 'role-chip';
+      chip.draggable = true;
+      chip.textContent = spec.role;
+      chip.style.background = spec.color;
+      chip.style.color = pickTextColor(spec.color);
+      chip.addEventListener('dragstart', e => {
+        dragPayload = { role: spec.role, category: 'Other', color: spec.color };
+        e.dataTransfer.setData('text', JSON.stringify(dragPayload));
+        e.dataTransfer.effectAllowed = 'copy';
+      });
+      chip.addEventListener('dragend', () => { dragPayload = null; });
+      admGrp.appendChild(chip);
+    });
+    pal.appendChild(admGrp);
+    return;
+  }
+
   // 'Other' is hidden from the palette for now (kept in ROLE_CATS so any
   // existing tasks tagged Other still render).
   ROLE_CATS.filter(cat => cat.label !== 'Other').forEach(cat => {
@@ -3460,6 +3495,15 @@ function hexToRgba(hex, a) {
   const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
   return `rgba(${r},${g},${b},${a})`;
 }
+// Readable text colour for a solid chip/badge background — dark ink on light
+// fills (e.g. the lighter-green Team/Other Event chip), white on dark fills.
+function pickTextColor(hex) {
+  const h = String(hex || '').replace('#', '');
+  if (h.length !== 6) return '#fff';
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.6 ? '#1b1c26' : '#fff';
+}
 
 function buildChip(task, dateStr) {
   if (task.isDueDate) return buildDueDateMarker(task, dateStr);
@@ -3489,6 +3533,7 @@ function buildRoleBlock(task, dateStr) {
   const badge = document.createElement('span');
   badge.className = 'review-badge';
   badge.style.background = task.color;
+  badge.style.color = pickTextColor(task.color);
   badge.textContent = (task.loe ? LOE_EMOJI[task.loe] + ' ' : '') + (ROLE_ABBR[task.role] || task.role || 'Task');
   badge.title = task.role || '';
   const title = document.createElement('span');
