@@ -501,6 +501,7 @@ const CAT_COLORS = {
   'Editing':        '#4cba6a',
   'Animation':      '#7c5cbf',
   'Production':     '#c0394f',
+  'Administrative': '#c14b9a', // admin + team/other events (mirror team.html ADMIN_COLOR)
 };
 const DOW_ALL = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const DOW_WD  = ['Mon','Tue','Wed','Thu','Fri'];
@@ -1035,11 +1036,17 @@ function getProducerCat(name) {
 }
 
 // Map a role name (+ task name for producers) to an ops category.
+// Administrative / Team-Event roles are internal team work — they get their own
+// category so they surface in the Gantt, workload, and breakdowns.
+const ADMIN_ROLES = ['administrative', 'team/other event'];
+function isAdminRole(role) { return ADMIN_ROLES.includes((role || '').toLowerCase()); }
+
 function getRoleCat(role, taskName) {
   const r = (role || '').toLowerCase();
   if (r === 'editor')   return 'Editing';
   if (r === 'animator') return 'Animation';
   if (r === 'producer') return getProducerCat(taskName);
+  if (isAdminRole(r))   return 'Administrative';
   return null;
 }
 
@@ -1053,7 +1060,7 @@ function getTaskCat(task) {
 
 // Default label for an un-named task — mirrors Team, where an empty name shows
 // the role's general verb (Producer → "Producing") rather than a placeholder.
-const ROLE_VERB = { 'Producer': 'Producing', 'Editor': 'Editing', 'Animator': 'Animating', 'Copywriter': 'Copywriting', 'Designer': 'Designing', 'Stakeholder': 'Reviewing', 'External Vendor': 'Vendor Work', 'Other': 'Working' };
+const ROLE_VERB = { 'Producer': 'Producing', 'Editor': 'Editing', 'Animator': 'Animating', 'Copywriter': 'Copywriting', 'Designer': 'Designing', 'Stakeholder': 'Reviewing', 'External Vendor': 'Vendor Work', 'Other': 'Working', 'Administrative': 'Administrative', 'Team/Other Event': 'Team Event' };
 function roleVerb(role) { return ROLE_VERB[role] || role || 'Task'; }
 
 // ── COLLECT ALL OPS TASKS ──
@@ -1082,7 +1089,7 @@ function getOpsEntries() {
       (task.attendees || []).forEach((a, i) => roster.push({ person: a.person, role: a.role, category: a.category, attIdx: i }));
       const rosterSeen = new Set();
       roster.forEach(p => {
-        if (p.category !== 'Internal Team') return;
+        if (p.category !== 'Internal Team' && !isAdminRole(p.role)) return;
         if (p.person) { if (rosterSeen.has(p.person)) return; rosterSeen.add(p.person); }
         const cat = getRoleCat(p.role, task.taskName);
         if (!cat) return;
@@ -1302,7 +1309,7 @@ function renderFilterChips() {
 }
 
 // ── CHIP BUILDER (shared by calendar + person view) ──
-const SHORT_CAT = { 'Pre-Production':'PRE','Producing':'PROD','Post-Producing':'POST','Editing':'EDIT','Animation':'ANIM','Production':'SHOOT' };
+const SHORT_CAT = { 'Pre-Production':'PRE','Producing':'PROD','Post-Producing':'POST','Editing':'EDIT','Animation':'ANIM','Production':'SHOOT','Administrative':'ADMIN' };
 
 function buildOpsChip(entry) {
   const chip = document.createElement('div');

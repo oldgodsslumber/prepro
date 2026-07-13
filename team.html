@@ -301,9 +301,9 @@ table.xl-review-table tr.xl-update-row.xl-unchecked td { background: transparent
 .cal-day-month-label { font-size: 9px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .07em; }
 
 /* ── GHOST ROWS (cross-project busyness overlay) ── */
-.ghost-row { font-size: 10px; font-weight: 500; padding: 1px 4px; color: rgba(255,255,255,.55); display: flex; align-items: center; gap: 4px; pointer-events: none; user-select: none; overflow: hidden; white-space: nowrap; min-width: 0; max-width: 100%; }
-.ghost-row .ghost-name { font-weight: 600; color: rgba(255,255,255,.7); overflow: hidden; text-overflow: ellipsis; }
-.ghost-effort { font-size: 9px; line-height: 1; flex-shrink: 0; width: 11px; text-align: center; }
+.ghost-row { font-size: 10px; font-weight: 500; padding: 1px 4px; color: rgba(255,255,255,.55); display: flex; align-items: flex-start; gap: 4px; pointer-events: none; user-select: none; overflow: hidden; min-width: 0; max-width: 100%; }
+.ghost-row .ghost-name { font-weight: 600; color: rgba(255,255,255,.7); overflow: hidden; white-space: normal; line-height: 1.3; word-break: break-word; }
+.ghost-effort { font-size: 9px; line-height: 1.3; flex-shrink: 0; width: 11px; text-align: center; }
 .ghost-row.idle .ghost-name { color: rgba(255,255,255,.32); }
 
 /* ── TASK CHIPS ── */
@@ -771,7 +771,7 @@ table.xl-review-table tr.xl-update-row.xl-unchecked td { background: transparent
         <div class="panel-divider"></div>
         <div class="panel-fields">
           <div class="panel-field panel-field-loe" id="panelFieldLOE">
-            <label>Effort <span class="htip">?<span class="htip-popup">Level of effort — click a dot: 🟢 Low, 🟡 Medium, 🔴 High. Defaults to Low. Shows as a dot on the task chip and feeds into the Trello Export.</span></span></label>
+            <label>Effort <span class="htip">?<span class="htip-popup">Level of effort — click a dot: 🟢 Low, 🟡 Medium, 🔴 High. Defaults to Low. Shows as a dot on the task chip and feeds the workload views &amp; exports.</span></span></label>
             <div class="loe-dots" id="panelLOE" data-value="low" role="radiogroup" aria-label="Effort">
               <button type="button" class="loe-dot loe-low"    data-loe="low"    title="Low"    aria-label="Low effort"></button>
               <button type="button" class="loe-dot loe-medium" data-loe="medium" title="Medium" aria-label="Medium effort"></button>
@@ -817,7 +817,6 @@ table.xl-review-table tr.xl-update-row.xl-unchecked td { background: transparent
     <div class="tools-rail-tab" data-tab="text"><span class="tr-icon">📄</span>Text</div>
     <div class="tools-rail-tab" data-tab="table"><span class="tr-icon">📊</span>Table</div>
     <div class="tools-rail-tab" data-tab="png"><span class="tr-icon">🖼️</span>PNG</div>
-    <div class="tools-rail-tab" data-tab="planyway"><span class="tr-icon">🗂️</span>Trello</div>
     <div class="tools-rail-tab" data-tab="invites-web"><span class="tr-icon">🌐</span>Invite</div>
     <div class="tools-rail-tab" data-tab="notes"><span class="tr-icon">📝</span>Notes</div>
     <div class="tools-rail-tab" data-tab="cea"><span class="tr-icon">🔗</span>CEA</div>
@@ -923,6 +922,13 @@ function isPtoProject(proj) { return !!(proj && /pto|time\s*off/i.test(proj.name
 // Administrative is a special project too: its palette carries only the admin /
 // team-event attendee chips (used to track outings, off-sites, admin blocks).
 function isAdminProject(proj) { return !!(proj && (/administrative/i.test(proj.name || '') || /\badmin\b/i.test(proj.name || ''))); }
+// Administrative / Team-Event roles: internal team work (counts toward workload)
+// even though they sit under the "Other"-style admin palette.
+const ADMIN_ROLES = ['administrative', 'team/other event'];
+function isAdminRole(role) { return ADMIN_ROLES.includes((role || '').toLowerCase()); }
+// Shared category colour for admin + team-event work (distinct from the blues,
+// green, purple, orange, red already in use). Mirror in ops.html CAT_COLORS.
+const ADMIN_COLOR = '#c14b9a';
 // Unique people in a roster group (union across its roles, deduped — no repeats).
 function getGroupNames(group) {
   const seen = new Set(), out = [];
@@ -981,7 +987,8 @@ let dragPayload     = null;
 let panelContext    = null;
 let exportTabActive  = localStorage.getItem('prepro_export_tab') || 'projectinfo';
 if (exportTabActive === 'roster') exportTabActive = 'projectinfo'; // old tab merged into Project Info
-const TAB_TITLES = { projectinfo: 'Project Info', text: 'Text Export', table: 'Table / Excel', png: 'PNG Export', planyway: 'Trello Export', 'invites-web': 'Invite Web', notes: 'Notes', cea: 'CEA' };
+if (exportTabActive === 'planyway') exportTabActive = 'projectinfo'; // Trello export removed
+const TAB_TITLES = { projectinfo: 'Project Info', text: 'Text Export', table: 'Table / Excel', png: 'PNG Export', 'invites-web': 'Invite Web', notes: 'Notes', cea: 'CEA' };
 let exportOpen       = false;
 let exportOptBold       = true;
 let exportOptRoles      = false;
@@ -3023,8 +3030,8 @@ function renderPalette() {
     admLbl.textContent = 'Administrative';
     admGrp.appendChild(admLbl);
     [
-      { role: 'Administrative',   color: '#4cba6a' }, // the re-enabled "Other" green, renamed
-      { role: 'Team/Other Event', color: '#7ed99a' }  // a lighter green for fun team outings
+      { role: 'Administrative',   color: ADMIN_COLOR },
+      { role: 'Team/Other Event', color: ADMIN_COLOR } // fun team outings, off-sites, etc.
     ].forEach(spec => {
       const chip = document.createElement('div');
       chip.className = 'role-chip';
@@ -3033,7 +3040,8 @@ function renderPalette() {
       chip.style.background = spec.color;
       chip.style.color = pickTextColor(spec.color);
       chip.addEventListener('dragstart', e => {
-        dragPayload = { role: spec.role, category: 'Other', color: spec.color };
+        // 'Internal Team' category so attendees count toward Team Workload.
+        dragPayload = { role: spec.role, category: 'Internal Team', color: spec.color };
         e.dataTransfer.setData('text', JSON.stringify(dragPayload));
         e.dataTransfer.effectAllowed = 'copy';
       });
@@ -3175,7 +3183,7 @@ function buildGhostInfo() {
   });
   (proj.tasks || []).forEach(t => {
     if (t.person && INTERNAL_ROLES.has(t.role)) rosterPeople.add(t.person);
-    (t.attendees || []).forEach(a => { if (a.person && a.category === 'Internal Team') rosterPeople.add(a.person); });
+    (t.attendees || []).forEach(a => { if (a.person && (a.category === 'Internal Team' || isAdminRole(a.role))) rosterPeople.add(a.person); });
   });
   if (!rosterPeople.size) return empty;
 
@@ -3447,40 +3455,58 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghostInfo, showMonthLabel)
     }
   });
 
-  // Ghost rows: one stable row per person on this project, with an effort dot
+  // Team Conflicts overlay: group the day's people by effort level and render one
+  // row per level actually used (busiest first, then PTO), listing everyone at
+  // that level — far less noisy than a separate row per person. Unused levels are
+  // skipped entirely.
   if (ghostInfo && ghostInfo.people.length) {
     const dayMap = ghostInfo.byDate.get(dateStr) || new Map();
-    const workloadEmoji = pts => {
-      if (pts < 1.5) return { e: '🟢', label: 'Light' };
-      if (pts < 2.5) return { e: '🟡', label: 'Manageable' };
-      if (pts < 3.5) return { e: '🟠', label: 'Busy' };
-      if (pts < 4.5) return { e: '🔴', label: 'Very Busy' };
-      return { e: '🚨', label: 'Overloaded' };
-    };
+    // Tier index by points, matching the previous thresholds (0 = busiest).
+    const tierFor = pts =>
+      pts < 1.5 ? 4 :
+      pts < 2.5 ? 3 :
+      pts < 3.5 ? 2 :
+      pts < 4.5 ? 1 : 0;
+    const TIERS = [
+      { e: '🚨', label: 'Overloaded' },
+      { e: '🔴', label: 'Very Busy' },
+      { e: '🟠', label: 'Busy' },
+      { e: '🟡', label: 'Manageable' },
+      { e: '🟢', label: 'Light' },
+    ];
+    const pto   = [];                 // [{ person, projects }]
+    const tiers = [[], [], [], [], []];
     ghostInfo.people.forEach(person => {
       const e = dayMap.get(person);
       if (!e || (!e.isPTO && e.pts <= 0)) return;
+      const projects = Array.from(e.projects);
+      if (e.isPTO) pto.push({ person, projects });
+      else tiers[tierFor(e.pts)].push({ person, projects, pts: e.pts });
+    });
+
+    const mkGhostRow = (emoji, label, people, withPts) => {
+      if (!people.length) return;
       const row = document.createElement('div');
       row.className = 'ghost-row';
       const eff = document.createElement('span');
       eff.className = 'ghost-effort';
-      let title;
-      if (e.isPTO) {
-        eff.textContent = '🏝';
-        title = person + ' · PTO (' + Array.from(e.projects).join(', ') + ')';
-      } else {
-        const w = workloadEmoji(e.pts);
-        eff.textContent = w.e;
-        title = person + ' · ' + w.label + ' (' + e.pts + ' pts on ' + Array.from(e.projects).join(', ') + ')';
-      }
+      eff.textContent = emoji;
       const nameSpan = document.createElement('span');
       nameSpan.className = 'ghost-name';
-      nameSpan.textContent = person;
-      row.title = title;
+      nameSpan.textContent = people.map(p => p.person).join(', ');
+      row.title = label + ' — ' + people.map(p => {
+        const proj = p.projects.length ? ' · ' + p.projects.join(', ') : '';
+        return withPts ? p.person + ' (' + p.pts + ' pts' + proj + ')'
+                       : p.person + (proj ? ' (' + p.projects.join(', ') + ')' : '');
+      }).join(', ');
       row.appendChild(eff);
       row.appendChild(nameSpan);
       cell.appendChild(row);
-    });
+    };
+
+    // PTO first (who's out), then workload levels busiest → lightest.
+    mkGhostRow('🏝', 'PTO', pto, false);
+    TIERS.forEach((t, i) => mkGhostRow(t.e, t.label, tiers[i], true));
   }
 
   cell.addEventListener('dragover', e => {
@@ -5922,40 +5948,6 @@ function renderExportPanel() {
     content.appendChild(opts);
     content.appendChild(actions);
 
-  } else if (exportTabActive === 'planyway') {
-    const items = buildPlanyway();
-    const copyText = items.map(i => i.line).join('\n') || '';
-    const toDateStr = str => str ? new Date(str + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
-
-    const actions = document.createElement('div');
-    actions.className = 'export-actions';
-    actions.appendChild(mkCopyBtn('Copy', copyText));
-    const pwNote = document.createElement('span');
-    pwNote.className = 'export-note';
-    pwNote.textContent = 'Copies category column only · Stakeholders excluded · External/Vendor tasks included if task name matches pre/post keywords';
-    actions.appendChild(pwNote);
-
-    const wrap = document.createElement('div');
-    wrap.className = 'export-table-wrap';
-    const table = document.createElement('table');
-    table.className = 'export-table';
-    const hrow = table.createTHead().insertRow();
-    ['Category', 'Start Date', 'End Date', 'Person'].forEach(h => {
-      const th = document.createElement('th'); th.textContent = h; hrow.appendChild(th);
-    });
-    const tbody = table.createTBody();
-    items.forEach(({ line, date, endDate, person }) => {
-      const row = tbody.insertRow();
-      [line, toDateStr(date), toDateStr(endDate), person || ''].forEach((v, i) => {
-        const td = row.insertCell();
-        td.textContent = v;
-        if (i > 0) td.style.color = 'var(--dim)';
-      });
-    });
-    wrap.appendChild(table);
-    content.appendChild(actions);
-    content.appendChild(wrap);
-
   } else if (exportTabActive === 'roster') {
     renderRosterPanel();
     return;
@@ -6067,17 +6059,6 @@ function getProducerCat(name) {
   return 'Producing';
 }
 
-function getPlanywayCat(task) {
-  if (task.isReview) return null; // handled separately in buildPlanyway
-  if (task.roleCategory !== 'Internal Team') return null;
-  const role = (task.role || '').toLowerCase();
-  const name = (task.taskName || '').toLowerCase();
-  if (role === 'editor')   return 'Editing';
-  if (role === 'animator') return 'Animation';
-  if (role === 'producer') return getProducerCat(name);
-  return null;
-}
-
 // Returns the person name of the most frequently used Producer in the project.
 // Counts direct producer tasks + appearances as an attendee in reviews/key dates.
 function getMostUsedProducer(proj) {
@@ -6100,55 +6081,6 @@ function getMostUsedProducer(proj) {
   const entries = Object.entries(counts);
   if (!entries.length) return null;
   return entries.sort((a, b) => b[1] - a[1])[0][0];
-}
-
-function buildPlanyway() {
-  const proj = getProject(activeProjectId);
-  if (!proj) return [];
-  const sorted = [...proj.tasks].filter(t => !t.isDueDate).sort((a, b) => a.date.localeCompare(b.date));
-  const topProducer = getMostUsedProducer(proj);
-  const items = [];
-
-  const SHOOT_LABELS = ['Studio Shoot', 'On-Location Shoot'];
-
-  sorted.forEach(task => {
-    if (task.isReview) {
-      const isShoot = SHOOT_LABELS.includes(task.reviewLabel);
-      const loe  = task.loe || 'medium';
-      const internalAtts = (task.attendees || []).filter(a => a.category === 'Internal Team');
-      if (isShoot) {
-        const line = LOE_EMOJI[loe] + ' Production';
-        if (internalAtts.length) {
-          internalAtts.forEach(att => {
-            items.push({ line, date: task.date, endDate: task.endDate || null, person: att.person || att.role });
-          });
-        } else {
-          items.push({ line, date: task.date, endDate: task.endDate || null, person: topProducer || 'Producer' });
-        }
-      } else {
-        const cat  = getProducerCat(task.taskName || task.reviewLabel);
-        const line = LOE_EMOJI[loe] + ' ' + cat;
-        if (internalAtts.length) {
-          internalAtts.forEach(att => {
-            items.push({ line, date: task.date, endDate: task.endDate || null, person: att.person || att.role });
-          });
-        } else {
-          items.push({ line, date: task.date, endDate: task.endDate || null, person: topProducer || 'Producer' });
-        }
-      }
-      return;
-    }
-    const cat = getPlanywayCat(task);
-    if (!cat) return;
-    const line = (task.loe ? LOE_EMOJI[task.loe] + ' ' : '') + cat;
-    const ppl = taskPeople(task);
-    if (ppl.length) {
-      ppl.forEach(p => items.push({ line, date: task.date, endDate: task.endDate || null, person: p.person || p.role }));
-    } else {
-      items.push({ line, date: task.date, endDate: task.endDate || null, person: task.role });
-    }
-  });
-  return items;
 }
 
 function mkCopyBtn(label, text) {
