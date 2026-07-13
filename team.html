@@ -441,7 +441,9 @@ table.xl-review-table tr.xl-update-row.xl-unchecked td { background: transparent
   overflow: hidden;
   transition: max-height .2s ease, border-top-color .15s;
 }
-.task-panel.open { max-height: 150px; border-top-color: var(--accent); }
+/* Once open, allow help popups (htip) to escape upward over the calendar; the
+   base rule keeps overflow:hidden so the collapse still slides cleanly. */
+.task-panel.open { max-height: 150px; border-top-color: var(--accent); overflow: visible; }
 
 .task-panel-inner {
   display: flex;
