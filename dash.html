@@ -1857,13 +1857,15 @@ function getHeadsUpItems(personName, afterDate) {
     return true;
   });
 
-  // Consolidate already-started PTO into a single "Currently Out" card.
-  // Upcoming PTO stays as individual items so the coaching prompts still fire.
-  const startedPto = deduped.filter(i => i.type === 'pto' && i.date <= afterDate);
-  const other = deduped.filter(i => !(i.type === 'pto' && i.date <= afterDate));
+  // Consolidate PTO into two summary cards — "Currently Out" (already started)
+  // and "Upcoming PTO" (not started yet) — so individual PTO chips don't clutter
+  // the Heads Up list.
+  const startedPto  = deduped.filter(i => i.type === 'pto' && i.date <= afterDate);
+  const upcomingPto = deduped.filter(i => i.type === 'pto' && i.date >  afterDate);
+  const other       = deduped.filter(i => i.type !== 'pto');
 
   if (startedPto.length) {
-    // Collapse to unique teammates with their earliest-end
+    // Collapse to unique teammates with their latest end (= when they're back).
     const byPerson = new Map();
     startedPto.forEach(i => {
       const name = i.teammateName || i.title.replace(/ — PTO$/, '');
@@ -1876,14 +1878,26 @@ function getHeadsUpItems(personName, afterDate) {
     });
     const people = [...byPerson.values()];
     other.push({
-      type: 'pto',
-      icon: '\u{1F3D6}',
+      type: 'pto', icon: '\u{1F3D6}',
       title: 'Currently Out (' + people.length + ')',
-      project: '',
-      date: afterDate,
-      endDate: null,
-      consolidated: true,
-      outPeople: people
+      project: '', date: afterDate, endDate: null,
+      consolidated: true, outPeople: people
+    });
+  }
+
+  if (upcomingPto.length) {
+    // One line per upcoming PTO window (cross-project dupes already removed),
+    // sorted by when each person goes out.
+    const people = upcomingPto.map(i => ({
+      name: i.teammateName || i.title.replace(/ — PTO$/, ''),
+      startDate: i.date,
+      endDate: i.endDate || i.date
+    })).sort((a, b) => a.startDate.localeCompare(b.startDate));
+    other.push({
+      type: 'pto', icon: '\u{1F3D6}',
+      title: 'Upcoming PTO (' + people.length + ')',
+      project: '', date: afterDate, endDate: null,
+      consolidated: true, upcoming: true, outPeople: people
     });
   }
 
@@ -2020,7 +2034,7 @@ function renderHeadsUpSection() {
     const body = document.createElement('div');
     body.className = 'headsup-body';
 
-    // Consolidated "Currently Out" card — renders people list, no prompt
+    // Consolidated PTO cards ("Currently Out" / "Upcoming PTO") — people list, no prompt
     if (item.consolidated && item.outPeople) {
       const titleDiv = document.createElement('div');
       titleDiv.className = 'headsup-title';
@@ -2032,8 +2046,14 @@ function renderHeadsUpSection() {
       peopleList.style.marginTop = '4px';
       peopleList.style.lineHeight = '1.6';
       peopleList.innerHTML = item.outPeople.map(p => {
-        const back = fmtDateShort(addDays(p.endDate, 1));
-        return `<div>\u{1F3D6} <strong style="color:var(--text)">${esc(p.name)}</strong> \u00b7 back ${esc(back)}</div>`;
+        let when;
+        if (item.upcoming) {
+          const start = fmtDateShort(p.startDate);
+          when = 'out ' + ((p.endDate && p.endDate !== p.startDate) ? start + ' \u2013 ' + fmtDateShort(p.endDate) : start);
+        } else {
+          when = 'back ' + fmtDateShort(addDays(p.endDate, 1));
+        }
+        return `<div>\u{1F3D6} <strong style="color:var(--text)">${esc(p.name)}</strong> \u00b7 ${esc(when)}</div>`;
       }).join('');
       body.appendChild(peopleList);
 
