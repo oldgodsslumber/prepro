@@ -261,6 +261,29 @@ a.today-card-project:hover { color: var(--accent); }
 .gantt-bar.clipped-right { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .gantt-empty { padding: 24px; text-align: center; color: var(--dim); font-style: italic; font-size: 12px; }
 
+/* ── CUSTOMIZABLE PANELS ── */
+.op-panel { position: relative; margin-bottom: 24px; }
+.op-panel > .today-hero, .op-panel > .dash-section, .op-panel > .effort-bar { margin-bottom: 0; }
+.op-panel-tools { position: absolute; top: 0; right: 0; z-index: 5; display: flex; align-items: center; gap: 3px; padding: 3px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; opacity: 0; transition: opacity .15s; }
+.op-panel:hover .op-panel-tools { opacity: 1; }
+.op-panel-handle { cursor: grab; color: var(--dim); font-size: 13px; line-height: 1; padding: 2px 3px; user-select: none; }
+.op-panel-handle:hover { color: var(--text); }
+.op-panel-handle:active { cursor: grabbing; }
+.op-panel-btn { width: 20px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 9px; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 3px; cursor: pointer; padding: 0; line-height: 1; }
+.op-panel-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.op-panel-btn:disabled { opacity: .3; cursor: default; }
+.op-panel.dragging { opacity: .45; }
+.op-panel.drag-over-above { box-shadow: inset 0 3px 0 0 var(--accent); }
+.op-panel.drag-over-below { box-shadow: inset 0 -3px 0 0 var(--accent); }
+.op-add-bar { position: relative; margin: 6px 0 28px; }
+.op-add-btn { font-size: 11px; font-weight: 600; color: var(--dim); background: var(--card); border: 1px dashed var(--border); border-radius: 6px; padding: 7px 16px; cursor: pointer; transition: color .15s, border-color .15s; }
+.op-add-btn:hover { color: var(--accent); border-color: var(--accent); }
+.op-add-menu { position: absolute; bottom: calc(100% + 6px); left: 0; min-width: 230px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 12px 34px rgba(0,0,0,.45); padding: 6px; z-index: 200; display: flex; flex-direction: column; gap: 2px; }
+.op-add-menu-item { font-size: 12px; font-weight: 500; color: var(--text); background: transparent; border: none; border-radius: 5px; padding: 8px 10px; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 9px; }
+.op-add-menu-item:hover { background: var(--card); color: var(--accent); }
+.op-add-menu-item > span { color: var(--accent); font-weight: 700; }
+.op-add-menu-empty { font-size: 11px; color: var(--dim); font-style: italic; padding: 9px 10px; }
+
 /* ── SETTINGS MODAL ── */
 .settings-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 9999; display: flex; align-items: center; justify-content: center; }
 .settings-modal { width: min(820px, 95vw); max-height: 85vh; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,.5); }
@@ -1236,6 +1259,178 @@ function updateDateLabel() {
   document.getElementById('dateLabel').textContent = fmtDateLong(selectedDate);
 }
 
+// ══════════════════════════════════════════════════════════════════
+// ── CUSTOMIZABLE PANEL SYSTEM ──
+// Each dashboard section is a registered "panel" the user can drag to
+// reorder, hide, and re-add. Layout persists per-browser in localStorage.
+// New panels added to DASH_PANELS appear automatically.
+// ══════════════════════════════════════════════════════════════════
+const DASH_PANELS = [
+  { id: 'effort',   label: 'Weekly Effort', render: renderEffortBar },
+  { id: 'today',    label: 'Today',         render: renderTodaySection },
+  { id: 'headsup',  label: 'Heads Up',      render: renderHeadsUpSection },
+  { id: 'comingup', label: 'Coming Up',     render: renderComingUpSection },
+];
+const DASH_LAYOUT_KEY = 'dash_panel_layout';
+let _dashPanelDrag = null;
+
+function getDashLayout() {
+  const all = DASH_PANELS.map(p => p.id);
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(DASH_LAYOUT_KEY) || '{}'); } catch (_) {}
+  const order = Array.isArray(saved.order) ? saved.order.filter(id => all.includes(id)) : [];
+  const hidden = new Set(Array.isArray(saved.hidden) ? saved.hidden.filter(id => all.includes(id)) : []);
+  all.forEach(id => { if (!order.includes(id)) order.push(id); }); // new panels appear automatically
+  return { order, hidden };
+}
+function saveDashLayout(layout) {
+  localStorage.setItem(DASH_LAYOUT_KEY, JSON.stringify({ order: layout.order, hidden: [...layout.hidden] }));
+}
+function dashPanelDef(id) { return DASH_PANELS.find(p => p.id === id); }
+
+function moveDashPanel(id, dir) {
+  const layout = getDashLayout();
+  const visible = layout.order.filter(x => !layout.hidden.has(x));
+  const target = visible[visible.indexOf(id) + dir];
+  if (target === undefined) return;
+  const a = layout.order.indexOf(id), b = layout.order.indexOf(target);
+  [layout.order[a], layout.order[b]] = [layout.order[b], layout.order[a]];
+  saveDashLayout(layout);
+  renderDashboard();
+}
+function reorderDashPanel(dragId, targetId, placeBelow) {
+  if (dragId === targetId) return;
+  const layout = getDashLayout();
+  const order = layout.order.filter(x => x !== dragId);
+  let idx = order.indexOf(targetId);
+  if (placeBelow) idx += 1;
+  order.splice(idx, 0, dragId);
+  layout.order = order;
+  saveDashLayout(layout);
+  renderDashboard();
+}
+function hideDashPanel(id) { const l = getDashLayout(); l.hidden.add(id); saveDashLayout(l); renderDashboard(); }
+function showDashPanel(id) { const l = getDashLayout(); l.hidden.delete(id); if (!l.order.includes(id)) l.order.push(id); saveDashLayout(l); renderDashboard(); }
+
+function mkDashPanelBtn(txt, title) {
+  const b = document.createElement('button');
+  b.className = 'op-panel-btn';
+  b.textContent = txt;
+  b.title = title;
+  return b;
+}
+
+function wrapDashPanel(def, content, vi, count) {
+  const panel = document.createElement('div');
+  panel.className = 'op-panel';
+  panel.dataset.panelId = def.id;
+
+  const tools = document.createElement('div');
+  tools.className = 'op-panel-tools';
+
+  const handle = document.createElement('span');
+  handle.className = 'op-panel-handle';
+  handle.textContent = '⠿';
+  handle.title = 'Drag to reorder';
+  handle.draggable = true;
+  tools.appendChild(handle);
+
+  const up = mkDashPanelBtn('▲', 'Move up');
+  up.disabled = vi === 0;
+  up.addEventListener('click', () => moveDashPanel(def.id, -1));
+  const down = mkDashPanelBtn('▼', 'Move down');
+  down.disabled = vi === count - 1;
+  down.addEventListener('click', () => moveDashPanel(def.id, 1));
+  const hide = mkDashPanelBtn('✕', 'Hide panel');
+  hide.addEventListener('click', () => hideDashPanel(def.id));
+  tools.appendChild(up);
+  tools.appendChild(down);
+  tools.appendChild(hide);
+
+  panel.appendChild(tools);
+  panel.appendChild(content);
+
+  handle.addEventListener('dragstart', e => {
+    _dashPanelDrag = def.id;
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', def.id); } catch (_) {}
+    try { e.dataTransfer.setDragImage(panel, 24, 12); } catch (_) {}
+    panel.classList.add('dragging');
+  });
+  handle.addEventListener('dragend', () => {
+    panel.classList.remove('dragging', 'drag-over-above', 'drag-over-below');
+    _dashPanelDrag = null;
+  });
+  panel.addEventListener('dragover', e => {
+    if (_dashPanelDrag == null || _dashPanelDrag === def.id) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const r = panel.getBoundingClientRect();
+    const below = (e.clientY - r.top) > r.height / 2;
+    panel.classList.toggle('drag-over-below', below);
+    panel.classList.toggle('drag-over-above', !below);
+  });
+  panel.addEventListener('dragleave', e => {
+    if (e.target === panel) panel.classList.remove('drag-over-above', 'drag-over-below');
+  });
+  panel.addEventListener('drop', e => {
+    if (_dashPanelDrag == null || _dashPanelDrag === def.id) return;
+    e.preventDefault();
+    const below = panel.classList.contains('drag-over-below');
+    panel.classList.remove('drag-over-above', 'drag-over-below');
+    reorderDashPanel(_dashPanelDrag, def.id, below);
+  });
+
+  return panel;
+}
+
+function renderDashAddBar(layout) {
+  const bar = document.createElement('div');
+  bar.className = 'op-add-bar';
+
+  const menu = document.createElement('div');
+  menu.className = 'op-add-menu';
+  menu.style.display = 'none';
+
+  const hiddenIds = DASH_PANELS.map(p => p.id).filter(id => layout.hidden.has(id));
+  if (!hiddenIds.length) {
+    const e = document.createElement('div');
+    e.className = 'op-add-menu-empty';
+    e.textContent = 'All panels are visible';
+    menu.appendChild(e);
+  } else {
+    hiddenIds.forEach(id => {
+      const def = dashPanelDef(id);
+      const item = document.createElement('button');
+      item.className = 'op-add-menu-item';
+      const plus = document.createElement('span');
+      plus.textContent = '＋';
+      item.appendChild(plus);
+      item.appendChild(document.createTextNode(def.label));
+      item.addEventListener('click', () => showDashPanel(id));
+      menu.appendChild(item);
+    });
+  }
+
+  const btn = document.createElement('button');
+  btn.className = 'op-add-btn';
+  btn.textContent = '＋ Add Panel';
+  btn.addEventListener('click', ev => {
+    ev.stopPropagation();
+    const open = menu.style.display !== 'none';
+    document.querySelectorAll('.op-add-menu').forEach(m => { m.style.display = 'none'; });
+    menu.style.display = open ? 'none' : 'flex';
+  });
+
+  bar.appendChild(menu);
+  bar.appendChild(btn);
+  return bar;
+}
+// Close any open add-panel menu on outside click.
+document.addEventListener('click', () => {
+  document.querySelectorAll('.op-add-menu').forEach(m => { m.style.display = 'none'; });
+});
+
 // ── MAIN DASHBOARD ──
 function renderDashboard() {
   const main = document.getElementById('dashMain');
@@ -1250,18 +1445,17 @@ function renderDashboard() {
 
   main.innerHTML = '';
 
-  // Weekly effort bar
-  main.appendChild(renderEffortBar());
-
-  // Today section
-  main.appendChild(renderTodaySection());
-
-  // Heads Up — upcoming reviews, shoots, teammate PTO
-  const headsUp = renderHeadsUpSection();
-  if (headsUp) main.appendChild(headsUp);
-
-  // Coming Up section
-  main.appendChild(renderComingUpSection());
+  const layout = getDashLayout();
+  const visible = layout.order.filter(id => !layout.hidden.has(id));
+  visible.forEach((id, vi) => {
+    const def = dashPanelDef(id);
+    if (!def) return;
+    let content = null;
+    try { content = def.render(); } catch (err) { console.error('dash panel render failed:', id, err); }
+    if (!content) return; // panel has no data right now → nothing to show
+    main.appendChild(wrapDashPanel(def, content, vi, visible.length));
+  });
+  main.appendChild(renderDashAddBar(layout));
 }
 
 // ── STATUS CONTROL (per-project) ──

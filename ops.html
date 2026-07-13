@@ -179,6 +179,29 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .hu-metric-label { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; margin-top: 6px; }
 .hu-metric-sub { font-size: 10px; color: var(--dim); margin-top: 2px; }
 
+/* ── CUSTOMIZABLE PANELS (Ops Dashboard + Metrics) ── */
+.op-panel { position: relative; margin-bottom: 24px; }
+.op-panel > .hu-section, .op-panel > .m-section { margin-bottom: 0; }
+.op-panel-tools { position: absolute; top: 0; right: 0; z-index: 5; display: flex; align-items: center; gap: 3px; padding: 3px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; opacity: 0; transition: opacity .15s; }
+.op-panel:hover .op-panel-tools { opacity: 1; }
+.op-panel-handle { cursor: grab; color: var(--dim); font-size: 13px; line-height: 1; padding: 2px 3px; user-select: none; }
+.op-panel-handle:hover { color: var(--text); }
+.op-panel-handle:active { cursor: grabbing; }
+.op-panel-btn { width: 20px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 9px; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 3px; cursor: pointer; padding: 0; line-height: 1; }
+.op-panel-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.op-panel-btn:disabled { opacity: .3; cursor: default; }
+.op-panel.dragging { opacity: .45; }
+.op-panel.drag-over-above { box-shadow: inset 0 3px 0 0 var(--accent); }
+.op-panel.drag-over-below { box-shadow: inset 0 -3px 0 0 var(--accent); }
+.op-add-bar { position: relative; margin: 6px 0 28px; }
+.op-add-btn { font-size: 11px; font-weight: 600; color: var(--dim); background: var(--card); border: 1px dashed var(--border); border-radius: 6px; padding: 7px 16px; cursor: pointer; transition: color .15s, border-color .15s; }
+.op-add-btn:hover { color: var(--accent); border-color: var(--accent); }
+.op-add-menu { position: absolute; bottom: calc(100% + 6px); left: 0; min-width: 230px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 12px 34px rgba(0,0,0,.45); padding: 6px; z-index: 200; display: flex; flex-direction: column; gap: 2px; }
+.op-add-menu-item { font-size: 12px; font-weight: 500; color: var(--text); background: transparent; border: none; border-radius: 5px; padding: 8px 10px; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 9px; }
+.op-add-menu-item:hover { background: var(--card); color: var(--accent); }
+.op-add-menu-item > span { color: var(--accent); font-weight: 700; }
+.op-add-menu-empty { font-size: 11px; color: var(--dim); font-style: italic; padding: 9px 10px; }
+
 /* ── METRICS VIEW ── */
 .metrics-view { flex: 1; overflow-y: auto; padding: 20px 24px; display: none; }
 .metrics-view.visible { display: block; }
@@ -2185,45 +2208,234 @@ function getOpsHeadsUpPrompt(item) {
   return null;
 }
 
-function renderHeadsUp() {
-  const container = document.getElementById('headsupView');
-  container.innerHTML = '';
+// ══════════════════════════════════════════════════════════════════
+// ── CUSTOMIZABLE PANEL SYSTEM (Ops Dashboard + Metrics views) ──
+// Each dashboard section is a registered "panel". Users can drag to
+// reorder, hide, and re-add panels; layout persists per-browser in
+// localStorage. New panels added to a registry appear automatically.
+// ══════════════════════════════════════════════════════════════════
+const DASH_PANELS = [
+  { id: 'shoots',        label: 'Upcoming Shoots',            render: () => renderHuGroup('shoot', 'Upcoming Shoots') },
+  { id: 'reviews',       label: 'Upcoming Reviews',           render: () => renderHuGroup('review', 'Upcoming Reviews') },
+  { id: 'milestones',    label: 'Milestones',                 render: () => renderHuGroup('milestone', 'Milestones') },
+  { id: 'pto',           label: 'Team PTO',                   render: () => renderHuGroup('pto', 'Team PTO') },
+  { id: 'projectHealth', label: 'Project Health · Most Late', render: renderHealthPanel },
+];
+const METRICS_PANELS = [
+  { id: 'snapshot',     label: 'Snapshot',              render: renderMetricsTiles },
+  { id: 'categoryMix',  label: 'Category Mix',          render: renderCategoryMix },
+  { id: 'quarterRecap', label: 'Quarter Recap',         render: renderQuarterRecap },
+  { id: 'effortPast',   label: 'Effort · Last 30 Days', render: () => renderEffortChart('past', 22) },
+  { id: 'effortNext',   label: 'Effort · Next 21 Days', render: () => renderEffortChart('next', 15) },
+  { id: 'projectGantt', label: 'Project Timeline',      render: renderProjectGantt },
+  { id: 'health',       label: 'Project Health',        render: renderProjectHealth },
+];
+const PANEL_VIEWS = {
+  dash:    { key: 'ops_dash_layout',    el: 'headsupView', panels: () => DASH_PANELS },
+  metrics: { key: 'ops_metrics_layout', el: 'metricsView', panels: () => METRICS_PANELS },
+};
+let _panelDrag = null;
 
-  const items = getTeamHeadsUp();
+function getLayout(view) {
+  const def = PANEL_VIEWS[view];
+  const all = def.panels().map(p => p.id);
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(def.key) || '{}'); } catch (_) {}
+  const order = Array.isArray(saved.order) ? saved.order.filter(id => all.includes(id)) : [];
+  const hidden = new Set(Array.isArray(saved.hidden) ? saved.hidden.filter(id => all.includes(id)) : []);
+  all.forEach(id => { if (!order.includes(id)) order.push(id); }); // new panels appear automatically
+  return { order, hidden };
+}
+function saveLayout(view, layout) {
+  localStorage.setItem(PANEL_VIEWS[view].key, JSON.stringify({ order: layout.order, hidden: [...layout.hidden] }));
+}
+function panelDef(view, id) { return PANEL_VIEWS[view].panels().find(p => p.id === id); }
+function rerenderPanelView(view) { view === 'dash' ? renderHeadsUp() : renderMetrics(); }
 
-  if (!items.length) {
-    const empty = document.createElement('div');
-    empty.className = 'hu-empty';
-    empty.textContent = 'Nothing flagged for the next 5 business days';
-    container.appendChild(empty);
+function movePanel(view, id, dir) {
+  const layout = getLayout(view);
+  const visible = layout.order.filter(x => !layout.hidden.has(x));
+  const target = visible[visible.indexOf(id) + dir];
+  if (target === undefined) return;
+  const a = layout.order.indexOf(id), b = layout.order.indexOf(target);
+  [layout.order[a], layout.order[b]] = [layout.order[b], layout.order[a]];
+  saveLayout(view, layout);
+  rerenderPanelView(view);
+}
+function reorderPanel(view, dragId, targetId, placeBelow) {
+  if (dragId === targetId) return;
+  const layout = getLayout(view);
+  const order = layout.order.filter(x => x !== dragId);
+  let idx = order.indexOf(targetId);
+  if (placeBelow) idx += 1;
+  order.splice(idx, 0, dragId);
+  layout.order = order;
+  saveLayout(view, layout);
+  rerenderPanelView(view);
+}
+function hidePanel(view, id) { const l = getLayout(view); l.hidden.add(id); saveLayout(view, l); rerenderPanelView(view); }
+function showPanel(view, id) { const l = getLayout(view); l.hidden.delete(id); if (!l.order.includes(id)) l.order.push(id); saveLayout(view, l); rerenderPanelView(view); }
+
+function mkPanelBtn(txt, title) {
+  const b = document.createElement('button');
+  b.className = 'op-panel-btn';
+  b.textContent = txt;
+  b.title = title;
+  return b;
+}
+
+function wrapPanel(view, def, content, vi, count) {
+  const panel = document.createElement('div');
+  panel.className = 'op-panel';
+  panel.dataset.panelId = def.id;
+
+  const tools = document.createElement('div');
+  tools.className = 'op-panel-tools';
+
+  const handle = document.createElement('span');
+  handle.className = 'op-panel-handle';
+  handle.textContent = '⠿';
+  handle.title = 'Drag to reorder';
+  handle.draggable = true;
+  tools.appendChild(handle);
+
+  const up = mkPanelBtn('▲', 'Move up');
+  up.disabled = vi === 0;
+  up.addEventListener('click', () => movePanel(view, def.id, -1));
+  const down = mkPanelBtn('▼', 'Move down');
+  down.disabled = vi === count - 1;
+  down.addEventListener('click', () => movePanel(view, def.id, 1));
+  const hide = mkPanelBtn('✕', 'Hide panel');
+  hide.addEventListener('click', () => hidePanel(view, def.id));
+  tools.appendChild(up);
+  tools.appendChild(down);
+  tools.appendChild(hide);
+
+  panel.appendChild(tools);
+  panel.appendChild(content);
+
+  handle.addEventListener('dragstart', e => {
+    _panelDrag = { view, id: def.id };
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', def.id); } catch (_) {}
+    try { e.dataTransfer.setDragImage(panel, 24, 12); } catch (_) {}
+    panel.classList.add('dragging');
+  });
+  handle.addEventListener('dragend', () => {
+    panel.classList.remove('dragging', 'drag-over-above', 'drag-over-below');
+    _panelDrag = null;
+  });
+  panel.addEventListener('dragover', e => {
+    if (!_panelDrag || _panelDrag.view !== view || _panelDrag.id === def.id) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const r = panel.getBoundingClientRect();
+    const below = (e.clientY - r.top) > r.height / 2;
+    panel.classList.toggle('drag-over-below', below);
+    panel.classList.toggle('drag-over-above', !below);
+  });
+  panel.addEventListener('dragleave', e => {
+    if (e.target === panel) panel.classList.remove('drag-over-above', 'drag-over-below');
+  });
+  panel.addEventListener('drop', e => {
+    if (!_panelDrag || _panelDrag.view !== view || _panelDrag.id === def.id) return;
+    e.preventDefault();
+    const below = panel.classList.contains('drag-over-below');
+    panel.classList.remove('drag-over-above', 'drag-over-below');
+    reorderPanel(view, _panelDrag.id, def.id, below);
+  });
+
+  return panel;
+}
+
+function renderAddBar(view, layout) {
+  const bar = document.createElement('div');
+  bar.className = 'op-add-bar';
+
+  const menu = document.createElement('div');
+  menu.className = 'op-add-menu';
+  menu.style.display = 'none';
+
+  const hiddenIds = PANEL_VIEWS[view].panels().map(p => p.id).filter(id => layout.hidden.has(id));
+  if (!hiddenIds.length) {
+    const e = document.createElement('div');
+    e.className = 'op-add-menu-empty';
+    e.textContent = 'All panels are visible';
+    menu.appendChild(e);
+  } else {
+    hiddenIds.forEach(id => {
+      const def = panelDef(view, id);
+      const item = document.createElement('button');
+      item.className = 'op-add-menu-item';
+      const plus = document.createElement('span');
+      plus.textContent = '＋';
+      item.appendChild(plus);
+      item.appendChild(document.createTextNode(def.label));
+      item.addEventListener('click', () => showPanel(view, id));
+      menu.appendChild(item);
+    });
   }
 
-  // Group by type
+  const btn = document.createElement('button');
+  btn.className = 'op-add-btn';
+  btn.textContent = '＋ Add Panel';
+  btn.addEventListener('click', ev => {
+    ev.stopPropagation();
+    const open = menu.style.display !== 'none';
+    document.querySelectorAll('.op-add-menu').forEach(m => { m.style.display = 'none'; });
+    menu.style.display = open ? 'none' : 'flex';
+  });
+
+  bar.appendChild(menu);
+  bar.appendChild(btn);
+  return bar;
+}
+// Close any open add-panel menu on outside click.
+document.addEventListener('click', () => {
+  document.querySelectorAll('.op-add-menu').forEach(m => { m.style.display = 'none'; });
+});
+
+function renderPanelView(view) {
+  const container = document.getElementById(PANEL_VIEWS[view].el);
+  if (!container) return;
+  container.innerHTML = '';
+  const layout = getLayout(view);
+  const visible = layout.order.filter(id => !layout.hidden.has(id));
+  visible.forEach((id, vi) => {
+    const def = panelDef(view, id);
+    if (!def) return;
+    let content = null;
+    try { content = def.render(); } catch (err) { console.error('panel render failed:', id, err); }
+    if (!content) return; // panel has no data right now → nothing to show
+    container.appendChild(wrapPanel(view, def, content, vi, visible.length));
+  });
+  container.appendChild(renderAddBar(view, layout));
+}
+
+// ── OPS DASHBOARD (heads-up) ──
+const HU_LOE_EMOJI = { low: '🟢', medium: '🟡', high: '🔴' };
+
+function renderHeadsUp() { renderPanelView('dash'); }
+
+function huGroups() {
   const groups = { shoot: [], review: [], milestone: [], pto: [] };
-  items.forEach(item => { if (groups[item.type]) groups[item.type].push(item); });
+  getTeamHeadsUp().forEach(item => { if (groups[item.type]) groups[item.type].push(item); });
+  return groups;
+}
 
-  const sectionOrder = [
-    { key: 'shoot', label: 'Upcoming Shoots' },
-    { key: 'review', label: 'Upcoming Reviews' },
-    { key: 'milestone', label: 'Milestones' },
-    { key: 'pto', label: 'Team PTO' }
-  ];
+function renderHuGroup(type, label) {
+  const groupItems = huGroups()[type];
+  if (!groupItems || !groupItems.length) return null;
 
-  const LOE_EMOJI = { low: '🟢', medium: '🟡', high: '🔴' };
+  const section = document.createElement('div');
+  section.className = 'hu-section';
 
-  sectionOrder.forEach(({ key, label }) => {
-    const groupItems = groups[key];
-    if (!groupItems || !groupItems.length) return;
+  const title = document.createElement('div');
+  title.className = 'hu-section-title';
+  title.textContent = label;
+  section.appendChild(title);
 
-    const section = document.createElement('div');
-    section.className = 'hu-section';
-
-    const title = document.createElement('div');
-    title.className = 'hu-section-title';
-    title.textContent = label;
-    section.appendChild(title);
-
-    groupItems.forEach(item => {
+  groupItems.forEach(item => {
       const card = document.createElement('div');
       card.className = 'hu-card ' + item.type;
 
@@ -2299,7 +2511,7 @@ function renderHeadsUp() {
           promptData.tasks.forEach(t => {
             const ti = document.createElement('div');
             ti.className = 'hu-task-item';
-            const loe = t.loe ? (LOE_EMOJI[t.loe] || '') + ' ' : '';
+            const loe = t.loe ? (HU_LOE_EMOJI[t.loe] || '') + ' ' : '';
             ti.innerHTML = '<span style="flex:1">' + loe + esc(t.taskName || '(untitled)') + '</span><span style="font-size:9px;color:#8080a0">' + esc(t.person || '') + '</span>';
             tasksDiv.appendChild(ti);
           });
@@ -2320,10 +2532,11 @@ function renderHeadsUp() {
       section.appendChild(card);
     });
 
-    container.appendChild(section);
-  });
+  return section;
+}
 
-  // ── PROJECT HEALTH · TOP 5 MOST LATE ──
+// ── PROJECT HEALTH PANEL · TOP 5 MOST LATE ──
+function renderHealthPanel() {
   const today = todayStr();
   const healthRows = (state.projects || [])
     .filter(p => !p.completed && !p.ghost)
@@ -2404,7 +2617,7 @@ function renderHeadsUp() {
     phTable.appendChild(phBody);
     phSection.appendChild(phTable);
   }
-  container.appendChild(phSection);
+  return phSection;
 }
 
 function computeOpsMetrics() {
@@ -2436,23 +2649,7 @@ function computeOpsMetrics() {
 }
 
 // ── METRICS VIEW ──
-function renderMetrics() {
-  const container = document.getElementById('metricsView');
-  container.innerHTML = '';
-
-  // Top row: snapshot tiles + category mix pie share the row
-  const topRow = document.createElement('div');
-  topRow.className = 'm-top-row';
-  topRow.appendChild(renderMetricsTiles());
-  topRow.appendChild(renderCategoryMix());
-  container.appendChild(topRow);
-
-  container.appendChild(renderQuarterRecap());
-  container.appendChild(renderEffortChart('past', 22));   // ~30 calendar days
-  container.appendChild(renderEffortChart('next', 15));   // ~21 calendar days
-  container.appendChild(renderProjectGantt());
-  container.appendChild(renderProjectHealth());
-}
+function renderMetrics() { renderPanelView('metrics'); }
 
 function mkSectionTitle(text) {
   const t = document.createElement('div');
