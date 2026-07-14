@@ -261,7 +261,10 @@ table.xl-review-table tr.xl-update-row.xl-unchecked td { background: transparent
 .chip-person::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.7); margin-right: 5px; vertical-align: middle; }
 .duedate-marker { background: #3a3a52; color: var(--text); border-radius: 4px; padding: 4px 17px; font-size: 11px; font-weight: 700; cursor: grab; user-select: none; flex-shrink: 0; width: 100%; border-left: 3px solid #8080a0; transition: opacity .12s; display: flex; flex-direction: column; justify-content: center; gap: 2px; position: relative; box-sizing: border-box; min-height: 30px; }
 .duedate-marker:hover { opacity: .85; }
-.duedate-marker.duedate-multi-start { border-radius: 4px 0 0 4px; border-right: none; margin-right: -7px; z-index: 1; width: calc(100% + 7px); }
+/* Multi-day start: match the continuation bars' top/bottom border so the whole
+   span reads as one continuous outline (day 1 was previously borderless on
+   top/bottom, leaving a seam against the bordered continuation days). */
+.duedate-marker.duedate-multi-start { border-radius: 4px 0 0 4px; border-top: 1.5px solid #8080a0; border-bottom: 1.5px solid #8080a0; border-right: none; margin-right: -7px; z-index: 1; width: calc(100% + 7px); }
 .duedate-marker .chip-handle-l,
 .duedate-marker .chip-handle-r { top: 50%; transform: translateY(-50%); }
 .duedate-marker:hover .chip-handle-l,
