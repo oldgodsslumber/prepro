@@ -2575,7 +2575,7 @@ function renderHuGroup(type, label) {
 function renderHealthPanel() {
   const today = todayStr();
   const healthRows = (state.projects || [])
-    .filter(p => !p.completed && !p.ghost)
+    .filter(p => !isInactive(p) && !p.ghost)
     .map(proj => {
       const workTasks = (proj.tasks || []).filter(t => !t.isReview && !t.isDueDate && t.date);
       const lastEnd = workTasks.reduce((m, t) => {
@@ -3536,7 +3536,7 @@ function renderProjectHealth() {
   section.appendChild(mkSectionTitle('Project Health'));
 
   const today = todayStr();
-  const projects = (state.projects || []).filter(p => !p.completed && !p.ghost);
+  const projects = (state.projects || []).filter(p => !isInactive(p) && !p.ghost);
   if (!projects.length) {
     section.appendChild(mkEmpty('No active projects.'));
     return section;
