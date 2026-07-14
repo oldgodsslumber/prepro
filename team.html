@@ -259,12 +259,12 @@ table.xl-review-table tr.xl-update-row.xl-unchecked td { background: transparent
 .chip-duedate { background: #3a3a52 !important; color: var(--text) !important; border: 1.5px solid #606080; }
 .chip-person  { border: 1.5px dashed rgba(255,255,255,.45); opacity: .92; position: relative; }
 .chip-person::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.7); margin-right: 5px; vertical-align: middle; }
-.duedate-marker { background: #3a3a52; color: var(--text); border-radius: 4px; padding: 4px 17px; font-size: 11px; font-weight: 700; cursor: grab; user-select: none; flex-shrink: 0; width: 100%; border-left: 3px solid #8080a0; transition: opacity .12s; display: flex; flex-direction: column; justify-content: center; gap: 2px; position: relative; box-sizing: border-box; min-height: 30px; }
+.duedate-marker { background: #3a3a52; color: var(--text); border-radius: 4px; padding: 4px 17px; font-size: 11px; font-weight: 700; cursor: grab; user-select: none; flex-shrink: 0; border-left: 3px solid #8080a0; transition: opacity .12s; display: flex; flex-direction: column; justify-content: center; gap: 2px; position: relative; box-sizing: border-box; min-height: 30px; }
 .duedate-marker:hover { opacity: .85; }
 /* Multi-day start: match the continuation bars' top/bottom border so the whole
    span reads as one continuous outline (day 1 was previously borderless on
    top/bottom, leaving a seam against the bordered continuation days). */
-.duedate-marker.duedate-multi-start { border-radius: 4px 0 0 4px; border-top: 1.5px solid #8080a0; border-bottom: 1.5px solid #8080a0; border-right: none; margin-right: -7px; z-index: 1; width: calc(100% + 7px); }
+.duedate-marker.duedate-multi-start { border-radius: 4px 0 0 4px; border-top: 1.5px solid #8080a0; border-bottom: 1.5px solid #8080a0; border-right: none; margin-right: -7px; z-index: 1; }
 .duedate-marker .chip-handle-l,
 .duedate-marker .chip-handle-r { top: 50%; transform: translateY(-50%); }
 .duedate-marker:hover .chip-handle-l,
@@ -274,9 +274,9 @@ table.xl-review-table tr.xl-update-row.xl-unchecked td { background: transparent
 .duedate-marker.drag-accepting .review-drop-hint { display: block; }
 .duedate-marker .review-drop-hint { color: rgba(200,200,220,.6); }
 /* continuation bars for multi-day key dates — full height */
-.duedate-bar { flex-shrink: 0; width: 100%; position: relative; cursor: pointer; background: #3a3a52; border: 1.5px solid #8080a0; border-left: none; font-size: 0; display: flex; align-items: center; min-height: 30px; box-sizing: border-box; }
-.duedate-bar-mid { border-radius: 0; border-right: none; margin-left: -5px; margin-right: -6px; width: calc(100% + 11px); }
-.duedate-bar-end { border-radius: 0 4px 4px 0; margin-left: -5px; padding-right: 17px; width: calc(100% + 5px); }
+.duedate-bar { flex-shrink: 0; position: relative; cursor: pointer; background: #3a3a52; border: 1.5px solid #8080a0; border-left: none; font-size: 0; display: flex; align-items: center; min-height: 30px; box-sizing: border-box; }
+.duedate-bar-mid { border-radius: 0; border-right: none; margin-left: -5px; margin-right: -6px; }
+.duedate-bar-end { border-radius: 0 4px 4px 0; margin-left: -5px; padding-right: 17px; }
 .duedate-bar.drag-accepting { background: #4a4a66; outline: 2px solid rgba(128,128,160,.6); outline-offset: -1px; }
 
 /* ── CALENDAR WRAPPER ── */
@@ -335,7 +335,11 @@ table.xl-review-table tr.xl-update-row.xl-unchecked td { background: transparent
 /* solo = single day: left handle + text + right handle */
 .task-chip.chip-solo  { border-radius: 4px; padding-left: 17px; padding-right: 17px; }
 /* start: bleeds 6px right (5px cell padding + 1px grid gap) */
-.task-chip.chip-start { border-radius: 4px 0 0 4px; padding-left: 17px; margin-right: -6px; position: relative; z-index: 1; }
+/* -7px (not -6px) so the opaque start overlaps the next segment by 1px. At -6px
+   the edges are flush, and flush edges at fractional 1fr column positions leak
+   the grid gap through as a 1px hairline on day 2. Matches the review/role/
+   duedate multi-day starts, which all use -7px for the same reason. */
+.task-chip.chip-start { border-radius: 4px 0 0 4px; padding-left: 17px; margin-right: -7px; position: relative; z-index: 1; }
 /* mid: extends left past padding, bleeds right into gap */
 .task-chip.chip-mid   { border-radius: 0; font-size: 0; margin-left: -5px; margin-right: -6px; opacity: .85; overflow: hidden; }
 /* end: extends left past padding, right stays normal */
@@ -427,8 +431,8 @@ table.xl-review-table tr.xl-update-row.xl-unchecked td { background: transparent
 .role-bar.seg-row-start { border-left-width: 1.5px; border-left-style: solid; border-top-left-radius: 5px; border-bottom-left-radius: 5px; margin-left: 0; }
 
 .duedate-marker.seg-row-end,
-.duedate-bar.seg-row-end   { border-right: 1.5px solid #8080a0; border-top-right-radius: 4px; border-bottom-right-radius: 4px; margin-right: 0; width: auto; }
-.duedate-bar.seg-row-start { border-left: 1.5px solid #8080a0; border-top-left-radius: 4px; border-bottom-left-radius: 4px; margin-left: 0; width: auto; }
+.duedate-bar.seg-row-end   { border-right: 1.5px solid #8080a0; border-top-right-radius: 4px; border-bottom-right-radius: 4px; margin-right: 0; }
+.duedate-bar.seg-row-start { border-left: 1.5px solid #8080a0; border-top-left-radius: 4px; border-bottom-left-radius: 4px; margin-left: 0; }
 
 /* ── EMPTY STATE ── */
 .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 8px; color: var(--dim); text-align: center; }
@@ -5554,13 +5558,9 @@ function possessivePtoSubject(names) {
   return names.slice(0, -1).join(', ') + ' and ' + poss(names[names.length - 1]) + ' PTO';
 }
 
-// Emails for the internal video team (Producer / Editor / Animator), skipping
-// sunset people and anyone without an email on file.
-function videoTeamRecipients() {
-  return collectAllPeople()
-    .filter(p => !isSunset(p.name) && isVideoTeamPerson(p) && p.email && p.email.includes('@'))
-    .map(p => p.email);
-}
+// The video team's distribution list — one address that fans out to the whole
+// team, so PTO "Notify Team" invites don't have to enumerate individuals.
+const VIDEO_TEAM_DIST = 'video@pega.com';
 
 // Special two-option invite for PTO / Time-Off projects. Each PTO entry gets:
 //   1) an "Out of Office" invite for the person on leave (subject = the PTO's
@@ -5594,7 +5594,7 @@ function renderPtoInvitesPanel(content, proj) {
     '<img src="' + PTO_IMG_REQRESP + '" alt="Outlook Request responses toggle" style="display:block;max-width:210px;width:100%;border:1px solid var(--border);border-radius:6px;margin:0;">';
   content.appendChild(note);
 
-  const teamEmails = videoTeamRecipients();
+  const teamEmails = [VIDEO_TEAM_DIST];
 
   const list = document.createElement('div');
   list.className = 'export-table-wrap';
@@ -5636,12 +5636,13 @@ function renderPtoInvitesPanel(content, proj) {
       }), '_blank');
     });
 
-    // Option 2 — notify the whole video team (free / no response expected).
+    // Option 2 — notify the whole video team via its distribution list
+    // (free / no response expected).
     const btn2 = document.createElement('button');
     btn2.className = 'btn btn-ghost';
     btn2.style.flexShrink = '0';
     btn2.textContent = '👥 Notify Team';
-    if (!teamEmails.length) { btn2.disabled = true; btn2.title = 'No video-team emails on file (add them in Settings)'; }
+    btn2.title = 'Invites ' + VIDEO_TEAM_DIST;
     btn2.addEventListener('click', () => {
       window.open(buildOutlookComposeURL({
         subject: subjectTeam, startDate, endDate, allDay: true,
