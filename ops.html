@@ -1107,6 +1107,19 @@ function getTaskCat(task) {
 const ROLE_VERB = { 'Producer': 'Producing', 'Editor': 'Editing', 'Animator': 'Animating', 'Copywriter': 'Copywriting', 'Designer': 'Designing', 'Stakeholder': 'Reviewing', 'External Vendor': 'Vendor Work', 'Other': 'Working', 'Administrative': 'Administrative', 'Team/Other Event': 'Team Event' };
 function roleVerb(role) { return ROLE_VERB[role] || role || 'Task'; }
 
+// Display title for a task, falling back to the same defaults Team uses when no
+// custom name was entered (role verb for work tasks, review/milestone labels else).
+function opsTaskTitle(task) {
+  if (!task) return 'Task';
+  if (task.taskName) return task.taskName;
+  if (task.isReview) return task.reviewLabel || 'Review';
+  if (task.isDueDate) {
+    const t = task.milestoneType;
+    return t === 'milestone' ? 'Milestone' : t === 'delivery' ? 'Delivery' : t === 'pto' ? 'PTO' : 'Project Due Date';
+  }
+  return roleVerb(task.role);
+}
+
 // ── COLLECT ALL OPS TASKS ──
 // Returns flat list of { date, endDate, person, cat, taskName, loe, color, projectName }
 function getOpsEntries() {
@@ -2218,7 +2231,7 @@ function getOpsHeadsUpPrompt(item) {
       return eventWords.some(w => tn.includes(w));
     });
 
-    if (matched.length === 1) return { text: `Will "${matched[0].taskName || '(untitled)'}" be ready in time?`, tasks: leadingTasks };
+    if (matched.length === 1) return { text: `Will "${opsTaskTitle(matched[0])}" be ready in time?`, tasks: leadingTasks };
     if (matched.length > 1) return { text: `${matched.length} related tasks need to land — all on track?`, tasks: leadingTasks };
     if (leadingTasks.length) return { text: `${leadingTasks.length} task${leadingTasks.length > 1 ? 's' : ''} due before this — all on track?`, tasks: leadingTasks };
     if (item.type === 'shoot') return { text: 'Shoot prepped?', tasks: [] };
@@ -2548,7 +2561,7 @@ function renderHuGroup(type, label) {
             const ti = document.createElement('div');
             ti.className = 'hu-task-item';
             const loe = t.loe ? (HU_LOE_EMOJI[t.loe] || '') + ' ' : '';
-            ti.innerHTML = '<span style="flex:1">' + loe + esc(t.taskName || '(untitled)') + '</span><span style="font-size:9px;color:#8080a0">' + esc(t.person || '') + '</span>';
+            ti.innerHTML = '<span style="flex:1">' + loe + esc(opsTaskTitle(t)) + '</span><span style="font-size:9px;color:#8080a0">' + esc(t.person || '') + '</span>';
             tasksDiv.appendChild(ti);
           });
 
@@ -2641,7 +2654,7 @@ function renderHealthPanel() {
       const taskTd = document.createElement('td');
       if (r.lastTask) {
         const end = r.lastTask.endDate || r.lastTask.date;
-        taskTd.textContent = (r.lastTask.taskName || '(untitled)') + ' · ' + fmtDateShort(end);
+        taskTd.textContent = opsTaskTitle(r.lastTask) + ' · ' + fmtDateShort(end);
       } else {
         taskTd.textContent = '—';
         taskTd.classList.add('dim');
@@ -2859,7 +2872,7 @@ function renderUnassignedPanel() {
       const start = t.date, end = t.endDate || t.date;
       const dateTxt = start === end ? fmtDateShort(start) : fmtDateShort(start) + ' – ' + fmtDateShort(end);
       const loe = t.loe ? (HU_LOE_EMOJI[t.loe] || '') + ' ' : '';
-      const name = mkOpsName(loe + (t.taskName || '(untitled)'));
+      const name = mkOpsName(loe + opsTaskTitle(t));
       name.style.fontWeight = '600';
       const when = document.createElement('span');
       when.className = 'opsx-sub';
@@ -2977,7 +2990,7 @@ function renderDeliveriesPanel() {
     const body = document.createElement('div');
     body.style.flex = '1';
     body.style.minWidth = '0';
-    const name = mkOpsName(t.taskName || 'Due date');
+    const name = mkOpsName(opsTaskTitle(t));
     body.appendChild(name);
     const sub = document.createElement('div');
     sub.className = 'opsx-sub';
