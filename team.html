@@ -5506,9 +5506,156 @@ function makeOutlookURL(t, proj) {
   return 'https://outlook.office.com/calendar/action/compose?' + params.toString();
 }
 
+// Local YYYY-MM-DD for "today" (calendar-day comparison, not UTC).
+function todayISOStr() {
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+
+// Low-level Outlook Web compose deeplink built from explicit fields. The
+// compose URL can carry subject / dates / all-day / recipients only — it
+// CANNOT set busy status (OOF / Free), reminders, or "response requested".
+// Those stay manual (see the note in the PTO invites panel). An .ics could
+// encode them, but IT security blocks .ics here.
+function buildOutlookComposeURL({ subject, startDate, endDate, allDay, toEmails }) {
+  const pad = n => String(n).padStart(2, '0');
+  const dayAfter = s => { const d = new Date(s + 'T00:00:00'); d.setDate(d.getDate() + 1);
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
+  const params = new URLSearchParams();
+  if (subject) params.set('subject', subject);
+  if (allDay) {
+    params.set('allday', 'true');
+    params.set('startdt', startDate);
+    params.set('enddt', dayAfter(endDate || startDate)); // Outlook all-day end is exclusive
+  } else {
+    params.set('startdt', startDate + 'T09:00:00');
+    params.set('enddt', (endDate || startDate) + 'T17:00:00');
+  }
+  const recips = (toEmails || []).filter(e => e && e.includes('@'));
+  if (recips.length) params.set('to', recips.join(','));
+  return 'https://outlook.office.com/calendar/action/compose?' + params.toString();
+}
+
+// People on a given PTO entry (legacy single person + attendees), deduped.
+function ptoInvitePeople(task) {
+  const seen = new Set(), out = [];
+  taskPeople(task).forEach(p => { if (p.person && !seen.has(p.person)) { seen.add(p.person); out.push(p.person); } });
+  return out;
+}
+
+// "Jason's PTO" / "Jason and Reggie's PTO" / "Jason, Reggie and Sam's PTO".
+function possessivePtoSubject(names) {
+  if (!names.length) return 'PTO';
+  const poss = n => n + "’s";
+  if (names.length === 1) return poss(names[0]) + ' PTO';
+  return names.slice(0, -1).join(', ') + ' and ' + poss(names[names.length - 1]) + ' PTO';
+}
+
+// Emails for the internal video team (Producer / Editor / Animator), skipping
+// sunset people and anyone without an email on file.
+function videoTeamRecipients() {
+  return collectAllPeople()
+    .filter(p => !isSunset(p.name) && isVideoTeamPerson(p) && p.email && p.email.includes('@'))
+    .map(p => p.email);
+}
+
+// Special two-option invite for PTO / Time-Off projects. Each PTO entry gets:
+//   1) an "Out of Office" invite for the person on leave (subject = the PTO's
+//      own subject), and
+//   2) a "Notify Team" invite to the whole video team (subject = "<names>'s PTO").
+// Both are all-day, spanning the full PTO range. Entries stay until the PTO's
+// end date passes, then drop off.
+function renderPtoInvitesPanel(content, proj) {
+  const today = todayISOStr();
+  const tasks = (proj ? proj.tasks : [])
+    .filter(t => t.isDueDate && t.milestoneType === 'pto')
+    .filter(t => (t.endDate || t.date) >= today) // hide once the leave is fully over
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  if (!tasks.length) {
+    const em = document.createElement('div');
+    em.style.cssText = 'color:var(--dim);font-size:12px;padding:14px 2px;';
+    em.textContent = 'No upcoming or in-progress PTO.';
+    content.appendChild(em); return;
+  }
+
+  const note = document.createElement('div');
+  note.style.cssText = 'font-size:11px;color:var(--dim);padding:6px 2px 8px;flex-shrink:0;line-height:1.55;';
+  note.innerHTML = 'Two Outlook invites per PTO entry. A link can’t preset status or reminders, so after Outlook opens:<br>' +
+    '• <b>Out of Office</b> (you): set <b>Show As → Out of Office</b> and turn the reminder off.<br>' +
+    '• <b>Notify Team</b>: set <b>Show As → Free</b>, turn the reminder off, and uncheck <b>Request Responses</b>.';
+  content.appendChild(note);
+
+  const teamEmails = videoTeamRecipients();
+
+  const list = document.createElement('div');
+  list.className = 'export-table-wrap';
+  tasks.forEach(t => {
+    const people = ptoInvitePeople(t);
+    const main = people[0] || null;
+    const mainEmail = main ? getPersonEmail(main) : '';
+    const subjectSelf = t.taskName || 'PTO';
+    const subjectTeam = possessivePtoSubject(people);
+    const startDate = t.date, endDate = t.endDate || t.date;
+
+    const row = document.createElement('div');
+    row.className = 'invite-row';
+
+    const dateEl = document.createElement('span');
+    dateEl.className = 'invite-date';
+    dateEl.style.minWidth = '78px';
+    dateEl.textContent = fmtDateRange(t);
+
+    const badge = document.createElement('span');
+    badge.className = 'invite-badge';
+    badge.textContent = '🏖 PTO';
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'invite-name';
+    nameEl.style.flex = '1';
+    nameEl.textContent = people.length ? people.join(', ') : '(no one assigned)';
+
+    // Option 1 — personal Out-of-Office, main person only.
+    const btn1 = document.createElement('button');
+    btn1.className = 'btn btn-ghost';
+    btn1.style.flexShrink = '0';
+    btn1.textContent = '🏖 Out of Office';
+    if (!main) { btn1.disabled = true; btn1.title = 'No person on this PTO entry'; }
+    btn1.addEventListener('click', () => {
+      window.open(buildOutlookComposeURL({
+        subject: subjectSelf, startDate, endDate, allDay: true,
+        toEmails: mainEmail ? [mainEmail] : []
+      }), '_blank');
+    });
+
+    // Option 2 — notify the whole video team (free / no response expected).
+    const btn2 = document.createElement('button');
+    btn2.className = 'btn btn-ghost';
+    btn2.style.flexShrink = '0';
+    btn2.textContent = '👥 Notify Team';
+    if (!teamEmails.length) { btn2.disabled = true; btn2.title = 'No video-team emails on file (add them in Settings)'; }
+    btn2.addEventListener('click', () => {
+      window.open(buildOutlookComposeURL({
+        subject: subjectTeam, startDate, endDate, allDay: true,
+        toEmails: teamEmails
+      }), '_blank');
+    });
+
+    row.appendChild(dateEl);
+    row.appendChild(badge);
+    row.appendChild(nameEl);
+    row.appendChild(btn1);
+    row.appendChild(btn2);
+    list.appendChild(row);
+  });
+  content.appendChild(list);
+}
+
 function renderInvitesWebPanel() {
   const content = document.getElementById('exportContent');
   const proj = getProject(activeProjectId);
+  // PTO / Time-Off projects get a dedicated two-option invite per person on leave.
+  if (isPtoProject(proj)) { renderPtoInvitesPanel(content, proj); return; }
   const tasks = proj ? proj.tasks.filter(isMeetingTask).sort((a,b) => a.date.localeCompare(b.date)) : [];
   if (!tasks.length) {
     const em = document.createElement('div');
