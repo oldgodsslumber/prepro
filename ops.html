@@ -551,6 +551,14 @@ const DOW_ALL = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const DOW_WD  = ['Mon','Tue','Wed','Thu','Fri'];
 const MONTHS  = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const SHOOT_LABELS = ['Studio Shoot','On-Location Shoot'];
+// Review-type labels that belong on the Studio Calendar. Shoots plus the
+// special "Studio Work" block from Administrative projects (set builds,
+// maintenance, etc.) that occupies the studio without being a shoot.
+const STUDIO_LABELS = [...SHOOT_LABELS, 'Studio Work'];
+function isStudioLabel(label) {
+  label = label || '';
+  return label.includes('Shoot') || STUDIO_LABELS.includes(label);
+}
 
 // ── TIMELINE CONSTANTS ──
 const TL_NAME_W     = 130;
@@ -3735,7 +3743,7 @@ function getStudioShoots() {
   (state.projects || []).filter(p => !p.completed && !p.ghost).forEach(proj => {
     (proj.tasks || []).forEach(task => {
       if (!task.isReview) return;
-      if (!(task.reviewLabel || '').includes('Shoot')) return;
+      if (!isStudioLabel(task.reviewLabel)) return;
 
       // Find most-used producer for this project
       const producerCounts = {};
@@ -3827,7 +3835,8 @@ function renderStudio() {
       } else {
         countdownText = shoot.daysUntil + 'd away';
       }
-      const durText = shoot.duration > 1 ? shoot.duration + '-day shoot' : '1-day shoot';
+      const durNoun = (shoot.shootLabel || '').includes('Shoot') ? 'shoot' : 'studio block';
+      const durText = shoot.duration + '-day ' + durNoun;
       info.innerHTML += `<div class="studio-countdown ${countdownCls}">${durText} \u00b7 ${countdownText}</div>`;
 
       chip.parentElement.appendChild(info);

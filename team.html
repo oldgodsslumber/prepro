@@ -902,7 +902,8 @@ const REVIEW_SUGGESTIONS = {
   'Review':            ['Internal Review', 'Client Review', 'Round 1', 'Round 2', 'Final Review'],
   'Meeting':           ['Kickoff', 'Status Update', 'Brainstorm', 'Planning', 'Check-in'],
   'Studio Shoot':      ['Studio Shoot', 'B-Roll', 'Interviews', 'Reshoot'],
-  'On-Location Shoot': ['On-Location Shoot', 'B-Roll', 'Interviews', 'Reshoot']
+  'On-Location Shoot': ['On-Location Shoot', 'B-Roll', 'Interviews', 'Reshoot'],
+  'Studio Work':       ['Studio Work', 'Set Build', 'Set Strike', 'Maintenance', 'Prep']
 };
 // Display groups for the Role Assignees side panel. Underlying roles are
 // unchanged; these only control how the roster is grouped. `primary` is the
@@ -3050,6 +3051,21 @@ function renderPalette() {
       chip.addEventListener('dragend', () => { dragPayload = null; });
       admGrp.appendChild(chip);
     });
+    // Special red "Studio Work" chip: a review-type block (like Studio Shoot)
+    // so it also surfaces on the ops Studio Calendar. See STUDIO_LABELS in ops.html.
+    const swChip = document.createElement('div');
+    swChip.className = 'role-chip';
+    swChip.draggable = true;
+    swChip.textContent = 'Studio Work';
+    swChip.style.background = REVIEW_COLOR;
+    swChip.style.color = pickTextColor(REVIEW_COLOR);
+    swChip.addEventListener('dragstart', e => {
+      dragPayload = { type: 'review', color: REVIEW_COLOR, label: 'Studio Work' };
+      e.dataTransfer.setData('text', JSON.stringify(dragPayload));
+      e.dataTransfer.effectAllowed = 'copy';
+    });
+    swChip.addEventListener('dragend', () => { dragPayload = null; });
+    admGrp.appendChild(swChip);
     pal.appendChild(admGrp);
     return;
   }
