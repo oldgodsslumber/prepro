@@ -394,7 +394,7 @@ table.xl-review-table tr.xl-update-row.xl-unchecked td { background: transparent
 .review-block.drag-accepting .review-drop-hint { display: block; }
 
 /* ── ROLE BLOCK (role tasks: header + attendee list, accepts dropped people) ── */
-.role-block { background: var(--card); border: 1.5px solid var(--border); border-radius: 5px; padding: 5px 7px; cursor: pointer; flex-shrink: 0; transition: filter .12s; position: relative; }
+.role-block { background: var(--card); border: 1.5px solid var(--border); border-radius: 5px; padding: 5px 7px; cursor: pointer; flex-shrink: 0; transition: filter .12s; position: relative; box-sizing: border-box; min-height: 41px; }
 .role-block.role-multi-start { border-radius: 5px 0 0 5px; border-right: none; margin-right: -7px; z-index: 1; }
 .role-block:hover { filter: brightness(1.25); }
 .role-block.drag-accepting { outline: 2px solid var(--accent); outline-offset: -1px; }
