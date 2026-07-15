@@ -2317,7 +2317,7 @@ function buildProjectFromRow(row) {
 
   return {
     id: genId(), name, parentId: null, tasks, roster, dueDate: null, notes,
-    ticketId: ticketId || null, ticketUrl: null,
+    ticketId: ticketId || null, ticketLabel: label || null, ticketUrl: null,
     leadProducer: (row.producer || '').trim() || null,
     function: null, videoType: (row.videoType || '').trim() || null,
     targetAudience: (row.targetAudience || '').trim() || null, budget: null,
@@ -2427,9 +2427,16 @@ function handleExcelImport(file) {
       const newStatus     = (o.caseStatus || '').trim();
       const statusChanged = !!newStatus && newStatus !== ((existing.caseStatus || '').trim());
       const producerFill  = !!(o.producer || '').trim() && !((existing.leadProducer || '').trim());
-      if (statusChanged || producerFill) {
+      // Ops folks rename tickets while the Case ID stays the same. Compare the
+      // incoming Label against the existing project's label (its name minus the
+      // Case ID prefix) so a rename is picked up as an update.
+      const newLabel      = (o.label || '').trim();
+      const oldLabel      = ticketLabelOf(existing);
+      const labelChanged  = !!newLabel && newLabel.toLowerCase() !== oldLabel.toLowerCase();
+      if (statusChanged || producerFill || labelChanged) {
         updateRows.push(Object.assign({}, o, {
-          _update: true, _existingId: existing.id, _oldStatus: existing.caseStatus || ''
+          _update: true, _existingId: existing.id, _oldStatus: existing.caseStatus || '',
+          _oldLabel: oldLabel, _labelChanged: labelChanged
         }));
       } else {
         skipped.push(o);
@@ -2455,10 +2462,27 @@ function caseStatusToAppStatus(caseStatus) {
   return null;
 }
 
+// The last label Excel gave this ticket, anchored to its Case ID. Prefer the
+// stored ticketLabel (set on import/update) so we compare Excel-label against
+// Excel-label — a manual in-app rename of the display name never registers as an
+// ops rename. Projects imported before ticketLabel existed fall back to deriving
+// it from the name (name = ticketId + ' ' + label).
+function ticketLabelOf(proj) {
+  if (proj && typeof proj.ticketLabel === 'string' && proj.ticketLabel.trim()) {
+    return proj.ticketLabel.trim();
+  }
+  const name = (proj && proj.name || '').trim();
+  const tid  = (proj && proj.ticketId || '').trim();
+  if (tid && name.toLowerCase().indexOf(tid.toLowerCase()) === 0) {
+    return name.slice(tid.length).trim();
+  }
+  return name;
+}
+
 // Apply an "Updated" review row onto its existing project: refresh Case Status,
-// backfill lead producer only when empty, and move the project into the section
-// its new status maps to. Everything else (schedule, roster, attendees, notes)
-// is left intact.
+// backfill lead producer only when empty, rename it when ops changed the ticket
+// label (Case ID unchanged), and move the project into the section its new status
+// maps to. Everything else (schedule, roster, attendees, notes) is left intact.
 function applyTicketUpdate(row) {
   const proj = getProject(row._existingId);
   if (!proj) return false;
@@ -2466,6 +2490,18 @@ function applyTicketUpdate(row) {
   const newStatus = (row.caseStatus || '').trim();
   if (prod && !((proj.leadProducer || '').trim())) proj.leadProducer = prod;
   if (newStatus) proj.caseStatus = newStatus;
+  // Rename when the incoming Label differs from the last one Excel gave us.
+  const newLabel = (row.label || '').trim();
+  const oldLabel = ticketLabelOf(proj);
+  if (newLabel && newLabel.toLowerCase() !== oldLabel.toLowerCase()) {
+    const tid = (proj.ticketId || '').trim();
+    proj.name = tid ? tid + ' ' + newLabel : newLabel;
+    proj.ticketLabel = newLabel;
+    addSystemNote(proj.id, 'Renamed from Excel (Case ' + (proj.ticketId || '—') + '): "' + oldLabel + '" → "' + newLabel + '"');
+  } else if (newLabel && !proj.ticketLabel) {
+    // Backfill the anchor for a pre-existing project on first matching import.
+    proj.ticketLabel = newLabel;
+  }
   addSystemNote(proj.id, 'Updated from Excel (Case ' + (proj.ticketId || '—') + ')' + (newStatus ? ' · status: ' + newStatus : ''));
   const appStatus = caseStatusToAppStatus(newStatus);
   if (appStatus && projStatus(proj) !== appStatus) {
@@ -2553,7 +2589,12 @@ function buildExcelReviewTable() {
     const badge = document.createElement('span');
     badge.className = 'xl-kind-badge ' + (row._update ? 'update' : 'new');
     badge.textContent = row._update ? 'Updated' : 'New';
-    if (row._update && row._oldStatus) badge.title = 'Was: ' + row._oldStatus;
+    if (row._update) {
+      const tips = [];
+      if (row._labelChanged) tips.push('Renamed from: "' + (row._oldLabel || '') + '"');
+      if (row._oldStatus)    tips.push('Was: ' + row._oldStatus);
+      if (tips.length) badge.title = tips.join(' · ');
+    }
     kCell.appendChild(badge);
 
     XL_GRID_COLS.forEach(col => {
