@@ -5636,8 +5636,10 @@ function renderPtoInvitesPanel(content, proj) {
   const note = document.createElement('div');
   note.style.cssText = 'font-size:11px;color:var(--dim);padding:6px 2px 8px;flex-shrink:0;line-height:1.55;';
   note.innerHTML =
-    'Two invites per PTO entry. Each downloads an <b>.ics</b> that opens in Outlook with the status, reminder, and responses already set — open it, then choose <b>Edit → Send</b> to notify the recipients.' +
-    '<div style="margin:7px 0 3px;">• <b>Out of Office</b>: all-day, <b>Show As → Out of Office</b>, reminder off; sent to the person(s) on the PTO.</div>' +
+    'Two invites per PTO entry. Each downloads an <b>.ics</b> with the status, reminder, and responses already set.' +
+    '<div style="margin:7px 0;padding:6px 8px;border-radius:6px;background:var(--warn-bg,rgba(230,160,30,.14));border:1px solid var(--warn,rgba(230,160,30,.5));color:var(--text);">' +
+    '⚠️ <b>After it opens in Outlook, press Edit → Send.</b> Otherwise the event only lands on your own calendar and no one is notified.</div>' +
+    '<div style="margin:0 0 3px;">• <b>Out of Office</b>: all-day, <b>Show As → Out of Office</b>, reminder off; sent to the person(s) on the PTO.</div>' +
     '<div style="margin:0;">• <b>Notify Team</b>: all-day <b>Free</b>, reminder off, responses off; sent to the video team.</div>';
   content.appendChild(note);
 
