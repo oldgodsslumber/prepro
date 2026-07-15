@@ -5543,6 +5543,55 @@ function buildOutlookComposeURL({ subject, startDate, endDate, allDay, toEmails 
   return 'https://outlook.office.com/calendar/action/compose?' + params.toString();
 }
 
+// Build an Outlook-friendly all-day meeting-request .ics for a PTO entry.
+// Unlike the compose URL, an .ics can preset Show As (Free/OOF), suppress the
+// reminder (no VALARM), and turn off response requests (RSVP=FALSE). Opening it
+// adds the event to your calendar; choose Edit → Send to notify the recipients.
+//   opts: { uid, subject, start:'YYYY-MM-DD', end(inclusive), busy:'FREE'|'OOF'|'BUSY',
+//           requestResponses:bool, attendees:[{name,email}] }
+function buildPtoICS(opts) {
+  const pad = n => String(n).padStart(2, '0');
+  const icsDate = (iso, add) => { const p = iso.split('-').map(Number);
+    const d = new Date(Date.UTC(p[0], p[1] - 1, p[2] + (add || 0)));
+    return '' + d.getUTCFullYear() + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate()); };
+  const now = new Date();
+  const stamp = '' + now.getUTCFullYear() + pad(now.getUTCMonth() + 1) + pad(now.getUTCDate()) +
+    'T' + pad(now.getUTCHours()) + pad(now.getUTCMinutes()) + pad(now.getUTCSeconds()) + 'Z';
+  const esc = s => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+  const fold = line => { if (line.length <= 75) return line;
+    let out = line.slice(0, 75), rest = line.slice(75);
+    while (rest.length) { out += '\r\n ' + rest.slice(0, 74); rest = rest.slice(74); }
+    return out; };
+  const busy = opts.busy || 'BUSY';
+  const rsvp = opts.requestResponses ? 'TRUE' : 'FALSE';
+  const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//PrePro//Team Scheduler//EN',
+    'CALSCALE:GREGORIAN', 'METHOD:REQUEST', 'BEGIN:VEVENT',
+    'UID:' + (opts.uid || (stamp + '@prepro')),
+    'DTSTAMP:' + stamp,
+    'DTSTART;VALUE=DATE:' + icsDate(opts.start, 0),
+    'DTEND;VALUE=DATE:' + icsDate(opts.end || opts.start, 1), // all-day end is exclusive
+    'SUMMARY:' + esc(opts.subject || 'PTO')];
+  (opts.attendees || []).forEach(a => { if (!a.email) return;
+    L.push('ATTENDEE;CN=' + esc(a.name || a.email) +
+      ';ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=' + rsvp + ':mailto:' + a.email); });
+  L.push('STATUS:CONFIRMED');
+  L.push('TRANSP:' + (busy === 'FREE' ? 'TRANSPARENT' : 'OPAQUE'));
+  L.push('SEQUENCE:0');
+  L.push('X-MICROSOFT-CDO-BUSYSTATUS:' + busy);
+  L.push('X-MICROSOFT-CDO-ALLDAYEVENT:TRUE');
+  if (!opts.requestResponses) L.push('X-MICROSOFT-DISALLOW-COUNTER:TRUE');
+  // No VALARM => no reminder.
+  L.push('END:VEVENT', 'END:VCALENDAR');
+  return L.map(fold).join('\r\n') + '\r\n';
+}
+
+// "Jason on PTO" / "Jason and Reggie on PTO" / "Jason, Reggie and Sam on PTO".
+function ptoOnSubject(names) {
+  if (!names.length) return 'PTO';
+  if (names.length === 1) return names[0] + ' on PTO';
+  return names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] + ' on PTO';
+}
+
 // People on a given PTO entry (legacy single person + attendees), deduped.
 function ptoInvitePeople(task) {
   const seen = new Set(), out = [];
@@ -5587,11 +5636,9 @@ function renderPtoInvitesPanel(content, proj) {
   const note = document.createElement('div');
   note.style.cssText = 'font-size:11px;color:var(--dim);padding:6px 2px 8px;flex-shrink:0;line-height:1.55;';
   note.innerHTML =
-    'Two Outlook invites per PTO entry. A link can’t preset status or reminders, so after Outlook opens:' +
-    '<div style="margin:7px 0 3px;">• <b>Out of Office</b> (you): set <b>Show As → Out of Office</b> and turn the reminder off.</div>' +
-    '<img src="' + PTO_IMG_SHOWAS + '" alt="Outlook Show As menu, choose Out of office" style="display:block;max-width:190px;width:100%;border:1px solid var(--border);border-radius:6px;margin:0 0 9px;">' +
-    '<div style="margin:0 0 3px;">• <b>Notify Team</b>: turn the reminder off and uncheck <b>Request responses</b>. (An all-day event already shows you as <b>Free</b>.)</div>' +
-    '<img src="' + PTO_IMG_REQRESP + '" alt="Outlook Request responses toggle" style="display:block;max-width:210px;width:100%;border:1px solid var(--border);border-radius:6px;margin:0;">';
+    'Two invites per PTO entry. Each downloads an <b>.ics</b> that opens in Outlook with the status, reminder, and responses already set — open it, then choose <b>Edit → Send</b> to notify the recipients.' +
+    '<div style="margin:7px 0 3px;">• <b>Out of Office</b>: all-day, <b>Show As → Out of Office</b>, reminder off; sent to the person(s) on the PTO.</div>' +
+    '<div style="margin:0;">• <b>Notify Team</b>: all-day <b>Free</b>, reminder off, responses off; sent to the video team.</div>';
   content.appendChild(note);
 
   const teamEmails = [VIDEO_TEAM_DIST];
@@ -5600,10 +5647,7 @@ function renderPtoInvitesPanel(content, proj) {
   list.className = 'export-table-wrap';
   tasks.forEach(t => {
     const people = ptoInvitePeople(t);
-    const main = people[0] || null;
-    const mainEmail = main ? getPersonEmail(main) : '';
     const subjectSelf = t.taskName || 'PTO';
-    const subjectTeam = possessivePtoSubject(people);
     const startDate = t.date, endDate = t.endDate || t.date;
 
     const row = document.createElement('div');
@@ -5623,31 +5667,43 @@ function renderPtoInvitesPanel(content, proj) {
     nameEl.style.flex = '1';
     nameEl.textContent = people.length ? people.join(', ') : '(no one assigned)';
 
-    // Option 1 — personal Out-of-Office, main person only.
+    // Attendees for the OOF invite = everyone named on the PTO who has an email.
+    const ptoAttendees = people
+      .map(p => ({ name: p, email: getPersonEmail(p) }))
+      .filter(a => a.email && a.email.includes('@'));
+
+    // Option 1 — personal Out-of-Office invite to the person(s) on the PTO.
+    // Downloads an .ics preset to Show As → Out of Office, reminder off.
     const btn1 = document.createElement('button');
     btn1.className = 'btn btn-ghost';
     btn1.style.flexShrink = '0';
     btn1.textContent = '🏖 Out of Office';
-    if (!main) { btn1.disabled = true; btn1.title = 'No person on this PTO entry'; }
+    if (!ptoAttendees.length) { btn1.disabled = true; btn1.title = 'No email on the person(s) for this PTO — add one in People'; }
     btn1.addEventListener('click', () => {
-      window.open(buildOutlookComposeURL({
-        subject: subjectSelf, startDate, endDate, allDay: true,
-        toEmails: mainEmail ? [mainEmail] : []
-      }), '_blank');
+      const ics = buildPtoICS({
+        uid: (t.id || genId()) + '-oof@prepro',
+        subject: subjectSelf, start: startDate, end: endDate,
+        busy: 'OOF', requestResponses: true, attendees: ptoAttendees
+      });
+      downloadICS(ics, ((subjectSelf.replace(/[^a-z0-9]/gi, '_')) || 'pto') + '_OOF.ics');
     });
 
-    // Option 2 — notify the whole video team via its distribution list
-    // (free / no response expected).
+    // Option 2 — notify the whole video team via its distribution list.
+    // Downloads an .ics preset to Free, reminder off, responses off, "X on PTO".
     const btn2 = document.createElement('button');
     btn2.className = 'btn btn-ghost';
     btn2.style.flexShrink = '0';
     btn2.textContent = '👥 Notify Team';
     btn2.title = 'Invites ' + VIDEO_TEAM_DIST;
     btn2.addEventListener('click', () => {
-      window.open(buildOutlookComposeURL({
-        subject: subjectTeam, startDate, endDate, allDay: true,
-        toEmails: teamEmails
-      }), '_blank');
+      const teamSubject = ptoOnSubject(people);
+      const ics = buildPtoICS({
+        uid: (t.id || genId()) + '-team@prepro',
+        subject: teamSubject, start: startDate, end: endDate,
+        busy: 'FREE', requestResponses: false,
+        attendees: teamEmails.map(em => ({ name: 'Video Team', email: em }))
+      });
+      downloadICS(ics, teamSubject.replace(/[^a-z0-9]/gi, '_') + '.ics');
     });
 
     row.appendChild(dateEl);
