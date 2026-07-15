@@ -5571,6 +5571,7 @@ function buildPtoICS(opts) {
     'DTSTART;VALUE=DATE:' + icsDate(opts.start, 0),
     'DTEND;VALUE=DATE:' + icsDate(opts.end || opts.start, 1), // all-day end is exclusive
     'SUMMARY:' + esc(opts.subject || 'PTO')];
+  if (opts.body) L.push('DESCRIPTION:' + esc(opts.body));
   (opts.attendees || []).forEach(a => { if (!a.email) return;
     L.push('ATTENDEE;CN=' + esc(a.name || a.email) +
       ';ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=' + rsvp + ':mailto:' + a.email); });
@@ -5680,10 +5681,20 @@ function renderPtoInvitesPanel(content, proj) {
     btn1.textContent = '🏖 Out of Office';
     if (!ptoAttendees.length) { btn1.disabled = true; btn1.title = 'No email on the person(s) for this PTO — add one in People'; }
     btn1.addEventListener('click', () => {
+      // First working day back = day after the PTO ends, skipping Sat/Sun.
+      const back = new Date(endDate + 'T00:00:00');
+      back.setDate(back.getDate() + 1);
+      while (back.getDay() === 0 || back.getDay() === 6) back.setDate(back.getDate() + 1);
+      const backStr = back.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+      // Generic ticket link, copied from the CEA URL used in project names so it
+      // can be changed here independently later.
+      const TICKET_URL = 'https://corporateexpress.pegacloud.io/prweb/sso/app/CampaignExecution';
+      const oofBody = 'Thank you for your message! I am out of office and will return on ' + backStr + '.\n\n' +
+        'If you would like to request a video, you can submit a ticket here: ' + TICKET_URL;
       const ics = buildPtoICS({
         uid: (t.id || genId()) + '-oof@prepro',
         subject: subjectSelf, start: startDate, end: endDate,
-        busy: 'OOF', requestResponses: true, attendees: ptoAttendees
+        busy: 'OOF', requestResponses: true, attendees: ptoAttendees, body: oofBody
       });
       downloadICS(ics, ((subjectSelf.replace(/[^a-z0-9]/gi, '_')) || 'pto') + '_OOF.ics');
     });
