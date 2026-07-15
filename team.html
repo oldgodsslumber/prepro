@@ -5611,6 +5611,8 @@ function possessivePtoSubject(names) {
 // The video team's distribution list — one address that fans out to the whole
 // team, so PTO "Notify Team" invites don't have to enumerate individuals.
 const VIDEO_TEAM_DIST = 'video@pega.com';
+// Brand Creative group, also looped in on PTO "Notify Team" invites.
+const BRAND_CREATIVE_DIST = 'BrandCreative@pega.com';
 
 // Special two-option invite for PTO / Time-Off projects. Each PTO entry gets:
 //   1) an "Out of Office" invite for the person on leave (subject = the PTO's
@@ -5642,7 +5644,10 @@ function renderPtoInvitesPanel(content, proj) {
     '<div style="margin:0;">• <b>Notify Team</b>: all-day <b>Free</b>, reminder off, responses off; sent to the video team.</div>';
   content.appendChild(note);
 
-  const teamEmails = [VIDEO_TEAM_DIST];
+  const teamEmails = [
+    { name: 'Video Team', email: VIDEO_TEAM_DIST },
+    { name: 'Brand Creative', email: BRAND_CREATIVE_DIST }
+  ];
 
   const list = document.createElement('div');
   list.className = 'export-table-wrap';
@@ -5705,14 +5710,14 @@ function renderPtoInvitesPanel(content, proj) {
     btn2.className = 'btn btn-ghost';
     btn2.style.flexShrink = '0';
     btn2.textContent = '👥 Notify Team';
-    btn2.title = 'Invites ' + VIDEO_TEAM_DIST;
+    btn2.title = 'Invites ' + teamEmails.map(r => r.email).join(', ');
     btn2.addEventListener('click', () => {
       const teamSubject = ptoOnSubject(people);
       const ics = buildPtoICS({
         uid: (t.id || genId()) + '-team@prepro',
         subject: teamSubject, start: startDate, end: endDate,
         busy: 'FREE', requestResponses: false,
-        attendees: teamEmails.map(em => ({ name: 'Video Team', email: em }))
+        attendees: teamEmails
       });
       downloadICS(ics, teamSubject.replace(/[^a-z0-9]/gi, '_') + '.ics');
     });
