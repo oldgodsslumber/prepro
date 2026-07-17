@@ -1132,7 +1132,7 @@ function opsTaskTitle(task) {
 // Returns flat list of { date, endDate, person, cat, taskName, loe, color, projectName }
 function getOpsEntries() {
   const entries = [];
-  (state.projects || []).filter(p => !p.completed && !p.ghost).forEach(proj => {
+  (state.projects || []).filter(p => !isInactive(p) && !p.ghost).forEach(proj => {
     (proj.tasks || []).forEach(task => {
       if (task.isDueDate) return;
       const loe = task.loe || 'medium';
@@ -1170,7 +1170,7 @@ function getOpsEntries() {
 // Returned as timeline-shaped entries (date/endDate/person) flagged isPTO.
 function getPtoEntries() {
   const out = [];
-  (state.projects || []).filter(p => !p.completed && !p.ghost).forEach(proj => {
+  (state.projects || []).filter(p => !isInactive(p) && !p.ghost).forEach(proj => {
     (proj.tasks || []).forEach(t => {
       if (!t.isDueDate || t.milestoneType !== 'pto') return;
       const end = t.endDate || t.date;
