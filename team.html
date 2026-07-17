@@ -823,6 +823,7 @@ table.xl-review-table tr.xl-update-row.xl-unchecked td { background: transparent
   <!-- TOOLS RAIL (vertical tabs) -->
   <div class="tools-rail" id="toolsRail">
     <div class="tools-rail-tab" data-tab="projectinfo"><span class="tr-icon">📋</span>Info</div>
+    <div class="tools-rail-tab" data-tab="roster"><span class="tr-icon">👥</span>Team</div>
     <div class="tools-rail-tab" data-tab="text"><span class="tr-icon">📄</span>Text</div>
     <div class="tools-rail-tab" data-tab="table"><span class="tr-icon">📊</span>Table</div>
     <div class="tools-rail-tab" data-tab="png"><span class="tr-icon">🖼️</span>PNG</div>
@@ -996,9 +997,8 @@ function saveExpandedIds() {
 let dragPayload     = null;
 let panelContext    = null;
 let exportTabActive  = localStorage.getItem('prepro_export_tab') || 'projectinfo';
-if (exportTabActive === 'roster') exportTabActive = 'projectinfo'; // old tab merged into Project Info
 if (exportTabActive === 'planyway') exportTabActive = 'projectinfo'; // Trello export removed
-const TAB_TITLES = { projectinfo: 'Project Info', text: 'Text Export', table: 'Table / Excel', png: 'PNG Export', 'invites-web': 'Meeting Invites', notes: 'Notes', cea: 'CEA' };
+const TAB_TITLES = { projectinfo: 'Project Info', roster: 'Role Assignees', text: 'Text Export', table: 'Table / Excel', png: 'PNG Export', 'invites-web': 'Meeting Invites', notes: 'Notes', cea: 'CEA' };
 let exportOpen       = false;
 let exportOptBold       = true;
 let exportOptRoles      = false;
@@ -6138,21 +6138,7 @@ function renderProjectInfo() {
   }
   wrap.appendChild(grid);
 
-  // ── Role assignees (merged in) ──
-  const divider = document.createElement('div');
-  divider.className = 'pi-divider';
-  wrap.appendChild(divider);
-
-  const t2 = document.createElement('div');
-  t2.className = 'pi-section-title';
-  t2.textContent = 'Role Assignees';
-  wrap.appendChild(t2);
-
-  const rosterHost = document.createElement('div');
-  wrap.appendChild(rosterHost);
-
   content.appendChild(wrap);
-  renderRosterInto(rosterHost);
 }
 
 function renderExportPanel() {
