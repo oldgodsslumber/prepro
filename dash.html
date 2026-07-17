@@ -506,6 +506,22 @@ const ROLE_CATS = [
 ];
 const LOE_EMOJI = { low: '\u{1F7E2}', medium: '\u{1F7E1}', high: '\u{1F534}' };
 const LOE_PTS   = { low: 1, medium: 2, high: 3 };
+
+// Generic display name for a task when no custom name was entered. Mirrors
+// ops.html's opsTaskTitle: role verb for work tasks, review/milestone labels
+// otherwise. Without this, unnamed work tasks fell through to '(untitled)'.
+const ROLE_VERB = { 'Producer': 'Producing', 'Editor': 'Editing', 'Animator': 'Animating', 'Copywriter': 'Copywriting', 'Designer': 'Designing', 'Stakeholder': 'Reviewing', 'External Vendor': 'Vendor Work', 'Other': 'Working', 'Administrative': 'Administrative', 'Team/Other Event': 'Team Event' };
+function roleVerb(role) { return ROLE_VERB[role] || role || 'Task'; }
+function taskDisplayName(task) {
+  if (!task) return 'Task';
+  if (task.taskName) return task.taskName;
+  if (task.isReview) return task.reviewLabel || 'Review';
+  if (task.isDueDate) {
+    const t = task.milestoneType;
+    return t === 'milestone' ? 'Milestone' : t === 'delivery' ? 'Delivery' : t === 'pto' ? 'PTO' : 'Project Due Date';
+  }
+  return roleVerb(task.role);
+}
 const DOW_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const NOTE_TYPES = [
   { key: 'update',    label: 'Project Update',        emoji: '\u{1F4CB}', desc: 'General status update' },
@@ -1856,7 +1872,7 @@ function renderTodaySection() {
 
       // Task content
       let html = '';
-      const taskLabel = task.taskName || task.reviewLabel || '(untitled)';
+      const taskLabel = taskDisplayName(task);
       html += `<span class="task-name">${esc(taskLabel)}</span>`;
 
       const multiDay = getMultiDayInfo(task, selectedDate);
@@ -2309,7 +2325,7 @@ function getHeadsUpPrompt(item, personName, afterDate) {
 
     if (matched.length) {
       if (matched.length === 1) {
-        const taskName = matched[0].taskName || '(untitled)';
+        const taskName = taskDisplayName(matched[0]);
         return { text: `Will \u201c${taskName}\u201d be ready for this?${statusNote}`, tasks: leadingTasks };
       }
       return { text: `${matched.length} related tasks need to land before this \u2014 on track?${statusNote}`, tasks: leadingTasks };
@@ -2425,7 +2441,7 @@ function renderHeadsUpSection() {
           ti.className = 'headsup-task-item';
           const loe = t.loe ? (LOE_EMOJI[t.loe] || '') + ' ' : '';
           const person = t.person ? ` \u00b7 ${esc(t.person)}` : '';
-          ti.innerHTML = `<span style="flex:1">${loe}${esc(t.taskName || '(untitled)')}</span><span class="headsup-task-person">${esc(t.person || '')}</span>`;
+          ti.innerHTML = `<span style="flex:1">${loe}${esc(taskDisplayName(t))}</span><span class="headsup-task-person">${esc(t.person || '')}</span>`;
           tasksDiv.appendChild(ti);
         });
 
@@ -2565,7 +2581,7 @@ function renderComingUpSection() {
 
     const labelCell = document.createElement('div');
     labelCell.className = 'gantt-label';
-    const taskName = task.taskName || task.reviewLabel || task.role || '(untitled)';
+    const taskName = taskDisplayName(task);
     labelCell.innerHTML = `<div class="gantt-task-name">${esc(taskName)}</div><div class="gantt-task-project">${esc(projectName)}</div>`;
     row.appendChild(labelCell);
 
@@ -2763,7 +2779,7 @@ function renderOverduePanel() {
     const name = document.createElement('div');
     name.className = 'od-name';
     const loe = task.loe ? (LOE_EMOJI[task.loe] || '') + ' ' : '';
-    name.innerHTML = loe + esc(task.taskName || '(untitled)') + ' <span class="od-project">· ' + esc(projectName) + '</span>';
+    name.innerHTML = loe + esc(taskDisplayName(task)) + ' <span class="od-project">· ' + esc(projectName) + '</span>';
     row.appendChild(name);
 
     const days = daysBetween(end, today);
@@ -2818,7 +2834,7 @@ function renderChecklistPanel() {
     head.className = 'ck-group-head';
     const tn = document.createElement('span');
     tn.className = 'ck-group-task';
-    tn.textContent = task.taskName || '(untitled)';
+    tn.textContent = taskDisplayName(task);
     head.appendChild(tn);
     const pn = document.createElement('span');
     pn.className = 'ck-group-project';
