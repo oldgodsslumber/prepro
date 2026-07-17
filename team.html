@@ -136,8 +136,16 @@ table.xl-review-table td.xl-kind { text-align: center; }
 .xl-kind-badge { display: inline-block; font-size: 9px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 7px; border-radius: 10px; white-space: nowrap; }
 .xl-kind-badge.new    { background: rgba(108,99,255,.18); color: var(--accent); }
 .xl-kind-badge.update { background: rgba(224,169,59,.20); color: #e0a93b; }
+.xl-kind-badge.closed { background: rgba(192,57,79,.20); color: #e07070; }
 table.xl-review-table tr.xl-update-row td { background: rgba(224,169,59,.06); }
 table.xl-review-table tr.xl-update-row.xl-unchecked td { background: transparent; }
+.xl-missing-section { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
+.xl-missing-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 2px 8px; }
+.xl-missing-head input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
+.xl-missing-title { font-size: 13px; font-weight: 700; color: #e07070; }
+.xl-missing-sub { font-size: 11px; color: var(--dim); }
+table.xl-missing-table tr.xl-missing-row td { background: rgba(192,57,79,.05); }
+table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transparent; }
 .settings-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--card); border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .settings-title { font-weight: 700; font-size: 14px; color: var(--text); }
 .settings-close { background: transparent; color: var(--dim); border: none; font-size: 16px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
@@ -2443,7 +2451,26 @@ function handleExcelImport(file) {
       }
     });
 
-    openExcelReview(newRows, updateRows, candidates.length, skipped.length);
+    // Tickets the app knows about (by Case ID) that are absent from this export.
+    // Because the Video Scheduler export is always the full active list, a ticket
+    // dropping out of it means it left the workflow (closed / cancelled) — Pega
+    // stops reporting closed cases, so absence is the only signal we get. We never
+    // auto-close: these are surfaced for the user to confirm. Already-terminal
+    // projects and non-ticket rows (PTO, admin, manual) are excluded.
+    const presentIds = new Set(candidates.map(o => o.ticketId.trim()));
+    const missingRows = [];
+    state.projects.forEach(p => {
+      const t = (p.ticketId || '').trim();
+      if (!t || presentIds.has(t)) return;
+      const st = projStatus(p);
+      if (st === 'completed' || st === 'cancelled') return;
+      missingRows.push({
+        _missing: true, _existingId: p.id, ticketId: t,
+        _name: p.name, _curStatus: st, caseStatus: p.caseStatus || ''
+      });
+    });
+
+    openExcelReview(newRows, updateRows, candidates.length, skipped.length, missingRows);
   };
   reader.readAsArrayBuffer(file);
 }
@@ -2512,21 +2539,29 @@ function applyTicketUpdate(row) {
   return true;
 }
 
-function openExcelReview(newRows, updateRows, totalRows, skippedCount) {
+function openExcelReview(newRows, updateRows, totalRows, skippedCount, missingRows) {
   updateRows = updateRows || [];
-  // Updated tickets first (more notable), then new ones. Both default to selected.
+  missingRows = missingRows || [];
+  // Updated tickets first (more notable), then new ones — both default selected.
+  // Missing/likely-closed tickets last, and default UNSELECTED: closing is the
+  // user's deliberate choice, never automatic.
   _xlReviewRows = [
     ...updateRows.map(o => Object.assign({ _selected: true }, o)),
-    ...newRows.map(o => Object.assign({ _selected: true }, o))
+    ...newRows.map(o => Object.assign({ _selected: true }, o)),
+    ...missingRows.map(o => Object.assign({ _selected: false }, o))
   ];
 
-  const nNew = newRows.length, nUpd = updateRows.length;
+  const nNew = newRows.length, nUpd = updateRows.length, nMiss = missingRows.length;
   const summary = document.getElementById('excelReviewSummary');
   summary.innerHTML = '<b>' + totalRows + '</b> rows in file · <b>' + skippedCount +
-    '</b> already in app (unchanged) · <b>' + nNew + '</b> new · <b>' + nUpd + '</b> updated';
+    '</b> already in app (unchanged) · <b>' + nNew + '</b> new · <b>' + nUpd + '</b> updated' +
+    (nMiss ? ' · <b>' + nMiss + '</b> no longer in file' : '');
 
   const wrap = document.getElementById('excelReviewGridWrap');
   wrap.innerHTML = '';
+
+  const gridRows = _xlReviewRows.filter(r => !r._missing);
+  const missRows = _xlReviewRows.filter(r => r._missing);
 
   if (!_xlReviewRows.length) {
     const empty = document.createElement('div');
@@ -2534,7 +2569,8 @@ function openExcelReview(newRows, updateRows, totalRows, skippedCount) {
     empty.textContent = 'Nothing to import — every ticket in this file is already in the app and unchanged.';
     wrap.appendChild(empty);
   } else {
-    wrap.appendChild(buildExcelReviewTable());
+    if (gridRows.length) wrap.appendChild(buildExcelReviewTable());
+    if (missRows.length) wrap.appendChild(buildMissingSection());
   }
 
   updateExcelConfirmLabel();
@@ -2551,8 +2587,9 @@ function buildExcelReviewTable() {
   const thCheck = document.createElement('th');
   const selAll = document.createElement('input');
   selAll.type = 'checkbox'; selAll.checked = true; selAll.title = 'Select / deselect all';
+  const gridRows = _xlReviewRows.filter(r => !r._missing);
   selAll.addEventListener('change', () => {
-    _xlReviewRows.forEach(r => { r._selected = selAll.checked; });
+    gridRows.forEach(r => { r._selected = selAll.checked; });
     table.querySelectorAll('tbody input.xl-row-check').forEach((cb, i) => {
       cb.checked = selAll.checked;
       cb.closest('tr').classList.toggle('xl-unchecked', !selAll.checked);
@@ -2568,7 +2605,7 @@ function buildExcelReviewTable() {
 
   // Body
   const tbody = table.createTBody();
-  _xlReviewRows.forEach(row => {
+  gridRows.forEach(row => {
     const tr = tbody.insertRow();
     if (row._update) tr.classList.add('xl-update-row');
 
@@ -2622,10 +2659,81 @@ function buildExcelReviewTable() {
   return table;
 }
 
+// Tickets present in the app but absent from the export — likely closed. Rendered
+// as its own section (they aren't editable ticket rows), default unchecked, each a
+// one-click "mark this completed".
+function buildMissingSection() {
+  const section = document.createElement('div');
+  section.className = 'xl-missing-section';
+
+  const head = document.createElement('div');
+  head.className = 'xl-missing-head';
+  const selAll = document.createElement('input');
+  selAll.type = 'checkbox'; selAll.className = 'xl-missing-all';
+  selAll.title = 'Select / deselect all';
+  const heading = document.createElement('span');
+  heading.className = 'xl-missing-title';
+  heading.textContent = 'No longer in this export — likely closed';
+  const sub = document.createElement('span');
+  sub.className = 'xl-missing-sub';
+  sub.textContent = 'Ticked tickets are marked Completed. Nothing here is closed unless you tick it.';
+  head.appendChild(selAll); head.appendChild(heading); head.appendChild(sub);
+  section.appendChild(head);
+
+  const table = document.createElement('table');
+  table.className = 'xl-review-table xl-missing-table';
+  const thead = table.createTHead();
+  const hrow = thead.insertRow();
+  ['', '', 'Case ID', 'Current name', 'Current status', 'Action'].forEach(t => {
+    const th = document.createElement('th'); th.textContent = t; hrow.appendChild(th);
+  });
+
+  const missRows = _xlReviewRows.filter(r => r._missing);
+  const tbody = table.createTBody();
+  missRows.forEach(row => {
+    const tr = tbody.insertRow();
+    tr.classList.add('xl-missing-row');
+    if (row._selected === false) tr.classList.add('xl-unchecked');
+
+    const cCell = tr.insertCell(); cCell.className = 'xl-check';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.className = 'xl-miss-check'; cb.checked = row._selected !== false;
+    cb.addEventListener('change', () => {
+      row._selected = cb.checked;
+      tr.classList.toggle('xl-unchecked', !cb.checked);
+      updateExcelConfirmLabel();
+    });
+    cCell.appendChild(cb);
+
+    const kCell = tr.insertCell(); kCell.className = 'xl-kind';
+    const badge = document.createElement('span');
+    badge.className = 'xl-kind-badge closed';
+    badge.textContent = 'Closed?';
+    kCell.appendChild(badge);
+
+    const idCell = tr.insertCell(); idCell.textContent = row.ticketId || '—';
+    const nmCell = tr.insertCell(); nmCell.textContent = row._name || '—'; nmCell.title = row._name || '';
+    const stCell = tr.insertCell(); stCell.textContent = row.caseStatus || row._curStatus || '—';
+    const acCell = tr.insertCell(); acCell.textContent = '→ Completed'; acCell.style.color = 'var(--dim)';
+  });
+
+  selAll.addEventListener('change', () => {
+    missRows.forEach(r => { r._selected = selAll.checked; });
+    table.querySelectorAll('tbody input.xl-miss-check').forEach(cb => {
+      cb.checked = selAll.checked;
+      cb.closest('tr').classList.toggle('xl-unchecked', !selAll.checked);
+    });
+    updateExcelConfirmLabel();
+  });
+
+  section.appendChild(table);
+  return section;
+}
+
 function updateExcelConfirmLabel() {
   const n = _xlReviewRows.filter(r => r._selected !== false).length;
   const btn = document.getElementById('excelReviewConfirm');
-  if (btn) { btn.textContent = 'Import ' + n + ' selected ticket' + (n === 1 ? '' : 's'); btn.disabled = n === 0; }
+  if (btn) { btn.textContent = 'Apply ' + n + ' selected change' + (n === 1 ? '' : 's'); btn.disabled = n === 0; }
 }
 
 function closeExcelReview() {
@@ -2636,9 +2744,11 @@ function closeExcelReview() {
 function confirmExcelImport() {
   const chosen = _xlReviewRows.filter(r => r._selected !== false);
   if (!chosen.length) { closeExcelReview(); return; }
-  let added = 0, updated = 0;
+  let added = 0, updated = 0, closed = 0;
   chosen.forEach(row => {
-    if (row._update && row._existingId) {
+    if (row._missing && row._existingId) {
+      if (applyTicketClose(row)) closed++;
+    } else if (row._update && row._existingId) {
       if (applyTicketUpdate(row)) updated++;
     } else {
       state.projects.push(buildProjectFromRow(row));
@@ -2653,8 +2763,20 @@ function confirmExcelImport() {
   const parts = [];
   if (added)   parts.push(added   + ' new');
   if (updated) parts.push(updated + ' updated');
-  alert('Imported ' + chosen.length + ' ticket' + (chosen.length === 1 ? '' : 's') + ' from Excel' +
+  if (closed)  parts.push(closed  + ' closed');
+  alert('Applied ' + chosen.length + ' change' + (chosen.length === 1 ? '' : 's') + ' from Excel' +
         (parts.length ? ' (' + parts.join(', ') + ').' : '.'));
+}
+
+// Mark a project completed because its Case ID is no longer in the export. Only
+// flips status + leaves a note explaining why; schedule, roster and notes stay put.
+function applyTicketClose(row) {
+  const proj = getProject(row._existingId);
+  if (!proj) return false;
+  addSystemNote(proj.id, 'Marked Completed from Excel — Case ' + (proj.ticketId || '—') +
+    ' is no longer in the Video Scheduler export (closed/cancelled in Pega).');
+  if (projStatus(proj) !== 'completed') setProjectStatus(proj.id, 'completed');
+  return true;
 }
 
 function duplicateProject(id) {
@@ -5589,7 +5711,7 @@ function buildOutlookComposeURL({ subject, startDate, endDate, allDay, toEmails 
 // reminder (no VALARM), and turn off response requests (RSVP=FALSE). Opening it
 // adds the event to your calendar; choose Edit → Send to notify the recipients.
 //   opts: { uid, subject, start:'YYYY-MM-DD', end(inclusive), busy:'FREE'|'OOF'|'BUSY',
-//           requestResponses:bool, attendees:[{name,email}] }
+//           requestResponses:bool, attendees:[{name,email}], organizer:{name,email} }
 function buildPtoICS(opts) {
   const pad = n => String(n).padStart(2, '0');
   const icsDate = (iso, add) => { const p = iso.split('-').map(Number);
@@ -5612,6 +5734,10 @@ function buildPtoICS(opts) {
     'DTSTART;VALUE=DATE:' + icsDate(opts.start, 0),
     'DTEND;VALUE=DATE:' + icsDate(opts.end || opts.start, 1), // all-day end is exclusive
     'SUMMARY:' + esc(opts.subject || 'PTO')];
+  if (opts.organizer && opts.organizer.email) {
+    L.push('ORGANIZER;CN=' + esc(opts.organizer.name || opts.organizer.email) +
+      ':mailto:' + opts.organizer.email);
+  }
   if (opts.body) L.push('DESCRIPTION:' + esc(opts.body));
   (opts.attendees || []).forEach(a => { if (!a.email) return;
     L.push('ATTENDEE;CN=' + esc(a.name || a.email) +
@@ -5754,11 +5880,17 @@ function renderPtoInvitesPanel(content, proj) {
     btn2.title = 'Invites ' + teamEmails.map(r => r.email).join(', ');
     btn2.addEventListener('click', () => {
       const teamSubject = ptoOnSubject(people);
+      // Organizer = the person on PTO (there's normally just the one). Falls back
+      // to no organizer if that person has no email on file.
+      const organizerPerson = people[0];
+      const organizerEmail = organizerPerson && getPersonEmail(organizerPerson);
+      const organizer = (organizerEmail && organizerEmail.includes('@'))
+        ? { name: organizerPerson, email: organizerEmail } : null;
       const ics = buildPtoICS({
         uid: (t.id || genId()) + '-team@prepro',
         subject: teamSubject, start: startDate, end: endDate,
         busy: 'FREE', requestResponses: false,
-        attendees: teamEmails
+        attendees: teamEmails, organizer
       });
       downloadICS(ics, teamSubject.replace(/[^a-z0-9]/gi, '_') + '.ics');
     });
