@@ -311,6 +311,49 @@ a.mp-name:hover { color: var(--accent); }
 .act-project { color: var(--text); }
 .act-empty { color: var(--dim); font-size: 12px; font-style: italic; padding: 12px 0; }
 
+/* ── LOOK BACK PANEL ── */
+.lb-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.lb-year { display: flex; align-items: center; gap: 4px; }
+.lb-year-btn { font-size: 13px; font-weight: 700; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 5px; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.lb-year-btn:hover { color: var(--text); border-color: var(--dim); }
+.lb-year-label { font-size: 14px; font-weight: 800; color: var(--text); min-width: 52px; text-align: center; letter-spacing: .02em; }
+.lb-periods { display: flex; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+.lb-period-btn { font-size: 10px; font-weight: 700; padding: 4px 10px; color: var(--dim); background: var(--bg); border: none; border-right: 1px solid var(--border); cursor: pointer; transition: all .15s; }
+.lb-period-btn:last-child { border-right: none; }
+.lb-period-btn:hover { color: var(--text); }
+.lb-period-btn.active { background: rgba(108,99,255,.18); color: var(--accent); }
+.lb-copy { margin-left: auto; font-size: 10px; font-weight: 600; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px; cursor: pointer; transition: all .15s; }
+.lb-copy:hover { color: var(--accent); border-color: var(--accent); }
+
+.lb-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; margin-bottom: 18px; }
+.lb-tile { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.lb-tile-val { font-size: 20px; font-weight: 800; color: var(--text); line-height: 1.1; letter-spacing: -.02em; }
+.lb-tile-label { font-size: 9px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; margin-top: 3px; }
+
+.lb-sub-title { font-size: 10px; font-weight: 700; color: var(--dim); letter-spacing: .08em; text-transform: uppercase; margin: 0 0 8px; }
+.lb-heatmap-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 18px; overflow-x: auto; }
+.lb-heatmap { display: flex; gap: 3px; }
+.lb-hm-week { display: flex; flex-direction: column; gap: 3px; }
+.lb-hm-cell { width: 12px; height: 12px; border-radius: 2px; background: var(--bg); border: 1px solid transparent; }
+.lb-hm-cell.empty { background: transparent; }
+.lb-hm-cell.weekend { opacity: .45; }
+.lb-hm-months { display: flex; gap: 3px; margin-bottom: 4px; }
+.lb-hm-month { font-size: 8px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .04em; overflow: hidden; white-space: nowrap; }
+.lb-hm-legend { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 9px; color: var(--dim); }
+.lb-hm-legend-swatch { width: 10px; height: 10px; border-radius: 2px; }
+
+.lb-proj-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
+.lb-proj-row { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+.lb-proj-main { flex: 1; min-width: 0; }
+.lb-proj-name { font-size: 13px; font-weight: 700; color: var(--text); text-decoration: none; }
+a.lb-proj-name:hover { color: var(--accent); }
+.lb-proj-done { font-size: 8px; font-weight: 700; padding: 1px 6px; border-radius: 8px; background: rgba(76,186,106,.18); color: #4cba6a; margin-left: 6px; vertical-align: middle; }
+.lb-proj-meta { font-size: 10px; color: var(--dim); margin-top: 2px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lb-proj-bar-wrap { width: 90px; height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; flex-shrink: 0; }
+.lb-proj-bar { height: 100%; background: var(--accent); border-radius: 3px; }
+.lb-proj-pts { font-size: 11px; font-weight: 700; color: var(--text); width: 42px; text-align: right; flex-shrink: 0; }
+.lb-empty { color: var(--dim); font-size: 12px; font-style: italic; padding: 20px 0; text-align: center; }
+
 /* ── CUSTOMIZABLE PANELS ── */
 .op-panel { position: relative; margin-bottom: 24px; }
 .op-panel > .today-hero, .op-panel > .dash-section, .op-panel > .effort-bar { margin-bottom: 0; }
@@ -481,6 +524,23 @@ let selectedPerson = localStorage.getItem('dash_selected_person') || null;
 let selectedDate   = todayStr();
 let searchFilter   = '';
 let pendingAddSubtaskFor = null;
+
+// ── LOOK BACK PANEL STATE (per-browser) ──
+let lookbackYear   = new Date().getFullYear();
+let lookbackPeriod = 'H1'; // Q1 Q2 H1 Q3 Q4 H2 FY
+(function loadLookback() {
+  try {
+    const raw = localStorage.getItem('dash_lookback');
+    if (raw) {
+      const s = JSON.parse(raw);
+      if (s && typeof s.year === 'number') lookbackYear = s.year;
+      if (s && typeof s.period === 'string') lookbackPeriod = s.period;
+    }
+  } catch (_) {}
+})();
+function saveLookback() {
+  localStorage.setItem('dash_lookback', JSON.stringify({ year: lookbackYear, period: lookbackPeriod }));
+}
 
 // ── DATA LOADING ──
 function loadState() {
@@ -1325,6 +1385,7 @@ const DASH_PANELS = [
   { id: 'checklist',  label: 'My Checklist',     render: renderChecklistPanel, defaultHidden: true },
   { id: 'outlook',    label: 'Workload Outlook', render: renderOutlookPanel,   defaultHidden: true },
   { id: 'activity',   label: 'Recent Activity',  render: renderActivityPanel,  defaultHidden: true },
+  { id: 'lookback',   label: 'Look Back (Review)', render: renderLookbackPanel, defaultHidden: true },
 ];
 const DASH_LAYOUT_KEY = 'dash_panel_layout';
 let _dashPanelDrag = null;
@@ -2917,6 +2978,375 @@ function renderActivityPanel() {
   return section;
 }
 
+
+// ══════════════════════════════════════════════════════════════════
+// ── PANEL: LOOK BACK (period self-review) ──
+// Aggregates the selected person's work over a chosen quarter / half /
+// full year so they can write a mid-year or year-end self-review.
+// Unlike the daily panels, this intentionally includes COMPLETED
+// projects — reviewing finished work is the whole point.
+// ══════════════════════════════════════════════════════════════════
+const LB_PERIODS = [
+  { key: 'Q1', label: 'Q1', months: [0, 2] },
+  { key: 'Q2', label: 'Q2', months: [3, 5] },
+  { key: 'H1', label: 'H1', months: [0, 5] },
+  { key: 'Q3', label: 'Q3', months: [6, 8] },
+  { key: 'Q4', label: 'Q4', months: [9, 11] },
+  { key: 'H2', label: 'H2', months: [6, 11] },
+  { key: 'FY', label: 'Year', months: [0, 11] },
+];
+const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function lbPad(n) { return (n < 10 ? '0' : '') + n; }
+
+function lbPeriodRange(year, periodKey) {
+  const def = LB_PERIODS.find(p => p.key === periodKey) || LB_PERIODS[2];
+  const [m0, m1] = def.months;
+  const start = year + '-' + lbPad(m0 + 1) + '-01';
+  const lastDay = new Date(year, m1 + 1, 0).getDate();
+  const end = year + '-' + lbPad(m1 + 1) + '-' + lbPad(lastDay);
+  const label = def.label === 'Year'
+    ? ('Full Year ' + year)
+    : (def.label + ' ' + year + ' (' + MONTH_ABBR[m0] + '–' + MONTH_ABBR[m1] + ')');
+  return { start, end, months: [m0, m1], label, def };
+}
+
+function lbDaysBetween(a, b) {
+  return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000);
+}
+
+// One pass over ALL non-ghost projects (including completed) collecting the
+// selected person's activity across [start, end].
+function aggregateLookback(start, end) {
+  const byDay = {};                 // dateStr -> effort pts
+  const byMonth = new Array(12).fill(0);
+  const byProject = new Map();       // projId -> { proj, pts, tasks, roles:Set, completed }
+  const notes = [];
+  let taskCount = 0, totalPts = 0, reviewCount = 0, ptoDays = 0;
+
+  (state.projects || []).filter(p => !p.ghost).forEach(proj => {
+    let projPts = 0, projTasks = 0;
+    const projRoles = new Set();
+
+    (proj.tasks || []).forEach(t => {
+      const s = t.date;
+      const e = t.endDate || t.date;
+      if (!s) return;
+      if (e < start || s > end) return;      // no overlap with the period
+      if (!taskIsForSelected(t)) return;
+
+      // Clip the task span to the period.
+      const from = s < start ? start : s;
+      const to   = e > end   ? end   : e;
+
+      if (t.isDueDate) {
+        // Milestones / PTO carry no effort; count PTO days.
+        if (t.milestoneType === 'pto') ptoDays += lbDaysBetween(from, to) + 1;
+        return;
+      }
+
+      const pts = loePts(t.loe);
+      taskCount++; projTasks++;
+      if (t.isReview) reviewCount++;
+      if (t.role) projRoles.add(t.role);
+      (t.attendees || []).forEach(a => { if (a.person === selectedPerson && a.role) projRoles.add(a.role); });
+
+      // Distribute effort across each spanned day (matches getDayWorkload semantics).
+      for (let d = from; d <= to; d = addDays(d, 1)) {
+        byDay[d] = (byDay[d] || 0) + pts;
+        byMonth[new Date(d + 'T00:00:00').getMonth()] += pts;
+        projPts += pts; totalPts += pts;
+        if (d === to) break; // guard (addDays always advances, but be safe)
+      }
+    });
+
+    if (projTasks > 0) {
+      byProject.set(proj.id, { proj, pts: projPts, tasks: projTasks, roles: projRoles, completed: !!proj.completed });
+      (proj.notes || []).forEach(n => {
+        if (n && n.date && n.date >= start && n.date <= end) notes.push({ note: n, projectName: proj.name });
+      });
+    }
+  });
+
+  notes.sort((a, b) => (b.note.date + (b.note.time || '')).localeCompare(a.note.date + (a.note.time || '')));
+
+  let busiestMonthIdx = -1, busiestMonthVal = 0;
+  byMonth.forEach((v, i) => { if (v > busiestMonthVal) { busiestMonthVal = v; busiestMonthIdx = i; } });
+
+  return {
+    byDay, byMonth, byProject, notes,
+    taskCount, totalPts, reviewCount, ptoDays,
+    activeDays: Object.keys(byDay).length,
+    busiestMonthIdx,
+  };
+}
+
+function renderLookbackPanel() {
+  const range = lbPeriodRange(lookbackYear, lookbackPeriod);
+  const agg = aggregateLookback(range.start, range.end);
+
+  const section = mkPanelSection('Look Back — ' + range.label);
+
+  // ── Controls: year stepper + period segments + copy ──
+  const controls = document.createElement('div');
+  controls.className = 'lb-controls';
+
+  const yearWrap = document.createElement('div');
+  yearWrap.className = 'lb-year';
+  const yPrev = document.createElement('button');
+  yPrev.className = 'lb-year-btn'; yPrev.textContent = '‹'; yPrev.title = 'Previous year';
+  yPrev.addEventListener('click', () => { lookbackYear--; saveLookback(); renderDashboard(); });
+  const yLabel = document.createElement('span');
+  yLabel.className = 'lb-year-label'; yLabel.textContent = lookbackYear;
+  const yNext = document.createElement('button');
+  yNext.className = 'lb-year-btn'; yNext.textContent = '›'; yNext.title = 'Next year';
+  yNext.addEventListener('click', () => { lookbackYear++; saveLookback(); renderDashboard(); });
+  yearWrap.appendChild(yPrev); yearWrap.appendChild(yLabel); yearWrap.appendChild(yNext);
+  controls.appendChild(yearWrap);
+
+  const periods = document.createElement('div');
+  periods.className = 'lb-periods';
+  LB_PERIODS.forEach(p => {
+    const b = document.createElement('button');
+    b.className = 'lb-period-btn' + (p.key === lookbackPeriod ? ' active' : '');
+    b.textContent = p.label;
+    b.addEventListener('click', () => { lookbackPeriod = p.key; saveLookback(); renderDashboard(); });
+    periods.appendChild(b);
+  });
+  controls.appendChild(periods);
+
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'lb-copy';
+  copyBtn.textContent = '📋 Copy for review';
+  copyBtn.addEventListener('click', () => {
+    const text = buildLookbackSummaryText(range, agg);
+    navigator.clipboard.writeText(text).then(
+      () => { copyBtn.textContent = '✓ Copied'; setTimeout(() => { copyBtn.textContent = '📋 Copy for review'; }, 1600); },
+      () => { copyBtn.textContent = '✕ Failed'; setTimeout(() => { copyBtn.textContent = '📋 Copy for review'; }, 1600); }
+    );
+  });
+  controls.appendChild(copyBtn);
+  section.appendChild(controls);
+
+  if (!agg.taskCount && !agg.ptoDays) {
+    const empty = document.createElement('div');
+    empty.className = 'lb-empty';
+    empty.textContent = 'No tracked work for ' + esc(selectedPerson) + ' in ' + range.label + '. Try another period or year.';
+    section.appendChild(empty);
+    return section;
+  }
+
+  // ── Summary tiles ──
+  const tiles = document.createElement('div');
+  tiles.className = 'lb-tiles';
+  const tileData = [
+    { val: agg.byProject.size, label: 'Projects' },
+    { val: agg.taskCount, label: 'Tasks' },
+    { val: agg.totalPts, label: 'Effort pts' },
+    { val: agg.activeDays, label: 'Active days' },
+    { val: agg.reviewCount, label: 'Reviews' },
+    { val: agg.ptoDays, label: 'PTO days' },
+    { val: agg.busiestMonthIdx >= 0 ? MONTH_ABBR[agg.busiestMonthIdx] : '—', label: 'Busiest mo.' },
+  ];
+  tileData.forEach(t => {
+    const tile = document.createElement('div');
+    tile.className = 'lb-tile';
+    tile.innerHTML = '<div class="lb-tile-val">' + esc(String(t.val)) + '</div><div class="lb-tile-label">' + esc(t.label) + '</div>';
+    tiles.appendChild(tile);
+  });
+  section.appendChild(tiles);
+
+  // ── Heatmap ──
+  section.appendChild(buildLookbackHeatmap(range, agg));
+
+  // ── Top projects ──
+  const projTitle = document.createElement('div');
+  projTitle.className = 'lb-sub-title';
+  projTitle.textContent = 'Projects worked on — by effort';
+  section.appendChild(projTitle);
+
+  const projRows = [...agg.byProject.values()].sort((a, b) => b.pts - a.pts || b.tasks - a.tasks);
+  const maxPts = projRows.length ? projRows[0].pts : 1;
+  const projList = document.createElement('div');
+  projList.className = 'lb-proj-list';
+  projRows.forEach(r => {
+    const row = document.createElement('div');
+    row.className = 'lb-proj-row';
+
+    const main = document.createElement('div');
+    main.className = 'lb-proj-main';
+    const nameLine = document.createElement('div');
+    const link = document.createElement('a');
+    link.className = 'lb-proj-name';
+    link.href = 'team.html#project=' + encodeURIComponent(r.proj.id);
+    link.target = '_blank';
+    link.textContent = r.proj.name;
+    nameLine.appendChild(link);
+    if (r.completed) {
+      const done = document.createElement('span');
+      done.className = 'lb-proj-done';
+      done.textContent = 'DONE';
+      nameLine.appendChild(done);
+    }
+    main.appendChild(nameLine);
+    const meta = document.createElement('div');
+    meta.className = 'lb-proj-meta';
+    const roleTxt = [...r.roles].sort().join(', ') || '—';
+    meta.textContent = r.tasks + ' task' + (r.tasks === 1 ? '' : 's') + ' · ' + roleTxt;
+    main.appendChild(meta);
+    row.appendChild(main);
+
+    const barWrap = document.createElement('div');
+    barWrap.className = 'lb-proj-bar-wrap';
+    const bar = document.createElement('div');
+    bar.className = 'lb-proj-bar';
+    bar.style.width = Math.max(4, Math.round((r.pts / maxPts) * 100)) + '%';
+    barWrap.appendChild(bar);
+    row.appendChild(barWrap);
+
+    const pts = document.createElement('div');
+    pts.className = 'lb-proj-pts';
+    pts.textContent = r.pts + ' pt';
+    row.appendChild(pts);
+
+    projList.appendChild(row);
+  });
+  section.appendChild(projList);
+
+  // ── Notes / highlights logged in the period ──
+  if (agg.notes.length) {
+    const noteTitle = document.createElement('div');
+    noteTitle.className = 'lb-sub-title';
+    noteTitle.textContent = 'Notes & highlights logged (' + agg.notes.length + ')';
+    section.appendChild(noteTitle);
+
+    const list = document.createElement('div');
+    list.className = 'act-list';
+    agg.notes.slice(0, 12).forEach(({ note, projectName }) => {
+      const item = document.createElement('div');
+      item.className = 'act-item';
+      const icon = document.createElement('span');
+      icon.className = 'act-icon';
+      const nt = NOTE_TYPES.find(t => t.key === note.type);
+      icon.textContent = note.emoji || (nt && nt.emoji) || '\u{1F4CB}';
+      item.appendChild(icon);
+      const body = document.createElement('div');
+      body.className = 'act-body';
+      const text = document.createElement('div');
+      text.className = 'act-text';
+      text.textContent = note.body || '';
+      body.appendChild(text);
+      const meta = document.createElement('div');
+      meta.className = 'act-meta';
+      meta.innerHTML = '<span class="act-project">' + esc(projectName) + '</span> · ' + esc(note.person || 'Team') + ' · ' + esc(fmtDateShort(note.date));
+      body.appendChild(meta);
+      item.appendChild(body);
+      list.appendChild(item);
+    });
+    section.appendChild(list);
+  }
+
+  return section;
+}
+
+// GitHub-style calendar heatmap for the period: columns = weeks (Sun-start),
+// rows = weekdays, cell color = that day's effort via workloadInfo().
+function buildLookbackHeatmap(range, agg) {
+  const wrap = document.createElement('div');
+  wrap.className = 'lb-heatmap-wrap';
+
+  const gridStart = getWeekStart(range.start);   // Sunday on/before period start
+  const weeks = [];
+  let cursor = gridStart;
+  let guard = 0;
+  while (cursor <= range.end && guard++ < 400) {
+    weeks.push(cursor);
+    cursor = addDays(cursor, 7);
+  }
+
+  // Month labels aligned to the week column where each month first appears.
+  const monthRow = document.createElement('div');
+  monthRow.className = 'lb-hm-months';
+  let lastMonth = -1;
+  weeks.forEach(weekStart => {
+    const lbl = document.createElement('div');
+    lbl.className = 'lb-hm-month';
+    lbl.style.width = '15px'; // 12px cell + 3px gap
+    const m = new Date(weekStart + 'T00:00:00').getMonth();
+    if (m !== lastMonth && weekStart >= range.start) { lbl.textContent = MONTH_ABBR[m]; lastMonth = m; }
+    monthRow.appendChild(lbl);
+  });
+  wrap.appendChild(monthRow);
+
+  const grid = document.createElement('div');
+  grid.className = 'lb-heatmap';
+  weeks.forEach(weekStart => {
+    const col = document.createElement('div');
+    col.className = 'lb-hm-week';
+    for (let dow = 0; dow < 7; dow++) {
+      const day = addDays(weekStart, dow);
+      const cell = document.createElement('div');
+      cell.className = 'lb-hm-cell';
+      if (day < range.start || day > range.end) {
+        cell.classList.add('empty');
+      } else {
+        const pts = agg.byDay[day] || 0;
+        if (dow === 5 || dow === 6) cell.classList.add('weekend'); // Mon-start grid: 5=Sat, 6=Sun
+        if (pts > 0) {
+          cell.style.background = workloadInfo(pts).color;
+          cell.title = fmtDateShort(day) + ' · ' + pts + ' pt' + (pts === 1 ? '' : 's') + ' (' + workloadInfo(pts).label + ')';
+        } else {
+          cell.title = fmtDateShort(day) + ' · no tracked work';
+        }
+      }
+      col.appendChild(cell);
+    }
+    grid.appendChild(col);
+  });
+  wrap.appendChild(grid);
+
+  // Legend
+  const legend = document.createElement('div');
+  legend.className = 'lb-hm-legend';
+  legend.appendChild(document.createTextNode('Lighter'));
+  [1, 2, 3, 4, 5].forEach(p => {
+    const sw = document.createElement('span');
+    sw.className = 'lb-hm-legend-swatch';
+    sw.style.background = workloadInfo(p).color;
+    legend.appendChild(sw);
+  });
+  legend.appendChild(document.createTextNode('Heavier'));
+  wrap.appendChild(legend);
+
+  return wrap;
+}
+
+// Plain-text summary to paste straight into a self-review doc.
+function buildLookbackSummaryText(range, agg) {
+  const lines = [];
+  lines.push(selectedPerson + ' — Look Back: ' + range.label);
+  lines.push('');
+  lines.push('SNAPSHOT');
+  lines.push('  Projects worked on: ' + agg.byProject.size);
+  lines.push('  Tasks: ' + agg.taskCount + '   Effort points: ' + agg.totalPts + '   Active days: ' + agg.activeDays);
+  lines.push('  Reviews: ' + agg.reviewCount + '   PTO days: ' + agg.ptoDays);
+  if (agg.busiestMonthIdx >= 0) lines.push('  Busiest month: ' + MONTH_ABBR[agg.busiestMonthIdx]);
+  lines.push('');
+  lines.push('PROJECTS (by effort)');
+  [...agg.byProject.values()].sort((a, b) => b.pts - a.pts).forEach(r => {
+    const roleTxt = [...r.roles].sort().join(', ') || '—';
+    lines.push('  • ' + r.proj.name + (r.completed ? ' [completed]' : '') + ' — ' + r.pts + ' pts, ' + r.tasks + ' tasks (' + roleTxt + ')');
+  });
+  if (agg.notes.length) {
+    lines.push('');
+    lines.push('NOTES & HIGHLIGHTS');
+    agg.notes.slice(0, 20).forEach(({ note, projectName }) => {
+      const nt = NOTE_TYPES.find(t => t.key === note.type);
+      lines.push('  • [' + (nt ? nt.label : 'Note') + '] ' + projectName + ' (' + note.date + '): ' + (note.body || ''));
+    });
+  }
+  return lines.join('\n');
+}
 
 // ── ESCAPE HTML ──
 function esc(str) {
