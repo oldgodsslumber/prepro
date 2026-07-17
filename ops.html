@@ -3525,15 +3525,25 @@ function pmCompletedProjects() {
 
 // Full date span of a project, derived from its tasks (no explicit start/end field).
 function pmProjectSpan(proj) {
-  let min = null, max = null;
-  (proj.tasks || []).forEach(t => {
-    if (!t.date) return;
-    const e = t.endDate || t.date;
-    if (min === null || t.date < min) min = t.date;
-    if (max === null || e > max) max = e;
-  });
-  if (!min) return null;
-  return { start: min, end: max, days: daysBetweenDates(min, max) };
+  // Span is anchored to actual work — the first work task through the last.
+  // Milestones/due-dates/PTO (isDueDate) are markers, not work, so they no
+  // longer stretch the timeline (a project-level due date sitting at the year
+  // start was previously dragging the start back to January). They still show
+  // as markers, clamped to the span edges. Fall back to all dated tasks if a
+  // project somehow has only milestones.
+  const scan = (pred) => {
+    let min = null, max = null;
+    (proj.tasks || []).forEach(t => {
+      if (!t.date || !pred(t)) return;
+      const e = t.endDate || t.date;
+      if (min === null || t.date < min) min = t.date;
+      if (max === null || e > max) max = e;
+    });
+    return min ? { min, max } : null;
+  };
+  const r = scan(t => !t.isDueDate) || scan(() => true);
+  if (!r) return null;
+  return { start: r.min, end: r.max, days: daysBetweenDates(r.min, r.max) };
 }
 
 function buildProjectMetrics(proj) {
