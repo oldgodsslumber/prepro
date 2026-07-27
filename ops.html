@@ -643,25 +643,35 @@ let tlDateMap  = new Map();       // date string → column index
 
 // ── LOAD DATA (Firebase) ──
 let state = { projects: [] };
-let _suppressRemoteRender = 0;  // counter to avoid re-render echo from our own writes
+// Signature of the value we last wrote, so we can skip re-rendering our own
+// echo without swallowing genuine concurrent remote updates (a plain counter
+// desyncs on identical/no-op writes or when another user's change interleaves).
+let _lastWrittenSig = null;
 
 function saveState() {
   if (!window._fb) return;
-  _suppressRemoteRender++;
   const { db, ref, set } = window._fb;
+  _lastWrittenSig = JSON.stringify(state);
   set(ref(db, 'prepro/state'), state).catch(err => console.error('saveState:', err));
 }
 
 function reloadState(newState) {
-  if (_suppressRemoteRender > 0) { _suppressRemoteRender--; if (newState) state = newState; return; }
-  if (newState) state = newState;
+  if (newState) {
+    const sig = JSON.stringify(newState);
+    if (sig === _lastWrittenSig) {
+      // Our own write echoing back — local state + view already reflect it.
+      state = newState;
+      _lastWrittenSig = null;
+      return;
+    }
+    state = newState;
+  }
   renderFilterChips();
   renderWorkload();
   if (viewMode === 'person') renderTimeline();
   else if (viewMode === 'headsup') renderHeadsUp();
   else if (viewMode === 'studio') renderStudio();
   else if (viewMode === 'metrics') renderMetrics();
-  else renderCalendar();
 }
 
 // ── DRAG / RESIZE STATE ──
@@ -804,7 +814,6 @@ function opsRerender() {
   else if (viewMode === 'headsup') renderHeadsUp();
   else if (viewMode === 'studio') renderStudio();
   else if (viewMode === 'metrics') renderMetrics();
-  else renderCalendar();
   renderFilterChips();
   renderWorkload();
 }
@@ -1188,12 +1197,14 @@ function getOpsEntries() {
       if (task.isReview) {
         const cat = getTaskCat(task);
         const color = CAT_COLORS[cat] || '#6c63ff';
-        const internalAtts = (task.attendees || []).filter(a => a.category === 'Internal Team');
-        if (internalAtts.length) {
-          internalAtts.forEach((att, attIdx) => {
-            entries.push({ date: task.date, endDate: task.endDate || task.date, person: att.person || att.role, cat, taskName: task.taskName || task.reviewLabel || 'Review', loe, color, projectName: proj.name, projectId: proj.id, taskId: task.id, isReview: true, attIdx });
-          });
-        }
+        // Iterate the FULL attendees array so attIdx is the real index into
+        // task.attendees. Drag-reassign writes back by this index, so using a
+        // filtered index would corrupt the wrong attendee when an external
+        // attendee precedes an internal one.
+        (task.attendees || []).forEach((att, attIdx) => {
+          if (att.category !== 'Internal Team') return;
+          entries.push({ date: task.date, endDate: task.endDate || task.date, person: att.person || att.role, cat, taskName: task.taskName || task.reviewLabel || 'Review', loe, color, projectName: proj.name, projectId: proj.id, taskId: task.id, isReview: true, attIdx });
+        });
         return;
       }
       // Everyone on a role task is an attendee now; the legacy single
@@ -1243,12 +1254,25 @@ function getAllPeople() {
   const rest = alpha.filter(p => !personOrder.includes(p));
   return [...ordered, ...rest];
 }
+// Same as getAllPeople but also surfaces people who only appear on PTO (no work
+// entries). The timeline renders and reorders from THIS list so PTO-only rows
+// are reorderable too.
+function getTimelinePeople() {
+  const people = new Set();
+  getOpsEntries().forEach(e => { if (e.person && !isSunset(e.person)) people.add(e.person); });
+  getPtoEntries().forEach(e => { if (e.person && !isSunset(e.person)) people.add(e.person); });
+  const alpha = [...people].sort();
+  if (!personOrder.length) return alpha;
+  const ordered = personOrder.filter(p => people.has(p));
+  const rest = alpha.filter(p => !personOrder.includes(p));
+  return [...ordered, ...rest];
+}
 function savePersonOrder(arr) {
   personOrder = arr;
   try { localStorage.setItem('ops_person_order', JSON.stringify(arr)); } catch(_) {}
 }
 function movePerson(person, dir) {
-  const current = getAllPeople();
+  const current = getTimelinePeople();
   const idx = current.indexOf(person);
   if (idx < 0) return;
   const newIdx = idx + dir;
@@ -1261,14 +1285,6 @@ function movePerson(person, dir) {
 
 // ── WORKLOAD ──
 function loePts(loe) { return LOE_PTS[loe] || 2; }
-
-function dateInRange(dateStr, startStr, endStr) {
-  return dateStr >= startStr && dateStr <= endStr;
-}
-
-function rangesOverlap(s1, e1, s2, e2) {
-  return s1 <= e2 && e1 >= s2;
-}
 
 // Returns the total effort score for a single day
 function getDayWorkload(person, dateStr) {
@@ -1288,10 +1304,9 @@ function isPersonPTO(person, dateStr) {
       if (!t.isDueDate || t.milestoneType !== 'pto') continue;
       const end = t.endDate || t.date;
       if (dateStr < t.date || dateStr > end) continue;
-      // Check attendees
+      // Match only explicit attendees. A taskName substring check ("John PTO")
+      // produced false positives for short names (e.g. "Al" matched "Alex PTO").
       if ((t.attendees || []).some(a => a.person && a.person.toLowerCase() === lowerPerson)) return true;
-      // Check taskName contains person name (e.g. "John PTO")
-      if (t.taskName && t.taskName.toLowerCase().includes(lowerPerson)) return true;
     }
   }
   return false;
@@ -1416,7 +1431,6 @@ function renderFilterChips() {
       else if (viewMode === 'studio') renderStudio();
       else if (viewMode === 'headsup') renderHeadsUp();
       else if (viewMode === 'metrics') renderMetrics();
-      else renderCalendar();
     });
     container.appendChild(chip);
   });
@@ -1782,10 +1796,8 @@ function renderTimeline() {
 
   const allEntries = getOpsEntries();
   const ptoAll     = getPtoEntries();
-  const people     = getAllPeople();
-  // Surface people who are only on PTO (no work entries) so their PTO still shows.
-  const peopleSet = new Set(people);
-  ptoAll.forEach(e => { if (e.person && !peopleSet.has(e.person)) { peopleSet.add(e.person); people.push(e.person); } });
+  // Includes people who only appear on PTO, ordered by the saved row order.
+  const people     = getTimelinePeople();
   const personColor = {};
   allEntries.forEach(e => { if (e.person && !personColor[e.person]) personColor[e.person] = e.color; });
 
@@ -2031,6 +2043,7 @@ function applyViewMode() {
     calNav.style.display    = '';
     calDow.style.display    = '';
     renderStudio();
+    setupCalObserver();
     scrollToToday();
   } else if (viewMode === 'metrics') {
     if (tlObserver) { tlObserver.disconnect(); tlObserver = null; }
@@ -2092,7 +2105,7 @@ function getTeamHeadsUp() {
 
   // Build a map of all internal people and their projects
   const peopleProjects = new Map(); // person -> Set of projectIds
-  (state.projects || []).filter(p => !p.completed && !p.ghost).forEach(proj => {
+  (state.projects || []).filter(p => !isInactive(p) && !p.ghost).forEach(proj => {
     const roster = proj.roster || {};
     for (const [role, names] of Object.entries(roster)) {
       if (!INTERNAL_ROLES.has(role)) continue;
@@ -2110,14 +2123,14 @@ function getTeamHeadsUp() {
     });
   });
 
-  (state.projects || []).filter(p => !p.completed && !p.ghost).forEach(proj => {
+  (state.projects || []).filter(p => !isInactive(p) && !p.ghost).forEach(proj => {
     const producer = getPrimaryProducer(proj);
     const withProducer = (label) => producer ? (producer + ' - ' + label) : label;
 
     (proj.tasks || []).forEach(task => {
       const start = task.date;
       const end = task.endDate || task.date;
-      if (!start || end <= today || start > cutoff) return;
+      if (!start || end < today || start > cutoff) return;
 
       // Reviews & shoots
       if (task.isReview) {
@@ -2166,7 +2179,7 @@ function getTeamHeadsUp() {
 
           // Calculate their workload before PTO
           let totalPts = 0;
-          (state.projects || []).filter(p => theirProjects.has(p.id) && !p.completed && !p.ghost).forEach(p => {
+          (state.projects || []).filter(p => theirProjects.has(p.id) && !isInactive(p) && !p.ghost).forEach(p => {
             (p.tasks || []).forEach(t => {
               if (t.isDueDate || t.person !== a.person) return;
               const tEnd = t.endDate || t.date;
@@ -3068,7 +3081,7 @@ function renderDeliveriesPanel() {
 
 function computeOpsMetrics() {
   const today = todayStr();
-  const projects = (state.projects || []).filter(p => !p.completed && !p.ghost);
+  const projects = (state.projects || []).filter(p => !isInactive(p) && !p.ghost);
   const activeProjects = projects.length;
 
   let activeWithTasks = 0;
@@ -4182,7 +4195,7 @@ function renderCategoryMix() {
 function getStudioShoots() {
   const shoots = [];
   const today = todayStr();
-  (state.projects || []).filter(p => !p.completed && !p.ghost).forEach(proj => {
+  (state.projects || []).filter(p => !isInactive(p) && !p.ghost).forEach(proj => {
     (proj.tasks || []).forEach(task => {
       if (!task.isReview) return;
       if (!isStudioLabel(task.reviewLabel)) return;
@@ -4230,59 +4243,77 @@ function renderStudio() {
   renderCalendar();
   const shoots = getStudioShoots();
 
-  // Remove non-shoot chips from calendar
-  document.querySelectorAll('#calGrid .ops-chip').forEach(chip => {
-    const taskId = chip.dataset.taskId;
-    const isShoot = shoots.some(s => s.id === taskId);
-    if (!isShoot) chip.style.display = 'none';
-  });
+  // Studio view shows only shoots. Hide the regular ops chips, then render the
+  // shoots directly from getStudioShoots() so that shoots whose attendees are
+  // all external (and therefore have no ops chip) still appear.
+  document.querySelectorAll('#calGrid .ops-chip').forEach(chip => { chip.style.display = 'none'; });
 
-  // Add info cards to shoot chips
   shoots.forEach(shoot => {
-    const chips = document.querySelectorAll(`#calGrid .ops-chip[data-task-id="${shoot.id}"]`);
-    chips.forEach((chip, i) => {
-      if (i !== 0) return; // only on the start chip
+    const cat = getTaskCat(shoot);
+    const color = CAT_COLORS[cat] || '#c0394f';
+    const catLabel = SHORT_CAT[cat] || 'SHOOT';
+    const start = shoot.date;
+    const end = shoot.endDate || shoot.date;
+    let infoPlaced = false;
 
-      const info = document.createElement('div');
-      info.className = 'studio-info';
+    // Place a chip in each visible day the shoot spans; the info card goes on
+    // the first visible cell of the span.
+    let cur = start;
+    while (cur <= end) {
+      const cell = document.querySelector(`#calGrid .cal-day[data-date="${cur}"]`);
+      if (cell) {
+        const chip = document.createElement('div');
+        chip.className = 'ops-chip';
+        chip.style.background = color;
+        chip.dataset.taskId = shoot.id;
+        chip.title = `${shoot.projectName} \u00b7 ${shoot.shootLabel}`;
+        const catSpan = document.createElement('span');
+        catSpan.className = 'ops-chip-cat';
+        catSpan.textContent = catLabel;
+        chip.appendChild(catSpan);
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'ops-chip-task';
+        nameSpan.style.opacity = '1';
+        nameSpan.textContent = shoot.shootLabel;
+        chip.appendChild(nameSpan);
+        cell.appendChild(chip);
 
-      // Project name
-      info.innerHTML = `<div class="studio-project">${esc(shoot.projectName)}</div>`;
-
-      // Producer
-      if (shoot.producer) {
-        info.innerHTML += `<div class="studio-producer">\u{1F3AC} ${esc(shoot.producer)}</div>`;
+        if (!infoPlaced) {
+          infoPlaced = true;
+          const info = document.createElement('div');
+          info.className = 'studio-info';
+          info.innerHTML = `<div class="studio-project">${esc(shoot.projectName)}</div>`;
+          if (shoot.producer) {
+            info.innerHTML += `<div class="studio-producer">\u{1F3AC} ${esc(shoot.producer)}</div>`;
+          }
+          if (shoot.crew.length) {
+            info.innerHTML += `<div class="studio-crew">\u{1F465} ${esc(shoot.crew.join(', '))}</div>`;
+          }
+          let countdownCls = '';
+          let countdownText = '';
+          if (shoot.daysUntil < 0) {
+            countdownCls = 'past';
+            countdownText = Math.abs(shoot.daysUntil) + 'd ago';
+          } else if (shoot.daysUntil === 0) {
+            countdownCls = 'imminent';
+            countdownText = 'Today';
+          } else if (shoot.daysUntil <= 3) {
+            countdownCls = 'imminent';
+            countdownText = shoot.daysUntil + 'd away';
+          } else if (shoot.daysUntil <= 7) {
+            countdownCls = 'soon';
+            countdownText = shoot.daysUntil + 'd away';
+          } else {
+            countdownText = shoot.daysUntil + 'd away';
+          }
+          const durNoun = (shoot.shootLabel || '').includes('Shoot') ? 'shoot' : 'studio block';
+          const durText = shoot.duration + '-day ' + durNoun;
+          info.innerHTML += `<div class="studio-countdown ${countdownCls}">${durText} \u00b7 ${countdownText}</div>`;
+          cell.appendChild(info);
+        }
       }
-
-      // Crew
-      if (shoot.crew.length) {
-        info.innerHTML += `<div class="studio-crew">\u{1F465} ${esc(shoot.crew.join(', '))}</div>`;
-      }
-
-      // Duration + countdown
-      let countdownCls = '';
-      let countdownText = '';
-      if (shoot.daysUntil < 0) {
-        countdownCls = 'past';
-        countdownText = Math.abs(shoot.daysUntil) + 'd ago';
-      } else if (shoot.daysUntil === 0) {
-        countdownCls = 'imminent';
-        countdownText = 'Today';
-      } else if (shoot.daysUntil <= 3) {
-        countdownCls = 'imminent';
-        countdownText = shoot.daysUntil + 'd away';
-      } else if (shoot.daysUntil <= 7) {
-        countdownCls = 'soon';
-        countdownText = shoot.daysUntil + 'd away';
-      } else {
-        countdownText = shoot.daysUntil + 'd away';
-      }
-      const durNoun = (shoot.shootLabel || '').includes('Shoot') ? 'shoot' : 'studio block';
-      const durText = shoot.duration + '-day ' + durNoun;
-      info.innerHTML += `<div class="studio-countdown ${countdownCls}">${durText} \u00b7 ${countdownText}</div>`;
-
-      chip.parentElement.appendChild(info);
-    });
+      cur = addDays(cur, 1);
+    }
   });
 }
 
@@ -4335,7 +4366,6 @@ function getOpsEntriesForDate(dateStr) {
 function buildWeekDays(weekMondayStr) {
   const mon = new Date(weekMondayStr + 'T00:00:00');
   const days = [];
-  const offsets = showWeekends ? [-1,0,1,2,3,4,5] : [0,1,2,3,4]; // -1=Sun for weekend mode... actually let's do Sun-Sat
   // showWeekends: Sun Mon Tue Wed Thu Fri Sat → offsets from Monday: -1,0,1,2,3,4,5
   // weekdays: Mon Tue Wed Thu Fri → offsets 0,1,2,3,4
   const offs = showWeekends ? [-1,0,1,2,3,4,5] : [0,1,2,3,4];
@@ -4414,16 +4444,19 @@ function extendCalendar(direction) {
   const calScroll = document.getElementById('calScroll');
   const prevScrollHeight = calScroll.scrollHeight;
   const prevScrollTop    = calScroll.scrollTop;
+  // In studio view, re-run the studio decoration so newly-loaded weeks keep
+  // shoot-only filtering + info cards instead of showing raw ops chips.
+  const rebuild = viewMode === 'studio' ? renderStudio : renderCalendar;
   if (direction === 'bottom') {
     const d = new Date(calLatestDate + 'T00:00:00');
     d.setDate(d.getDate() + WEEKS_EXTEND * 7);
     calLatestDate = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
-    renderCalendar();
+    rebuild();
   } else {
     const d = new Date(calEarliestDate + 'T00:00:00');
     d.setDate(d.getDate() - WEEKS_EXTEND * 7);
     calEarliestDate = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
-    renderCalendar();
+    rebuild();
     calScroll.scrollTop = prevScrollTop + (calScroll.scrollHeight - prevScrollHeight);
   }
   updateCalTitle();
@@ -4466,11 +4499,6 @@ function init() {
       const todayCell = document.getElementById('calScroll').querySelector('.cal-day.today');
       if (!todayCell) { resetCalRange(); renderStudio(); setTimeout(scrollToToday, 50); }
       else scrollToToday();
-    } else if (viewMode === 'calendar') {
-      // kept for safety but calendar mode is removed
-      const todayCell = document.getElementById('calScroll').querySelector('.cal-day.today');
-      if (!todayCell) { resetCalRange(); renderCalendar(); setTimeout(scrollToToday, 50); }
-      else scrollToToday();
     }
   });
 
@@ -4481,11 +4509,7 @@ function init() {
   document.getElementById('wkndBtn').addEventListener('click', () => {
     showWeekends = !showWeekends;
     document.getElementById('wkndBtn').classList.toggle('on', showWeekends);
-    if (viewMode === 'calendar' || viewMode === 'studio') {
-      if (viewMode === 'studio') renderStudio();
-      else renderCalendar();
-      return;
-    }
+    if (viewMode === 'studio') { renderStudio(); return; }
     // Capture the date at the centre of the viewport before columns change
     const sc = document.getElementById('tlScroll');
     const centrePixel = sc.scrollLeft - TL_NAME_W + (sc.clientWidth - TL_NAME_W) / 2;
@@ -4539,7 +4563,6 @@ function init() {
     document.querySelectorAll('#chipDisplayToggle .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.disp === chipDisplay));
     if (viewMode === 'person') renderTimeline();
     else if (viewMode === 'studio') renderStudio();
-    else renderCalendar();
   });
 
   // All / None filter buttons
@@ -4551,7 +4574,6 @@ function init() {
     else if (viewMode === 'studio') renderStudio();
     else if (viewMode === 'headsup') renderHeadsUp();
     else if (viewMode === 'metrics') renderMetrics();
-    else renderCalendar();
   });
 
   document.getElementById('filterNoneBtn').addEventListener('click', () => {
@@ -4562,7 +4584,6 @@ function init() {
     else if (viewMode === 'studio') renderStudio();
     else if (viewMode === 'headsup') renderHeadsUp();
     else if (viewMode === 'metrics') renderMetrics();
-    else renderCalendar();
   });
 }
 

@@ -105,8 +105,16 @@ header { display: flex; align-items: center; gap: 12px; padding: 0 16px; height:
 .proj-filter-input:focus { border-color: var(--accent); }
 .proj-filter-clear { background: var(--card); border: 1px solid var(--border); border-radius: 6px; color: var(--dim); font-size: 11px; cursor: pointer; padding: 5px 8px; }
 .proj-filter-clear:hover { color: var(--text); border-color: var(--accent); }
-.proj-filter-check { display: flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; color: var(--dim); cursor: pointer; user-select: none; }
+.proj-filter-check { display: flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; color: var(--dim); cursor: pointer; user-select: none; white-space: nowrap; }
 .proj-filter-check input { accent-color: var(--accent); cursor: pointer; }
+.proj-filter-select { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; color: var(--text); font-size: 11px; outline: none; cursor: pointer; transition: border-color .15s; }
+.proj-filter-select:focus { border-color: var(--accent); }
+.proj-filter-meta { justify-content: space-between; }
+.proj-filter-count { font-size: 10px; font-weight: 600; color: var(--dim); }
+.proj-filter-count.filtered { color: var(--accent); }
+.proj-filter-clearall { background: none; border: none; color: var(--dim); font-size: 10px; font-weight: 600; cursor: pointer; padding: 2px 4px; text-decoration: underline; font-family: inherit; }
+.proj-filter-clearall:hover { color: var(--text); }
+.proj-filter-clearall.hidden { display: none; }
 /* ── LEAD PRODUCER DROP BOX (Role Assignees) ── */
 .lead-producer-box { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-height: 30px; border: 1.5px dashed var(--border); border-radius: 6px; padding: 5px 8px; transition: border-color .12s, background .12s; }
 .lead-producer-box.drag-over { border-color: var(--accent); border-style: solid; background: rgba(108,99,255,.10); }
@@ -636,9 +644,20 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 .notes-compose-actions { display: flex; gap: 6px; align-items: center; }
 .notes-compose-type { font-size: 11px; color: var(--dim); display: flex; align-items: center; gap: 4px; }
 .notes-empty { color: var(--dim); font-size: 12px; font-style: italic; padding: 20px 10px; }
-.note-delete { font-size: 10px; color: var(--dim); cursor: pointer; opacity: 0; transition: opacity .15s; flex-shrink: 0; padding: 0 2px; }
-.note-card:hover .note-delete { opacity: 1; }
+.note-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.note-delete, .note-edit { font-size: 11px; color: var(--dim); cursor: pointer; opacity: 0; transition: opacity .15s, color .15s; flex-shrink: 0; padding: 0 3px; background: none; border: none; line-height: 1; }
+.note-card:hover .note-delete, .note-card:hover .note-edit { opacity: 1; }
 .note-delete:hover { color: var(--danger); }
+.note-edit:hover { color: var(--accent); }
+/* ── NOTE INLINE EDITOR ── */
+.note-editor { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.note-editor textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; color: var(--text); padding: 6px 8px; font: inherit; font-size: 12px; resize: vertical; min-height: 54px; outline: none; box-sizing: border-box; }
+.note-editor textarea:focus { border-color: var(--accent); }
+.note-editor-person { display: flex; align-items: center; gap: 6px; }
+.note-editor-person span { font-size: 9px; font-weight: 700; color: var(--dim); letter-spacing: .06em; text-transform: uppercase; }
+.note-editor-person input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; color: var(--text); padding: 4px 8px; font: inherit; font-size: 12px; outline: none; box-sizing: border-box; }
+.note-editor-person input:focus { border-color: var(--accent); }
+.note-editor-actions { display: flex; gap: 6px; }
 
 /* ── UTIL ── */
 .hidden { display: none !important; }
@@ -722,13 +741,30 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
     <div class="data-migration">
       <div class="proj-filter">
         <div class="proj-filter-row">
-          <input type="text" id="projFilterName" class="proj-filter-input" placeholder="Filter by name…" list="projFilterNames" autocomplete="off" title="Show only projects this person is attached to">
-          <datalist id="projFilterNames"></datalist>
-          <button class="proj-filter-clear" id="projFilterClear" title="Clear filter">✕</button>
+          <input type="text" id="projFilterSearch" class="proj-filter-input" placeholder="Search projects…" autocomplete="off" title="Search across project name, Case ID, type, region, synopsis, notes and people">
         </div>
-        <label class="proj-filter-check" title="Show only projects where this person is the lead producer">
-          <input type="checkbox" id="projFilterLeadOnly"> Lead producer only
-        </label>
+        <div class="proj-filter-row">
+          <input type="text" id="projFilterName" class="proj-filter-input" placeholder="Filter by person…" list="projFilterNames" autocomplete="off" title="Show only projects this person is attached to">
+          <datalist id="projFilterNames"></datalist>
+          <button class="proj-filter-clear" id="projFilterClear" title="Clear all filters">✕</button>
+        </div>
+        <div class="proj-filter-row">
+          <select id="projFilterStatus" class="proj-filter-select" title="Filter by project status">
+            <option value="all">All statuses</option>
+            <option value="active">Active</option>
+            <option value="completed">Completed</option>
+            <option value="onhold">On Hold</option>
+            <option value="cancelled">Cancelled</option>
+            <option value="draft">Draft</option>
+          </select>
+          <label class="proj-filter-check" title="Show only projects where the filtered person is the lead producer">
+            <input type="checkbox" id="projFilterLeadOnly"> Lead only
+          </label>
+        </div>
+        <div class="proj-filter-row proj-filter-meta">
+          <span class="proj-filter-count" id="projFilterCount"></span>
+          <button type="button" class="proj-filter-clearall hidden" id="projFilterClearAll">Clear filters</button>
+        </div>
       </div>
       <a href="ops.html" target="_blank" class="data-mig-btn" title="Ops mode — team workload view">📊 Ops</a>
       <a href="dash.html" target="_blank" class="data-mig-btn" title="Personal dashboard view">📋 Dash</a>
@@ -989,10 +1025,16 @@ let viewStart       = null; // YYYY-MM-DD of first visible day
 // only those where they are the lead producer). Persisted across reloads.
 let filterPerson   = (() => { try { return localStorage.getItem('prepro_filter_person') || ''; } catch(_) { return ''; } })();
 let filterLeadOnly = (() => { try { return localStorage.getItem('prepro_filter_leadonly') === '1'; } catch(_) { return false; } })();
+// Free-text search across project fields, and a categorical status filter. All
+// active filters combine with AND. Persisted across reloads like the others.
+let filterText     = (() => { try { return localStorage.getItem('prepro_filter_text') || ''; } catch(_) { return ''; } })();
+let filterStatus   = (() => { try { return localStorage.getItem('prepro_filter_status') || 'all'; } catch(_) { return 'all'; } })();
 function saveFilter() {
   try {
     localStorage.setItem('prepro_filter_person', filterPerson);
     localStorage.setItem('prepro_filter_leadonly', filterLeadOnly ? '1' : '0');
+    localStorage.setItem('prepro_filter_text', filterText);
+    localStorage.setItem('prepro_filter_status', filterStatus);
   } catch(_) {}
 }
 let expandedIds     = (() => {
@@ -1005,8 +1047,9 @@ function saveExpandedIds() {
 let dragPayload     = null;
 let panelContext    = null;
 let exportTabActive  = localStorage.getItem('prepro_export_tab') || 'projectinfo';
-if (exportTabActive === 'planyway') exportTabActive = 'projectinfo'; // Trello export removed
 const TAB_TITLES = { projectinfo: 'Project Info', roster: 'Role Assignees', text: 'Text Export', table: 'Table / Excel', png: 'PNG Export', 'invites-web': 'Meeting Invites', notes: 'Notes', cea: 'CEA' };
+// Normalize any stale/removed tab id from localStorage (e.g. the old Trello tab).
+if (!TAB_TITLES[exportTabActive]) exportTabActive = 'projectinfo';
 let exportOpen       = false;
 let exportOptBold       = true;
 let exportOptRoles      = false;
@@ -2075,10 +2118,25 @@ function wireSettingsModal() {
   const filterInput    = document.getElementById('projFilterName');
   const filterLeadCb   = document.getElementById('projFilterLeadOnly');
   const filterClearBtn = document.getElementById('projFilterClear');
-  if (filterInput)  filterInput.value = filterPerson;
-  if (filterLeadCb) filterLeadCb.checked = filterLeadOnly;
+  const filterSearch   = document.getElementById('projFilterSearch');
+  const filterStatusEl = document.getElementById('projFilterStatus');
+  const filterClearAll = document.getElementById('projFilterClearAll');
+  if (filterInput)    filterInput.value = filterPerson;
+  if (filterLeadCb)   filterLeadCb.checked = filterLeadOnly;
+  if (filterSearch)   filterSearch.value = filterText;
+  if (filterStatusEl) filterStatusEl.value = filterStatus;
   if (filterInput) filterInput.addEventListener('input', () => {
     filterPerson = filterInput.value;
+    saveFilter();
+    renderSidebar();
+  });
+  if (filterSearch) filterSearch.addEventListener('input', () => {
+    filterText = filterSearch.value;
+    saveFilter();
+    renderSidebar();
+  });
+  if (filterStatusEl) filterStatusEl.addEventListener('change', () => {
+    filterStatus = filterStatusEl.value || 'all';
     saveFilter();
     renderSidebar();
   });
@@ -2087,14 +2145,9 @@ function wireSettingsModal() {
     saveFilter();
     renderSidebar();
   });
-  if (filterClearBtn) filterClearBtn.addEventListener('click', () => {
-    filterPerson = '';
-    filterLeadOnly = false;
-    if (filterInput)  filterInput.value = '';
-    if (filterLeadCb) filterLeadCb.checked = false;
-    saveFilter();
-    renderSidebar();
-  });
+  // Both the ✕ button and the "Clear filters" link reset every active filter.
+  if (filterClearBtn) filterClearBtn.addEventListener('click', clearAllFilters);
+  if (filterClearAll) filterClearAll.addEventListener('click', clearAllFilters);
   const closeBtn = document.getElementById('settingsClose');
   if (closeBtn) closeBtn.addEventListener('click', closeSettings);
   const overlay = document.getElementById('settingsOverlay');
@@ -2907,6 +2960,19 @@ function deleteNote(projectId, noteId) {
   if (exportOpen) renderExportPanel();
 }
 
+// Edit an existing note's body and/or author. Only the fields provided in
+// `changes` are touched; the note keeps its original date/time and type.
+function editNote(projectId, noteId, changes) {
+  const proj = getProject(projectId);
+  if (!proj || !proj.notes) return;
+  const note = proj.notes.find(n => n.id === noteId);
+  if (!note) return;
+  if (typeof changes.body === 'string') note.body = changes.body;
+  if (typeof changes.person === 'string') note.person = changes.person || 'Team';
+  saveState();
+  if (exportOpen) renderExportPanel();
+}
+
 let completedOpen = false, onHoldOpen = false, cancelledOpen = false, draftOpen = false;
 
 // ── SIDEBAR ──
@@ -2931,11 +2997,92 @@ function isPersonOnProject(proj, name) {
   }
   return isLeadProducer(proj, name);
 }
-// Does this project match the active sidebar filter? (No filter → always true.)
+// Is any filter currently narrowing the sidebar? Drives the count label + the
+// visibility of the "Clear filters" control.
+function anyFilterActive() {
+  return !!(filterPerson.trim() || filterText.trim() || (filterStatus && filterStatus !== 'all') || filterLeadOnly);
+}
+// Fields on a project that free-text search should look through. Everything is
+// coerced to a string so missing/empty/non-string values never throw.
+function projectSearchHaystack(proj) {
+  if (!proj) return '';
+  const parts = [
+    proj.name, proj.ticketId, proj.ticketLabel, proj.ticketUrl, proj.leadProducer,
+    proj.videoType, proj.function, proj.region, proj.scopeLevel, proj.internalExternal,
+    proj.caseStatus, proj.targetAudience, proj.audienceDescription, proj.synopsis,
+    proj.tangibleGoal1, proj.tangibleGoal2, proj.completionIssues, proj.additionalNotes,
+    proj.budget
+  ];
+  // People attached via the roster.
+  const roster = proj.roster || {};
+  for (const role in roster) (roster[role] || []).forEach(n => parts.push(n));
+  // People on tasks + attendees, and note bodies.
+  (proj.tasks || []).forEach(t => {
+    if (t && t.person) parts.push(t.person);
+    (t && t.attendees || []).forEach(a => { if (a && a.person) parts.push(a.person); });
+    if (t && t.taskName) parts.push(t.taskName);
+  });
+  (proj.notes || []).forEach(n => { if (n && n.body) parts.push(n.body); });
+  return parts.filter(v => v != null && v !== '').map(v => String(v).toLowerCase()).join('  ');
+}
+// Does this project match ALL of the active sidebar filters? (No filter → always
+// true.) Person, free-text, and status combine with AND; each is defensive
+// against projects with missing/empty fields.
 function projectMatchesFilter(proj) {
+  if (!proj) return false;
+  // Person filter (name attached to project, optionally lead-producer only).
   const q = filterPerson.trim().toLowerCase();
-  if (!q) return true;
-  return filterLeadOnly ? isLeadProducer(proj, q) : isPersonOnProject(proj, q);
+  if (q) {
+    const personOk = filterLeadOnly ? isLeadProducer(proj, q) : isPersonOnProject(proj, q);
+    if (!personOk) return false;
+  } else if (filterLeadOnly) {
+    // "Lead only" with no person named → keep only projects that have a lead.
+    if (!getMostUsedProducer(proj)) return false;
+  }
+  // Status filter.
+  if (filterStatus && filterStatus !== 'all' && projStatus(proj) !== filterStatus) return false;
+  // Free-text search across project fields + people + notes.
+  const text = filterText.trim().toLowerCase();
+  if (text) {
+    const hay = projectSearchHaystack(proj);
+    // Every whitespace-separated token must appear somewhere (AND within search).
+    if (!text.split(/\s+/).every(tok => hay.includes(tok))) return false;
+  }
+  return true;
+}
+// Reset every sidebar filter to its neutral state and re-render.
+function clearAllFilters() {
+  filterPerson = '';
+  filterLeadOnly = false;
+  filterText = '';
+  filterStatus = 'all';
+  const nameEl   = document.getElementById('projFilterName');
+  const leadEl   = document.getElementById('projFilterLeadOnly');
+  const searchEl = document.getElementById('projFilterSearch');
+  const statusEl = document.getElementById('projFilterStatus');
+  if (nameEl)   nameEl.value = '';
+  if (leadEl)   leadEl.checked = false;
+  if (searchEl) searchEl.value = '';
+  if (statusEl) statusEl.value = 'all';
+  saveFilter();
+  renderSidebar();
+}
+// Live count of matching (non-folder) projects, shown under the filter controls.
+function updateFilterCount() {
+  const countEl = document.getElementById('projFilterCount');
+  const clearEl = document.getElementById('projFilterClearAll');
+  if (!countEl) return;
+  const active = anyFilterActive();
+  const projects = (state.projects || []).filter(p => p && !p.isFolder);
+  if (!active) {
+    countEl.textContent = projects.length + (projects.length === 1 ? ' project' : ' projects');
+    countEl.classList.remove('filtered');
+  } else {
+    const n = projects.filter(p => projectMatchesFilter(p)).length;
+    countEl.textContent = n + ' of ' + projects.length + ' shown';
+    countEl.classList.add('filtered');
+  }
+  if (clearEl) clearEl.classList.toggle('hidden', !active);
 }
 // A project stays visible if it OR any descendant matches (so parents of a match
 // aren't hidden and the tree path is preserved).
@@ -2944,10 +3091,15 @@ function subtreeMatchesFilter(proj) {
   return getChildren(proj.id).some(child => subtreeMatchesFilter(child));
 }
 
+// Escape a string for safe interpolation into HTML text/attribute contexts.
+function escapeHtmlAttr(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 function renderSidebar() {
   // Refresh the filter datalist with everyone we know about.
   const dl = document.getElementById('projFilterNames');
-  if (dl) dl.innerHTML = collectAllPeople().filter(isVideoTeamPerson).map(p => '<option value="' + p.name.replace(/"/g, '&quot;') + '">').join('');
+  if (dl) dl.innerHTML = collectAllPeople().filter(isVideoTeamPerson).map(p => '<option value="' + escapeHtmlAttr(p.name) + '">').join('');
 
   const tree = document.getElementById('sidebarTree');
   tree.innerHTML = '';
@@ -2958,6 +3110,8 @@ function renderSidebar() {
   renderStatusSection('onhold',    'onHoldSection',    'onHoldTree',    'onHoldCount');
   renderStatusSection('cancelled', 'cancelledSection', 'cancelledTree', 'cancelledCount');
   renderStatusSection('draft',     'draftSection',     'draftTree',     'draftCount');
+
+  updateFilterCount();
 }
 
 function renderStatusSection(status, sectionId, treeId, countId) {
@@ -3062,18 +3216,10 @@ function renderTreeLevel(parentId, depth, container) {
       node.classList.remove('drop-above', 'drop-below', 'drop-onto');
       document.querySelectorAll('.tree-node.drop-above, .tree-node.drop-below, .tree-node.drop-onto')
         .forEach(n => n.classList.remove('drop-above', 'drop-below', 'drop-onto'));
-      // Handle alt-drag duplicate (no drop fires for this case)
-      if (dragPayload && dragPayload.type === 'dup-project' && dragPayload.projectId === proj.id) {
-        const newProj = duplicateProject(proj.id);
-        dragPayload = null;
-        if (newProj) {
-          activeProjectId = newProj.id;
-          calEarliestDate = null;
-          renderSidebar(); renderCalendar();
-          if (exportOpen) renderExportPanel();
-        }
-        return;
-      }
+      // Alt-drag duplicate is performed by the drop handler when the drag lands on
+      // a real drop zone (a tree node). We deliberately DO NOT duplicate here: a
+      // drag released over empty space or cancelled with Esc fires dragend but no
+      // drop, and must not create a phantom duplicate.
       // DO NOT null dragPayload here. In some Chrome versions, dragend fires
       // BEFORE drop on the target — if we nulled it, drop would see null and bail.
       // The drop handler nulls it on success; the next dragstart overwrites it
@@ -3102,13 +3248,18 @@ function renderTreeLevel(parentId, depth, container) {
       else if (pos === 'after') node.classList.add('drop-below');
       else node.classList.add('drop-onto');
     };
+    // Alt-drag duplicate: any tree node is a valid drop zone. Accept the drag
+    // (preventDefault) so a real `drop` fires; no reorder indicator for a copy.
+    const isDupDrag = () => dragPayload && dragPayload.type === 'dup-project';
     node.addEventListener('dragenter', e => {
+      if (isDupDrag()) { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'; return; }
       if (!canDropHere()) return;
       e.preventDefault(); e.stopPropagation();
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
       setIndicator(computePosition(e.clientY));
     });
     node.addEventListener('dragover', e => {
+      if (isDupDrag()) { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'; return; }
       if (!canDropHere()) return;
       e.preventDefault(); e.stopPropagation();
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
@@ -3123,6 +3274,20 @@ function renderTreeLevel(parentId, depth, container) {
     node.addEventListener('drop', e => {
       e.preventDefault(); e.stopPropagation();
       node.classList.remove('drop-above', 'drop-below', 'drop-onto');
+      // Valid drop zone reached for an alt-drag → perform the duplicate here (so a
+      // cancelled drag, which never reaches a drop, can't create one).
+      if (isDupDrag()) {
+        const dupId = dragPayload.projectId;
+        dragPayload = null;
+        const newProj = duplicateProject(dupId);
+        if (newProj) {
+          activeProjectId = newProj.id;
+          calEarliestDate = null;
+          renderSidebar(); renderCalendar();
+          if (exportOpen) renderExportPanel();
+        }
+        return;
+      }
       if (!canDropHere()) return;
       moveProjectInTree(dragPayload.projectId, proj.id, computePosition(e.clientY));
       dragPayload = null;
@@ -4808,7 +4973,7 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
   renderTaskSuggestions();
   document.getElementById('taskPanel').classList.add('open');
   const focusId = (mode === 'create-review' || mode === 'edit-review' || mode === 'edit') ? 'panelTask' : 'panelPerson';
-  setTimeout(() => document.getElementById(focusId).focus(), 220);
+  setTimeout(() => { const fEl = document.getElementById(focusId); if (fEl) fEl.focus(); }, 220);
 }
 
 // Second panel row: quick-pick task-title chips that fill the Task input.
@@ -6071,8 +6236,18 @@ function renderNotesTab(container) {
         + '<div class="note-meta">' + escHtml(note.person) + ' · ' + note.date + (note.time ? ' ' + note.time : '') + '</div>';
       card.appendChild(body);
 
-      // Delete button (not for system notes)
+      // Edit + delete buttons (not for system notes)
       if (note.type !== 'system') {
+        const actions = document.createElement('div');
+        actions.className = 'note-actions';
+
+        const edit = document.createElement('button');
+        edit.className = 'note-edit';
+        edit.textContent = '✎';
+        edit.title = 'Edit note';
+        edit.addEventListener('click', () => showNoteEdit(card, body, note));
+        actions.appendChild(edit);
+
         const del = document.createElement('button');
         del.className = 'note-delete';
         del.textContent = '×';
@@ -6080,7 +6255,9 @@ function renderNotesTab(container) {
         del.addEventListener('click', () => {
           if (confirm('Delete this note?')) { deleteNote(activeProjectId, note.id); }
         });
-        card.appendChild(del);
+        actions.appendChild(del);
+
+        card.appendChild(actions);
       }
 
       feed.appendChild(card);
@@ -6096,6 +6273,69 @@ function renderNotesTab(container) {
     if (nt) showNoteCompose(container, nt, addBar);
     else _noteDraft = null;
   }
+}
+
+// Replace a note card's body with an inline editor for the note text and the
+// author, so any comment can be corrected regardless of who logged it.
+function showNoteEdit(card, bodyEl, note) {
+  if (card.querySelector('.note-editor')) return; // already editing
+  bodyEl.style.display = 'none';
+
+  const editor = document.createElement('div');
+  editor.className = 'note-editor';
+
+  const textarea = document.createElement('textarea');
+  textarea.value = note.body || '';
+  textarea.rows = 3;
+  editor.appendChild(textarea);
+
+  // Author picker — pick from known people, or type a new name.
+  const personRow = document.createElement('div');
+  personRow.className = 'note-editor-person';
+  const personLbl = document.createElement('span');
+  personLbl.textContent = 'By';
+  const personInput = document.createElement('input');
+  personInput.type = 'text';
+  personInput.value = note.person || '';
+  personInput.placeholder = 'Name';
+  personInput.setAttribute('list', 'noteEditPeople');
+  personInput.autocomplete = 'off';
+  let dl = document.getElementById('noteEditPeople');
+  if (!dl) { dl = document.createElement('datalist'); dl.id = 'noteEditPeople'; card.appendChild(dl); }
+  dl.innerHTML = '';
+  collectAllPeople().forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.name;
+    dl.appendChild(opt);
+  });
+  personRow.appendChild(personLbl);
+  personRow.appendChild(personInput);
+  editor.appendChild(personRow);
+
+  const actions = document.createElement('div');
+  actions.className = 'note-editor-actions';
+
+  const save = document.createElement('button');
+  save.className = 'btn btn-primary';
+  save.textContent = 'Save';
+  save.style.fontSize = '11px';
+  save.addEventListener('click', () => {
+    if (!textarea.value.trim()) return;
+    editNote(activeProjectId, note.id, { body: textarea.value.trim(), person: personInput.value.trim() });
+  });
+
+  const cancel = document.createElement('button');
+  cancel.className = 'btn btn-ghost';
+  cancel.textContent = 'Cancel';
+  cancel.style.fontSize = '11px';
+  cancel.addEventListener('click', () => { editor.remove(); bodyEl.style.display = ''; });
+
+  actions.appendChild(save);
+  actions.appendChild(cancel);
+  editor.appendChild(actions);
+
+  bodyEl.after(editor);
+  textarea.focus();
 }
 
 function showNoteCompose(container, noteType, addBar) {
@@ -6137,8 +6377,10 @@ function showNoteCompose(container, noteType, addBar) {
   saveBtn.style.fontSize = '11px';
   saveBtn.addEventListener('click', () => {
     if (!textarea.value.trim()) return;
-    // Use the selected person from dashboard localStorage, or 'Team'
-    const person = localStorage.getItem('dash_selected_person') || 'Team';
+    // Attribute to the pinned "This is me" identity from the dashboard, so
+    // browsing other people's dashboards never mis-attributes a note. Falls
+    // back to the currently-viewed person, then 'Team'.
+    const person = localStorage.getItem('dash_me') || localStorage.getItem('dash_selected_person') || 'Team';
     _noteDraft = null; // clear before re-render so the compose box doesn't reopen
     addNote(activeProjectId, noteType.key, textarea.value.trim(), person);
     renderExportPanel();
@@ -6467,7 +6709,8 @@ function getProducerCat(name) {
 // Returns the person name of the most frequently used Producer in the project.
 // Counts direct producer tasks + appearances as an attendee in reviews/key dates.
 function getMostUsedProducer(proj) {
-  if (proj && proj.leadProducer) return proj.leadProducer;
+  if (!proj) return null;
+  if (proj.leadProducer) return proj.leadProducer;
   const counts = {};
   (proj.tasks || []).forEach(t => {
     // Direct producer tasks
@@ -6975,7 +7218,8 @@ function initFirebase() {
         renderSidebar();
         renderCalendar();
         renderExportPanel();
-        setupInitListeners();
+        // Listeners are already wired synchronously by init() before initFirebase();
+        // no second setup call needed here.
       } else if (changed) {
         // A genuine remote change (teammate edit) — refresh. Our own echoed
         // writes compare equal in applyRemoteState, so they don't reach here.
