@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260728a';
+window.PREPRO_BUILD = '20260728b';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,9 +29,9 @@ window.PREPRO_BUILD = '20260728a';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260728a"></script>
+<script type="module" src="./auth.js?v=20260728b"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260728a"></script>
+<script src="./xlsx.full.min.js?v=20260728b"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -5876,13 +5876,18 @@ function buildOutlookComposeURL({ subject, startDate, endDate, allDay, toEmails 
 // reminder (no VALARM), and turn off response requests (RSVP=FALSE). Opening it
 // adds the event to your calendar; choose Edit → Send to notify the recipients.
 //
-// NOTE: never write an ORGANIZER line. On Exchange the organizer is whichever
-// mailbox the item is created in — an ORGANIZER naming someone else is read as
-// spoofing, so the event sticks on "Waiting to sync" and is dropped on the next
-// sync cycle. These files are opened by the person on PTO on their own machine,
-// so Outlook fills in the organizer correctly by itself.
+// ORGANIZER rules — both halves matter:
+//   • METHOD:REQUEST REQUIRES an ORGANIZER (RFC 5545). Omitting it produces an
+//     invalid file that mail-security policy blocks outright ("organization's
+//     policy" / malware warning), so it never even opens.
+//   • The ORGANIZER must match the mailbox that opens the file. On Exchange the
+//     organizer is whichever mailbox the item is created in; naming anyone else
+//     reads as spoofing and the event sticks on "Waiting to sync", then drops.
+// Each person downloads and opens their OWN PTO files, so ORGANIZER = the person
+// on that PTO satisfies both. Do not hand someone else's file to a third party.
 //   opts: { uid, subject, start:'YYYY-MM-DD', end(inclusive), busy:'FREE'|'OOF'|'BUSY',
-//           method:'REQUEST'|'PUBLISH', requestResponses:bool, attendees:[{name,email}] }
+//           method:'REQUEST'|'PUBLISH', requestResponses:bool,
+//           attendees:[{name,email}], organizer:{name,email} }
 function buildPtoICS(opts) {
   const pad = n => String(n).padStart(2, '0');
   const icsDate = (iso, add) => { const p = iso.split('-').map(Number);
@@ -5905,6 +5910,10 @@ function buildPtoICS(opts) {
     'DTSTART;VALUE=DATE:' + icsDate(opts.start, 0),
     'DTEND;VALUE=DATE:' + icsDate(opts.end || opts.start, 1), // all-day end is exclusive
     'SUMMARY:' + esc(opts.subject || 'PTO')];
+  if (opts.organizer && opts.organizer.email) {
+    L.push('ORGANIZER;CN=' + esc(opts.organizer.name || opts.organizer.email) +
+      ':mailto:' + opts.organizer.email);
+  }
   if (opts.body) L.push('DESCRIPTION:' + esc(opts.body));
   (opts.attendees || []).forEach(a => { if (!a.email) return;
     L.push('ATTENDEE;CN=' + esc(a.name || a.email) +
@@ -5973,8 +5982,8 @@ function renderPtoInvitesPanel(content, proj) {
   note.innerHTML =
     'Two files per PTO entry. Each downloads an <b>.ics</b> with the status, reminder, and responses already set.' +
     '<div style="margin:7px 0;padding:6px 8px;border-radius:6px;background:var(--warn-bg,rgba(230,160,30,.14));border:1px solid var(--warn,rgba(230,160,30,.5));color:var(--text);">' +
-    '⚠️ <b>The person on PTO opens these on their own machine</b>, so Outlook makes them the organizer. ' +
-    'Opening someone else\'s on your calendar is what leaves it stuck on "Waiting to sync."</div>' +
+    '⚠️ <b>Each person downloads and opens their own files.</b> The team invite is stamped with their address as ' +
+    'organizer, so opening someone else\'s on your calendar leaves it stuck on "Waiting to sync."</div>' +
     '<div style="margin:0 0 3px;">• <b>Out of Office</b>: all-day, <b>Show As → Out of Office</b>, reminder off. A personal calendar block — no invite is sent.</div>' +
     '<div style="margin:0;">• <b>Notify Team</b>: all-day <b>Free</b>, reminder off, responses off, addressed to the video team. <b>Press Edit → Send in Outlook</b> or nobody is notified.</div>';
   content.appendChild(note);
@@ -5990,6 +5999,16 @@ function renderPtoInvitesPanel(content, proj) {
     const people = ptoInvitePeople(t);
     const subjectSelf = t.taskName || 'PTO';
     const startDate = t.date, endDate = t.endDate || t.date;
+
+    // Organizer for the team invite = the person on the PTO who is opening this
+    // file. On a shared entry, prefer whoever is starred as "me" on the dash
+    // (localStorage dash_me) so each person's download is stamped with their own
+    // address; fall back to the first name listed. Null if no email on file.
+    const starredMe = localStorage.getItem('dash_me');
+    const organizerPerson = (starredMe && people.includes(starredMe)) ? starredMe : people[0];
+    const organizerEmail = organizerPerson && getPersonEmail(organizerPerson);
+    const ptoOrganizer = (organizerEmail && organizerEmail.includes('@'))
+      ? { name: organizerPerson, email: organizerEmail } : null;
 
     const row = document.createElement('div');
     row.className = 'invite-row';
@@ -6044,16 +6063,23 @@ function renderPtoInvitesPanel(content, proj) {
     btn2.className = 'btn btn-ghost';
     btn2.style.flexShrink = '0';
     btn2.textContent = '👥 Notify Team';
-    btn2.title = 'Invites ' + teamEmails.map(r => r.email).join(', ');
+    if (!ptoOrganizer) {
+      btn2.disabled = true;
+      btn2.title = 'No email on ' + (organizerPerson || 'this person') +
+        ' — add one in People. A team invite needs an organizer address or Outlook blocks the file.';
+    } else {
+      btn2.title = 'Opened by ' + ptoOrganizer.name + '. Invites ' + teamEmails.map(r => r.email).join(', ');
+    }
     btn2.addEventListener('click', () => {
       const teamSubject = ptoOnSubject(people);
-      // No organizer — whoever opens this becomes it. Meant to be the person on
-      // PTO, so the team sees the notice come from them.
+      // Organizer = the person on PTO, who is also the one opening this file.
+      // METHOD:REQUEST is invalid without it and gets blocked by mail policy,
+      // so bail rather than ship a file that cannot open.
       const ics = buildPtoICS({
         uid: (t.id || genId()) + '-team-' + genId().slice(0, 8) + '@prepro', // fresh per download; see OOF note
         subject: teamSubject, start: startDate, end: endDate,
         busy: 'FREE', requestResponses: false,
-        attendees: teamEmails
+        attendees: teamEmails, organizer: ptoOrganizer
       });
       downloadICS(ics, teamSubject.replace(/[^a-z0-9]/gi, '_') + '.ics');
     });
