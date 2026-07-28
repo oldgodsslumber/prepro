@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260728c';
+window.PREPRO_BUILD = '20260728d';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,9 +29,9 @@ window.PREPRO_BUILD = '20260728c';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260728c"></script>
+<script type="module" src="./auth.js?v=20260728d"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260728c"></script>
+<script src="./xlsx.full.min.js?v=20260728d"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -5985,7 +5985,7 @@ function renderPtoInvitesPanel(content, proj) {
     '⚠️ <b>Each person downloads and opens their own files.</b> Both open as your own appointment, ' +
     'already filled in — you just send the team one.</div>' +
     '<div style="margin:0 0 3px;">• <b>Out of Office</b>: all-day, <b>Show As → Out of Office</b>, reminder off. A personal calendar block — nothing is sent.</div>' +
-    '<div style="margin:0;">• <b>Notify Team</b>: all-day <b>Free</b>, reminder off, responses off. <b>Press Invite Attendees, then Send</b> — the addresses are in the body to paste if the To line is empty.</div>';
+    '<div style="margin:0;">• <b>Notify Team</b>: all-day <b>Free</b>, reminder off, responses off, team addresses already filled in. <b>Press Edit → Send.</b> You won\'t get a copy — Outlook never sends you your own invite; it\'s already on your calendar, and in Sent Items.</div>';
   content.appendChild(note);
 
   const teamEmails = [
@@ -6057,7 +6057,7 @@ function renderPtoInvitesPanel(content, proj) {
     btn2.className = 'btn btn-ghost';
     btn2.style.flexShrink = '0';
     btn2.textContent = '👥 Notify Team';
-    btn2.title = 'Opens as an appointment — press Invite Attendees, then Send. Goes to ' +
+    btn2.title = 'Opens as your own appointment — press Edit → Send. Goes to ' +
       teamEmails.map(r => r.email).join(', ');
     btn2.addEventListener('click', () => {
       const teamSubject = ptoOnSubject(people);
@@ -6068,16 +6068,13 @@ function renderPtoInvitesPanel(content, proj) {
       // published appointment it is simply the opener's own event; they press
       // Invite Attendees → Send and Outlook issues the real invitation then.
       // No ORGANIZER, for the same reason the OOF file has none.
-      // Outlook does not reliably carry ATTENDEE lines from a PUBLISH file into
-      // the To field, so the addresses are repeated in the body to paste.
-      const teamList = teamEmails.map(r => r.email).join('; ');
-      const teamBody = 'Send this to: ' + teamList +
-        '\n\n(Press Invite Attendees, paste the addresses above into To, then Send.)';
+      // ATTENDEE lines survive the PUBLISH import into the To field (verified in
+      // Outlook desktop), so no body text — anything here is read by the team.
       const ics = buildPtoICS({
         uid: (t.id || genId()) + '-team-' + genId().slice(0, 8) + '@prepro', // fresh per download; see OOF note
         subject: teamSubject, start: startDate, end: endDate,
         busy: 'FREE', method: 'PUBLISH', requestResponses: false,
-        attendees: teamEmails, body: teamBody
+        attendees: teamEmails
       });
       downloadICS(ics, teamSubject.replace(/[^a-z0-9]/gi, '_') + '.ics');
     });
