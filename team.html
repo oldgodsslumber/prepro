@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260624h';
+window.PREPRO_BUILD = '20260728a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,9 +29,9 @@ window.PREPRO_BUILD = '20260624h';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260624h"></script>
+<script type="module" src="./auth.js?v=20260728a"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260624h"></script>
+<script src="./xlsx.full.min.js?v=20260728a"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -5871,12 +5871,18 @@ function buildOutlookComposeURL({ subject, startDate, endDate, allDay, toEmails 
   return 'https://outlook.office.com/calendar/action/compose?' + params.toString();
 }
 
-// Build an Outlook-friendly all-day meeting-request .ics for a PTO entry.
+// Build an Outlook-friendly all-day .ics for a PTO entry.
 // Unlike the compose URL, an .ics can preset Show As (Free/OOF), suppress the
 // reminder (no VALARM), and turn off response requests (RSVP=FALSE). Opening it
 // adds the event to your calendar; choose Edit → Send to notify the recipients.
+//
+// NOTE: never write an ORGANIZER line. On Exchange the organizer is whichever
+// mailbox the item is created in — an ORGANIZER naming someone else is read as
+// spoofing, so the event sticks on "Waiting to sync" and is dropped on the next
+// sync cycle. These files are opened by the person on PTO on their own machine,
+// so Outlook fills in the organizer correctly by itself.
 //   opts: { uid, subject, start:'YYYY-MM-DD', end(inclusive), busy:'FREE'|'OOF'|'BUSY',
-//           requestResponses:bool, attendees:[{name,email}], organizer:{name,email} }
+//           method:'REQUEST'|'PUBLISH', requestResponses:bool, attendees:[{name,email}] }
 function buildPtoICS(opts) {
   const pad = n => String(n).padStart(2, '0');
   const icsDate = (iso, add) => { const p = iso.split('-').map(Number);
@@ -5893,16 +5899,12 @@ function buildPtoICS(opts) {
   const busy = opts.busy || 'BUSY';
   const rsvp = opts.requestResponses ? 'TRUE' : 'FALSE';
   const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//PrePro//Team Scheduler//EN',
-    'CALSCALE:GREGORIAN', 'METHOD:REQUEST', 'BEGIN:VEVENT',
+    'CALSCALE:GREGORIAN', 'METHOD:' + (opts.method || 'REQUEST'), 'BEGIN:VEVENT',
     'UID:' + (opts.uid || (stamp + '@prepro')),
     'DTSTAMP:' + stamp,
     'DTSTART;VALUE=DATE:' + icsDate(opts.start, 0),
     'DTEND;VALUE=DATE:' + icsDate(opts.end || opts.start, 1), // all-day end is exclusive
     'SUMMARY:' + esc(opts.subject || 'PTO')];
-  if (opts.organizer && opts.organizer.email) {
-    L.push('ORGANIZER;CN=' + esc(opts.organizer.name || opts.organizer.email) +
-      ':mailto:' + opts.organizer.email);
-  }
   if (opts.body) L.push('DESCRIPTION:' + esc(opts.body));
   (opts.attendees || []).forEach(a => { if (!a.email) return;
     L.push('ATTENDEE;CN=' + esc(a.name || a.email) +
@@ -5969,11 +5971,12 @@ function renderPtoInvitesPanel(content, proj) {
   const note = document.createElement('div');
   note.style.cssText = 'font-size:11px;color:var(--dim);padding:6px 2px 8px;flex-shrink:0;line-height:1.55;';
   note.innerHTML =
-    'Two invites per PTO entry. Each downloads an <b>.ics</b> with the status, reminder, and responses already set.' +
+    'Two files per PTO entry. Each downloads an <b>.ics</b> with the status, reminder, and responses already set.' +
     '<div style="margin:7px 0;padding:6px 8px;border-radius:6px;background:var(--warn-bg,rgba(230,160,30,.14));border:1px solid var(--warn,rgba(230,160,30,.5));color:var(--text);">' +
-    '⚠️ <b>After it opens in Outlook, press Edit → Send.</b> Otherwise the event only lands on your own calendar and no one is notified.</div>' +
-    '<div style="margin:0 0 3px;">• <b>Out of Office</b>: all-day, <b>Show As → Out of Office</b>, reminder off; sent to the person(s) on the PTO.</div>' +
-    '<div style="margin:0;">• <b>Notify Team</b>: all-day <b>Free</b>, reminder off, responses off; sent to the video team.</div>';
+    '⚠️ <b>The person on PTO opens these on their own machine</b>, so Outlook makes them the organizer. ' +
+    'Opening someone else\'s on your calendar is what leaves it stuck on "Waiting to sync."</div>' +
+    '<div style="margin:0 0 3px;">• <b>Out of Office</b>: all-day, <b>Show As → Out of Office</b>, reminder off. A personal calendar block — no invite is sent.</div>' +
+    '<div style="margin:0;">• <b>Notify Team</b>: all-day <b>Free</b>, reminder off, responses off, addressed to the video team. <b>Press Edit → Send in Outlook</b> or nobody is notified.</div>';
   content.appendChild(note);
 
   const teamEmails = [
@@ -6005,18 +6008,14 @@ function renderPtoInvitesPanel(content, proj) {
     nameEl.style.flex = '1';
     nameEl.textContent = people.length ? people.join(', ') : '(no one assigned)';
 
-    // Attendees for the OOF invite = everyone named on the PTO who has an email.
-    const ptoAttendees = people
-      .map(p => ({ name: p, email: getPersonEmail(p) }))
-      .filter(a => a.email && a.email.includes('@'));
-
-    // Option 1 — personal Out-of-Office invite to the person(s) on the PTO.
-    // Downloads an .ics preset to Show As → Out of Office, reminder off.
+    // Option 1 — personal Out-of-Office block for the person on the PTO, opened
+    // on their own machine. No attendees and no organizer: it's their own
+    // calendar entry, so METHOD:PUBLISH (a plain appointment, not a request).
     const btn1 = document.createElement('button');
     btn1.className = 'btn btn-ghost';
     btn1.style.flexShrink = '0';
     btn1.textContent = '🏖 Out of Office';
-    if (!ptoAttendees.length) { btn1.disabled = true; btn1.title = 'No email on the person(s) for this PTO — add one in People'; }
+    btn1.title = 'For the person on PTO to open on their own machine';
     btn1.addEventListener('click', () => {
       // First working day back = day after the PTO ends, skipping Sat/Sun.
       const back = new Date(endDate + 'T00:00:00');
@@ -6029,9 +6028,12 @@ function renderPtoInvitesPanel(content, proj) {
       const oofBody = 'Thank you for your message! I am out of office and will return on ' + backStr + '.\n\n' +
         'If you would like to request a video, you can submit a ticket here: ' + TICKET_URL;
       const ics = buildPtoICS({
-        uid: (t.id || genId()) + '-oof@prepro',
+        // Fresh UID per download. A stable UID gets tombstoned by Exchange after
+        // the first failed/deleted import, and every later import of that same
+        // UID is silently dropped on sync.
+        uid: (t.id || genId()) + '-oof-' + genId().slice(0, 8) + '@prepro',
         subject: subjectSelf, start: startDate, end: endDate,
-        busy: 'OOF', requestResponses: true, attendees: ptoAttendees, body: oofBody
+        busy: 'OOF', method: 'PUBLISH', requestResponses: false, body: oofBody
       });
       downloadICS(ics, ((subjectSelf.replace(/[^a-z0-9]/gi, '_')) || 'pto') + '_OOF.ics');
     });
@@ -6045,17 +6047,13 @@ function renderPtoInvitesPanel(content, proj) {
     btn2.title = 'Invites ' + teamEmails.map(r => r.email).join(', ');
     btn2.addEventListener('click', () => {
       const teamSubject = ptoOnSubject(people);
-      // Organizer = the person on PTO (there's normally just the one). Falls back
-      // to no organizer if that person has no email on file.
-      const organizerPerson = people[0];
-      const organizerEmail = organizerPerson && getPersonEmail(organizerPerson);
-      const organizer = (organizerEmail && organizerEmail.includes('@'))
-        ? { name: organizerPerson, email: organizerEmail } : null;
+      // No organizer — whoever opens this becomes it. Meant to be the person on
+      // PTO, so the team sees the notice come from them.
       const ics = buildPtoICS({
-        uid: (t.id || genId()) + '-team@prepro',
+        uid: (t.id || genId()) + '-team-' + genId().slice(0, 8) + '@prepro', // fresh per download; see OOF note
         subject: teamSubject, start: startDate, end: endDate,
         busy: 'FREE', requestResponses: false,
-        attendees: teamEmails, organizer
+        attendees: teamEmails
       });
       downloadICS(ics, teamSubject.replace(/[^a-z0-9]/gi, '_') + '.ics');
     });
