@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260728b';
+window.PREPRO_BUILD = '20260728c';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,9 +29,9 @@ window.PREPRO_BUILD = '20260728b';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260728b"></script>
+<script type="module" src="./auth.js?v=20260728c"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260728b"></script>
+<script src="./xlsx.full.min.js?v=20260728c"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -5982,10 +5982,10 @@ function renderPtoInvitesPanel(content, proj) {
   note.innerHTML =
     'Two files per PTO entry. Each downloads an <b>.ics</b> with the status, reminder, and responses already set.' +
     '<div style="margin:7px 0;padding:6px 8px;border-radius:6px;background:var(--warn-bg,rgba(230,160,30,.14));border:1px solid var(--warn,rgba(230,160,30,.5));color:var(--text);">' +
-    '⚠️ <b>Each person downloads and opens their own files.</b> The team invite is stamped with their address as ' +
-    'organizer, so opening someone else\'s on your calendar leaves it stuck on "Waiting to sync."</div>' +
-    '<div style="margin:0 0 3px;">• <b>Out of Office</b>: all-day, <b>Show As → Out of Office</b>, reminder off. A personal calendar block — no invite is sent.</div>' +
-    '<div style="margin:0;">• <b>Notify Team</b>: all-day <b>Free</b>, reminder off, responses off, addressed to the video team. <b>Press Edit → Send in Outlook</b> or nobody is notified.</div>';
+    '⚠️ <b>Each person downloads and opens their own files.</b> Both open as your own appointment, ' +
+    'already filled in — you just send the team one.</div>' +
+    '<div style="margin:0 0 3px;">• <b>Out of Office</b>: all-day, <b>Show As → Out of Office</b>, reminder off. A personal calendar block — nothing is sent.</div>' +
+    '<div style="margin:0;">• <b>Notify Team</b>: all-day <b>Free</b>, reminder off, responses off. <b>Press Invite Attendees, then Send</b> — the addresses are in the body to paste if the To line is empty.</div>';
   content.appendChild(note);
 
   const teamEmails = [
@@ -6000,15 +6000,9 @@ function renderPtoInvitesPanel(content, proj) {
     const subjectSelf = t.taskName || 'PTO';
     const startDate = t.date, endDate = t.endDate || t.date;
 
-    // Organizer for the team invite = the person on the PTO who is opening this
-    // file. On a shared entry, prefer whoever is starred as "me" on the dash
-    // (localStorage dash_me) so each person's download is stamped with their own
-    // address; fall back to the first name listed. Null if no email on file.
-    const starredMe = localStorage.getItem('dash_me');
-    const organizerPerson = (starredMe && people.includes(starredMe)) ? starredMe : people[0];
-    const organizerEmail = organizerPerson && getPersonEmail(organizerPerson);
-    const ptoOrganizer = (organizerEmail && organizerEmail.includes('@'))
-      ? { name: organizerPerson, email: organizerEmail } : null;
+    // No ORGANIZER on either file — both are METHOD:PUBLISH and Outlook assigns
+    // the organizer from the mailbox that opens them. Nothing here depends on
+    // who is starred on the dash.
 
     const row = document.createElement('div');
     row.className = 'invite-row';
@@ -6063,23 +6057,27 @@ function renderPtoInvitesPanel(content, proj) {
     btn2.className = 'btn btn-ghost';
     btn2.style.flexShrink = '0';
     btn2.textContent = '👥 Notify Team';
-    if (!ptoOrganizer) {
-      btn2.disabled = true;
-      btn2.title = 'No email on ' + (organizerPerson || 'this person') +
-        ' — add one in People. A team invite needs an organizer address or Outlook blocks the file.';
-    } else {
-      btn2.title = 'Opened by ' + ptoOrganizer.name + '. Invites ' + teamEmails.map(r => r.email).join(', ');
-    }
+    btn2.title = 'Opens as an appointment — press Invite Attendees, then Send. Goes to ' +
+      teamEmails.map(r => r.email).join(', ');
     btn2.addEventListener('click', () => {
       const teamSubject = ptoOnSubject(people);
-      // Organizer = the person on PTO, who is also the one opening this file.
-      // METHOD:REQUEST is invalid without it and gets blocked by mail policy,
-      // so bail rather than ship a file that cannot open.
+      // METHOD:PUBLISH, mirroring the OOF file that imports and sticks.
+      // A REQUEST is meant to ARRIVE as an emailed invitation; opening one from
+      // disk creates a meeting the server has no sent item for, so Exchange
+      // sweeps the orphan — the "adds itself, then disappears" symptom. As a
+      // published appointment it is simply the opener's own event; they press
+      // Invite Attendees → Send and Outlook issues the real invitation then.
+      // No ORGANIZER, for the same reason the OOF file has none.
+      // Outlook does not reliably carry ATTENDEE lines from a PUBLISH file into
+      // the To field, so the addresses are repeated in the body to paste.
+      const teamList = teamEmails.map(r => r.email).join('; ');
+      const teamBody = 'Send this to: ' + teamList +
+        '\n\n(Press Invite Attendees, paste the addresses above into To, then Send.)';
       const ics = buildPtoICS({
         uid: (t.id || genId()) + '-team-' + genId().slice(0, 8) + '@prepro', // fresh per download; see OOF note
         subject: teamSubject, start: startDate, end: endDate,
-        busy: 'FREE', requestResponses: false,
-        attendees: teamEmails, organizer: ptoOrganizer
+        busy: 'FREE', method: 'PUBLISH', requestResponses: false,
+        attendees: teamEmails, body: teamBody
       });
       downloadICS(ics, teamSubject.replace(/[^a-z0-9]/gi, '_') + '.ics');
     });
