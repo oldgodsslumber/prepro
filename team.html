@@ -52,6 +52,18 @@ input  { font: inherit; }
   --cat-external: #e07b39;
   --cat-vendor:   #7c5cbf;
   --cat-other:    #4cba6a;
+  /* Key dates (Project Due Date / Milestone / Delivery / PTO) — the one chip
+     family with no per-task colour, so it has to follow the theme itself. */
+  --dd-bg:        #3a3a52;
+  --dd-bg-hi:     #4a4a66;
+  --dd-edge:      #8080a0;
+  --dd-border:    #606080;
+  --dd-badge:     #444;
+  --dd-ink-soft:  rgba(255,255,255,.9);
+  --dd-hint:      rgba(200,200,220,.6);
+  /* Selection glow — reads against the page, not against the chip fill. */
+  --sel-ring:     rgba(255,255,255,.9);
+  --sel-glow:     rgba(255,255,255,.3);
 }
 
 /* ── LIGHT THEME ── */
@@ -63,6 +75,15 @@ input  { font: inherit; }
   --text:    #1b1c26;
   --dim:     #61637a;
   --accent:  #5a51e6;
+  --dd-bg:        #dfe3f2;
+  --dd-bg-hi:     #ccd2e8;
+  --dd-edge:      #7b81a3;
+  --dd-border:    #a9afc8;
+  --dd-badge:     #5a5f7d;
+  --dd-ink-soft:  rgba(27,28,38,.75);
+  --dd-hint:      rgba(27,28,38,.55);
+  --sel-ring:     rgba(30,30,54,.85);
+  --sel-glow:     rgba(30,30,54,.22);
 }
 
 /* ── THEME TOGGLE BUTTON ── */
@@ -272,28 +293,28 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 .role-chip { padding: 0 11px; height: 26px; display: inline-flex; align-items: center; border-radius: 12px; font-size: 11px; font-weight: 600; color: #fff; cursor: grab; user-select: none; white-space: nowrap; transition: opacity .1s, transform .1s; border: 1.5px solid transparent; box-sizing: border-box; }
 .role-chip:hover { opacity: .9; transform: translateY(-1px); }
 .role-chip:active { cursor: grabbing; transform: scale(.97); }
-.chip-duedate { background: #3a3a52 !important; color: var(--text) !important; border: 1.5px solid #606080; }
+.chip-duedate { background: var(--dd-bg) !important; color: var(--text) !important; border: 1.5px solid var(--dd-border); }
 .chip-person  { border: 1.5px dashed rgba(255,255,255,.45); opacity: .92; position: relative; }
 .chip-person::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.7); margin-right: 5px; vertical-align: middle; }
-.duedate-marker { background: #3a3a52; color: var(--text); border-radius: 4px; padding: 4px 17px; font-size: 11px; font-weight: 700; cursor: grab; user-select: none; flex-shrink: 0; border-left: 3px solid #8080a0; transition: opacity .12s; display: flex; flex-direction: column; justify-content: center; gap: 2px; position: relative; box-sizing: border-box; min-height: 30px; }
+.duedate-marker { background: var(--dd-bg); color: var(--text); border-radius: 4px; padding: 4px 17px; font-size: 11px; font-weight: 700; cursor: grab; user-select: none; flex-shrink: 0; border-left: 3px solid var(--dd-edge); transition: opacity .12s; display: flex; flex-direction: column; justify-content: center; gap: 2px; position: relative; box-sizing: border-box; min-height: 30px; }
 .duedate-marker:hover { opacity: .85; }
 /* Multi-day start: match the continuation bars' top/bottom border so the whole
    span reads as one continuous outline (day 1 was previously borderless on
    top/bottom, leaving a seam against the bordered continuation days). */
-.duedate-marker.duedate-multi-start { border-radius: 4px 0 0 4px; border-top: 1.5px solid #8080a0; border-bottom: 1.5px solid #8080a0; border-right: none; margin-right: -7px; z-index: 1; }
+.duedate-marker.duedate-multi-start { border-radius: 4px 0 0 4px; border-top: 1.5px solid var(--dd-edge); border-bottom: 1.5px solid var(--dd-edge); border-right: none; margin-right: -7px; z-index: 1; }
 .duedate-marker .chip-handle-l,
 .duedate-marker .chip-handle-r { top: 50%; transform: translateY(-50%); }
 .duedate-marker:hover .chip-handle-l,
-.duedate-marker:hover .chip-handle-r { color: rgba(255,255,255,.9); }
+.duedate-marker:hover .chip-handle-r { color: var(--dd-ink-soft); }
 .duedate-hd { font-weight: 700; white-space: nowrap; }
 .duedate-marker.drag-accepting { outline: 2px solid rgba(128,128,160,.5); outline-offset: -1px; }
 .duedate-marker.drag-accepting .review-drop-hint { display: block; }
-.duedate-marker .review-drop-hint { color: rgba(200,200,220,.6); }
+.duedate-marker .review-drop-hint { color: var(--dd-hint); }
 /* continuation bars for multi-day key dates — full height */
-.duedate-bar { flex-shrink: 0; position: relative; cursor: pointer; background: #3a3a52; border: 1.5px solid #8080a0; border-left: none; font-size: 0; display: flex; align-items: center; min-height: 30px; box-sizing: border-box; }
+.duedate-bar { flex-shrink: 0; position: relative; cursor: pointer; background: var(--dd-bg); border: 1.5px solid var(--dd-edge); border-left: none; font-size: 0; display: flex; align-items: center; min-height: 30px; box-sizing: border-box; }
 .duedate-bar-mid { border-radius: 0; border-right: none; margin-left: -5px; margin-right: -6px; }
 .duedate-bar-end { border-radius: 0 4px 4px 0; margin-left: -5px; padding-right: 17px; }
-.duedate-bar.drag-accepting { background: #4a4a66; outline: 2px solid rgba(128,128,160,.6); outline-offset: -1px; }
+.duedate-bar.drag-accepting { background: var(--dd-bg-hi); outline: 2px solid rgba(128,128,160,.6); outline-offset: -1px; }
 
 /* ── CALENDAR WRAPPER ── */
 .cal-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 12px 14px 0; min-height: 0; }
@@ -334,19 +355,19 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 .task-chip.chip-solo.task-selected,
 .review-block.task-selected,
 .role-block.task-selected,
-.duedate-marker.task-selected { box-shadow: 0 0 0 2px rgba(255,255,255,.9), 0 0 8px 3px rgba(255,255,255,.3); }
+.duedate-marker.task-selected { box-shadow: 0 0 0 2px var(--sel-ring), 0 0 8px 3px var(--sel-glow); }
 /* Start: left + top + bottom only (no right — abuts the mid chip) */
-.task-chip.chip-start.task-selected { box-shadow: -2px 0 0 0 rgba(255,255,255,.9), 0 -2px 0 0 rgba(255,255,255,.9), 0 2px 0 0 rgba(255,255,255,.9), 0 0 8px 3px rgba(255,255,255,.3); }
+.task-chip.chip-start.task-selected { box-shadow: -2px 0 0 0 var(--sel-ring), 0 -2px 0 0 var(--sel-ring), 0 2px 0 0 var(--sel-ring), 0 0 8px 3px var(--sel-glow); }
 /* Mid: top + bottom only */
 .task-chip.chip-mid.task-selected,
 .review-bar-mid.task-selected,
 .role-bar-mid.task-selected,
-.duedate-bar-mid.task-selected { box-shadow: 0 -2px 0 0 rgba(255,255,255,.9), 0 2px 0 0 rgba(255,255,255,.9), 0 0 8px 3px rgba(255,255,255,.3); }
+.duedate-bar-mid.task-selected { box-shadow: 0 -2px 0 0 var(--sel-ring), 0 2px 0 0 var(--sel-ring), 0 0 8px 3px var(--sel-glow); }
 /* End: right + top + bottom only (no left — abuts the mid chip) */
 .task-chip.chip-end.task-selected,
 .review-bar-end.task-selected,
 .role-bar-end.task-selected,
-.duedate-bar-end.task-selected { box-shadow: 2px 0 0 0 rgba(255,255,255,.9), 0 -2px 0 0 rgba(255,255,255,.9), 0 2px 0 0 rgba(255,255,255,.9), 0 0 8px 3px rgba(255,255,255,.3); }
+.duedate-bar-end.task-selected { box-shadow: 2px 0 0 0 var(--sel-ring), 0 -2px 0 0 var(--sel-ring), 0 2px 0 0 var(--sel-ring), 0 0 8px 3px var(--sel-glow); }
 
 /* solo = single day: left handle + text + right handle */
 .task-chip.chip-solo  { border-radius: 4px; padding-left: 17px; padding-right: 17px; }
@@ -447,8 +468,8 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 .role-bar.seg-row-start { border-left-width: 1.5px; border-left-style: solid; border-top-left-radius: 5px; border-bottom-left-radius: 5px; margin-left: 0; }
 
 .duedate-marker.seg-row-end,
-.duedate-bar.seg-row-end   { border-right: 1.5px solid #8080a0; border-top-right-radius: 4px; border-bottom-right-radius: 4px; margin-right: 0; }
-.duedate-bar.seg-row-start { border-left: 1.5px solid #8080a0; border-top-left-radius: 4px; border-bottom-left-radius: 4px; margin-left: 0; }
+.duedate-bar.seg-row-end   { border-right: 1.5px solid var(--dd-edge); border-top-right-radius: 4px; border-bottom-right-radius: 4px; margin-right: 0; }
+.duedate-bar.seg-row-start { border-left: 1.5px solid var(--dd-edge); border-top-left-radius: 4px; border-bottom-left-radius: 4px; margin-left: 0; }
 
 /* ── EMPTY STATE ── */
 .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 8px; color: var(--dim); text-align: center; }
@@ -554,6 +575,13 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 .pi-label { color: var(--dim); font-weight: 600; }
 .pi-value { color: var(--text); word-break: break-word; white-space: pre-wrap; }
 .pi-value a { color: var(--accent); text-decoration: none; }
+/* Notes folded into the Info panel: the panel itself is the scroller, so the feed
+   grows naturally instead of becoming a second nested scroll area. The compose
+   bar sticks to the top so it stays reachable past a long run of ticket rows. */
+.project-info .pi-grid { flex: 0 0 auto; }
+.project-info .notes-add-bar { position: sticky; top: 0; z-index: 2; background: var(--panel); padding: 8px 2px; border-top: 1px solid var(--border); }
+.project-info .notes-compose { padding: 10px 2px; }
+.project-info .notes-feed { flex: 0 0 auto; overflow: visible; }
 .pi-value a:hover { text-decoration: underline; }
 .pi-divider { height: 1px; background: var(--border); margin: 12px 0 2px; }
 .pi-empty { color: var(--dim); font-style: italic; padding: 14px 2px; font-size: 12px; }
@@ -872,7 +900,6 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
     <div class="tools-rail-tab" data-tab="table"><span class="tr-icon">📊</span>Table</div>
     <div class="tools-rail-tab" data-tab="png"><span class="tr-icon">🖼️</span>PNG</div>
     <div class="tools-rail-tab" data-tab="invites-web"><span class="tr-icon">📅</span>Invites</div>
-    <div class="tools-rail-tab" data-tab="notes"><span class="tr-icon">📝</span>Notes</div>
     <div class="tools-rail-tab" data-tab="cea"><span class="tr-icon">🔗</span>CEA</div>
     <!-- Bottom-docked actions: Settings sits above the admin button -->
     <div class="tools-rail-foot">
@@ -1047,7 +1074,9 @@ function saveExpandedIds() {
 let dragPayload     = null;
 let panelContext    = null;
 let exportTabActive  = localStorage.getItem('prepro_export_tab') || 'projectinfo';
-const TAB_TITLES = { projectinfo: 'Project Info', roster: 'Role Assignees', text: 'Text Export', table: 'Table / Excel', png: 'PNG Export', 'invites-web': 'Meeting Invites', notes: 'Notes', cea: 'CEA' };
+// 'notes' is no longer its own tab — the feed lives inside Project Info. Anyone
+// whose localStorage still points at it falls through to projectinfo below.
+const TAB_TITLES = { projectinfo: 'Project Info & Notes', roster: 'Role Assignees', text: 'Text Export', table: 'Table / Excel', png: 'PNG Export', 'invites-web': 'Meeting Invites', cea: 'CEA' };
 // Normalize any stale/removed tab id from localStorage (e.g. the old Trello tab).
 if (!TAB_TITLES[exportTabActive]) exportTabActive = 'projectinfo';
 let exportOpen       = false;
@@ -4211,7 +4240,7 @@ function buildDueDateMarker(task, dateStr) {
   const mLabel = mType === 'milestone' ? 'Milestone' : mType === 'delivery' ? 'Delivery' : mType === 'pto' ? 'PTO' : 'Project Due Date';
   const badge = document.createElement('span');
   badge.className = 'review-badge';
-  badge.style.cssText = 'background:#444;cursor:pointer;';
+  badge.style.cssText = 'background:var(--dd-badge);cursor:pointer;';
   badge.textContent = mEmoji + ' ' + (mType === 'due-date' ? 'Key Date' : mLabel);
   badge.title = 'Click to change type';
   badge.addEventListener('click', e => { e.stopPropagation(); openTypeSwitcher(e, task.id, mLabel); });
@@ -4957,7 +4986,7 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     panelContext = { mode: 'edit-duedate', taskId };
     const badge2 = document.getElementById('panelRoleBadge');
     badge2.textContent      = mEmoji2;
-    badge2.style.background = '#444';
+    badge2.style.background = 'var(--dd-badge)';
     badge2.style.cursor     = 'pointer';
     badge2.title            = 'Click to change type';
     badge2.onclick          = e => { closePanel(); openTypeSwitcher(e, taskId, mLabel2); };
@@ -6450,7 +6479,7 @@ function openCEAVideo(proj) {
   window.open(ceaVideoUrl(proj), '_blank');
 }
 
-// First tab: the key ticket data (top) merged with Role Assignees (bottom).
+// First tab: the key ticket data (top) with the project's notes feed (bottom).
 function renderProjectInfo() {
   const content = document.getElementById('exportContent');
   if (!content) return;
@@ -6530,6 +6559,14 @@ function renderProjectInfo() {
     grid.appendChild(e);
   }
   wrap.appendChild(grid);
+
+  // ── Notes ── (folded in from the old standalone Notes tab, so the ticket data
+  // and the running commentary on it read as one page instead of two)
+  const t2 = document.createElement('div');
+  t2.className = 'pi-section-title';
+  t2.textContent = 'Notes';
+  wrap.appendChild(t2);
+  renderNotesTab(wrap);
 
   content.appendChild(wrap);
 }
@@ -6620,10 +6657,6 @@ function renderExportPanel() {
 
   } else if (exportTabActive === 'invites-web') {
     renderInvitesWebPanel();
-    return;
-
-  } else if (exportTabActive === 'notes') {
-    renderNotesTab(content);
     return;
 
   } else {
