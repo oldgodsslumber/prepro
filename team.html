@@ -685,6 +685,11 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 .note-editor-person span { font-size: 9px; font-weight: 700; color: var(--dim); letter-spacing: .06em; text-transform: uppercase; }
 .note-editor-person input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; color: var(--text); padding: 4px 8px; font: inherit; font-size: 12px; outline: none; box-sizing: border-box; }
 .note-editor-person input:focus { border-color: var(--accent); }
+.note-editor-when { display: flex; align-items: center; gap: 6px; }
+.note-editor-when span { font-size: 9px; font-weight: 700; color: var(--dim); letter-spacing: .06em; text-transform: uppercase; }
+.note-editor-when input { background: var(--bg); border: 1px solid var(--border); border-radius: 5px; color: var(--text); padding: 4px 8px; font: inherit; font-size: 12px; outline: none; box-sizing: border-box; }
+.note-editor-when input[type="date"] { flex: 1; min-width: 0; }
+.note-editor-when input:focus { border-color: var(--accent); }
 .note-editor-actions { display: flex; gap: 6px; }
 
 /* ── UTIL ── */
@@ -2972,8 +2977,12 @@ function deleteNote(projectId, noteId) {
   if (exportOpen) renderExportPanel();
 }
 
-// Edit an existing note's body and/or author. Only the fields provided in
-// `changes` are touched; the note keeps its original date/time and type.
+// Edit an existing note's body, author, and/or timestamp. Only the fields
+// provided in `changes` are touched; the note keeps its type. The date/time can
+// be rewritten so a note can be applied retroactively — but they're strictly
+// format-validated first (ISO YYYY-MM-DD and HH:MM), because ops.html/dash.html
+// parse and sort on those exact string shapes. An empty/malformed value is
+// ignored rather than blanking the field.
 function editNote(projectId, noteId, changes) {
   const proj = getProject(projectId);
   if (!proj || !proj.notes) return;
@@ -2981,6 +2990,8 @@ function editNote(projectId, noteId, changes) {
   if (!note) return;
   if (typeof changes.body === 'string') note.body = changes.body;
   if (typeof changes.person === 'string') note.person = changes.person || 'Team';
+  if (typeof changes.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(changes.date)) note.date = changes.date;
+  if (typeof changes.time === 'string' && /^\d{2}:\d{2}$/.test(changes.time)) note.time = changes.time;
   saveState();
   if (exportOpen) renderExportPanel();
 }
@@ -6255,7 +6266,12 @@ function renderNotesTab(container) {
   if (!proj.notes.length) {
     feed.innerHTML = '<div class="notes-empty">No notes yet. Add one above.</div>';
   } else {
-    [...proj.notes].reverse().forEach(note => {
+    // Newest first, sorted by the note's own timestamp (not add-order) so a
+    // backdated note lands at its correct chronological spot. ISO date + HH:MM
+    // are lexicographically ordered, so a string compare is correct.
+    [...proj.notes]
+      .sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')))
+      .forEach(note => {
       const card = document.createElement('div');
       card.className = 'note-card ' + note.type;
 
@@ -6349,6 +6365,24 @@ function showNoteEdit(card, bodyEl, note) {
   personRow.appendChild(personInput);
   editor.appendChild(personRow);
 
+  // When — lets a note be backdated (retroactively applied). Prefilled from the
+  // note's stored ISO date + HH:MM time, which are exactly the value formats the
+  // native date/time inputs expect, so no conversion is needed either way.
+  const whenRow = document.createElement('div');
+  whenRow.className = 'note-editor-when';
+  const whenLbl = document.createElement('span');
+  whenLbl.textContent = 'When';
+  const dateInput = document.createElement('input');
+  dateInput.type = 'date';
+  dateInput.value = note.date || '';
+  const timeInput = document.createElement('input');
+  timeInput.type = 'time';
+  timeInput.value = note.time || '';
+  whenRow.appendChild(whenLbl);
+  whenRow.appendChild(dateInput);
+  whenRow.appendChild(timeInput);
+  editor.appendChild(whenRow);
+
   const actions = document.createElement('div');
   actions.className = 'note-editor-actions';
 
@@ -6358,7 +6392,12 @@ function showNoteEdit(card, bodyEl, note) {
   save.style.fontSize = '11px';
   save.addEventListener('click', () => {
     if (!textarea.value.trim()) return;
-    editNote(activeProjectId, note.id, { body: textarea.value.trim(), person: personInput.value.trim() });
+    editNote(activeProjectId, note.id, {
+      body: textarea.value.trim(),
+      person: personInput.value.trim(),
+      date: dateInput.value,   // "" if cleared → editNote ignores it
+      time: timeInput.value
+    });
   });
 
   const cancel = document.createElement('button');
