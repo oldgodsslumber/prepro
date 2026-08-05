@@ -777,14 +777,6 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
           <button class="proj-filter-clear" id="projFilterClear" title="Clear all filters">✕</button>
         </div>
         <div class="proj-filter-row">
-          <select id="projFilterStatus" class="proj-filter-select" title="Filter by project status">
-            <option value="all">All statuses</option>
-            <option value="active">Active</option>
-            <option value="completed">Completed</option>
-            <option value="onhold">On Hold</option>
-            <option value="cancelled">Cancelled</option>
-            <option value="draft">Draft</option>
-          </select>
           <label class="proj-filter-check" title="Show only projects where the filtered person is the lead producer">
             <input type="checkbox" id="projFilterLeadOnly"> Lead only
           </label>
@@ -811,7 +803,7 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 
     <!-- ROLE PALETTE -->
     <div class="palette" id="palette">
-      <span class="htip" style="margin-left:6px;">?<span class="htip-popup">Drag any role chip onto a calendar day to create a task. Red chips (Review, Studio Shoot, On-Location Shoot) create multi-day event blocks. Drop more chips onto a red block to add attendees.</span></span>
+      <span class="htip" style="margin-left:6px;">?<span class="htip-popup">Drag any role chip onto a calendar day to create a task. Red chips (Meeting, Studio Shoot, On-Location Shoot, Studio Work) create multi-day event blocks. Drop more chips onto a red block to add attendees.</span></span>
     </div>
 
     <!-- CALENDAR -->
@@ -979,7 +971,7 @@ const TASK_SUGGESTIONS = {
 };
 const REVIEW_SUGGESTIONS = {
   'Review':            ['Internal Review', 'Client Review', 'Round 1', 'Round 2', 'Final Review'],
-  'Meeting':           ['Kickoff', 'Status Update', 'Brainstorm', 'Planning', 'Check-in'],
+  'Meeting':           ['Discovery', 'Status Update', 'Brainstorm', 'Planning', 'Check-in'],
   'Studio Shoot':      ['Studio Shoot', 'B-Roll', 'Interviews', 'Reshoot'],
   'On-Location Shoot': ['On-Location Shoot', 'B-Roll', 'Interviews', 'Reshoot'],
   'Studio Work':       ['Studio Work', 'Set Build', 'Set Strike', 'Maintenance', 'Prep']
@@ -1052,16 +1044,15 @@ let viewStart       = null; // YYYY-MM-DD of first visible day
 // only those where they are the lead producer). Persisted across reloads.
 let filterPerson   = (() => { try { return localStorage.getItem('prepro_filter_person') || ''; } catch(_) { return ''; } })();
 let filterLeadOnly = (() => { try { return localStorage.getItem('prepro_filter_leadonly') === '1'; } catch(_) { return false; } })();
-// Free-text search across project fields, and a categorical status filter. All
-// active filters combine with AND. Persisted across reloads like the others.
+// Free-text search across project fields. All active filters combine with AND.
+// Persisted across reloads like the others. (The old status filter was dropped —
+// projects already sort into their own status sections, so it was redundant.)
 let filterText     = (() => { try { return localStorage.getItem('prepro_filter_text') || ''; } catch(_) { return ''; } })();
-let filterStatus   = (() => { try { return localStorage.getItem('prepro_filter_status') || 'all'; } catch(_) { return 'all'; } })();
 function saveFilter() {
   try {
     localStorage.setItem('prepro_filter_person', filterPerson);
     localStorage.setItem('prepro_filter_leadonly', filterLeadOnly ? '1' : '0');
     localStorage.setItem('prepro_filter_text', filterText);
-    localStorage.setItem('prepro_filter_status', filterStatus);
   } catch(_) {}
 }
 let expandedIds     = (() => {
@@ -1080,7 +1071,6 @@ const TAB_TITLES = { projectinfo: 'Project Info & Notes', roster: 'Role Assignee
 // Normalize any stale/removed tab id from localStorage (e.g. the old Trello tab).
 if (!TAB_TITLES[exportTabActive]) exportTabActive = 'projectinfo';
 let exportOpen       = false;
-let exportOptBold       = true;
 let exportOptRoles      = false;
 let exportOptAlign      = true;
 let exportOptDueDate    = true;
@@ -2148,12 +2138,10 @@ function wireSettingsModal() {
   const filterLeadCb   = document.getElementById('projFilterLeadOnly');
   const filterClearBtn = document.getElementById('projFilterClear');
   const filterSearch   = document.getElementById('projFilterSearch');
-  const filterStatusEl = document.getElementById('projFilterStatus');
   const filterClearAll = document.getElementById('projFilterClearAll');
   if (filterInput)    filterInput.value = filterPerson;
   if (filterLeadCb)   filterLeadCb.checked = filterLeadOnly;
   if (filterSearch)   filterSearch.value = filterText;
-  if (filterStatusEl) filterStatusEl.value = filterStatus;
   if (filterInput) filterInput.addEventListener('input', () => {
     filterPerson = filterInput.value;
     saveFilter();
@@ -2161,11 +2149,6 @@ function wireSettingsModal() {
   });
   if (filterSearch) filterSearch.addEventListener('input', () => {
     filterText = filterSearch.value;
-    saveFilter();
-    renderSidebar();
-  });
-  if (filterStatusEl) filterStatusEl.addEventListener('change', () => {
-    filterStatus = filterStatusEl.value || 'all';
     saveFilter();
     renderSidebar();
   });
@@ -3029,7 +3012,7 @@ function isPersonOnProject(proj, name) {
 // Is any filter currently narrowing the sidebar? Drives the count label + the
 // visibility of the "Clear filters" control.
 function anyFilterActive() {
-  return !!(filterPerson.trim() || filterText.trim() || (filterStatus && filterStatus !== 'all') || filterLeadOnly);
+  return !!(filterPerson.trim() || filterText.trim() || filterLeadOnly);
 }
 // Fields on a project that free-text search should look through. Everything is
 // coerced to a string so missing/empty/non-string values never throw.
@@ -3068,8 +3051,6 @@ function projectMatchesFilter(proj) {
     // "Lead only" with no person named → keep only projects that have a lead.
     if (!getMostUsedProducer(proj)) return false;
   }
-  // Status filter.
-  if (filterStatus && filterStatus !== 'all' && projStatus(proj) !== filterStatus) return false;
   // Free-text search across project fields + people + notes.
   const text = filterText.trim().toLowerCase();
   if (text) {
@@ -3084,15 +3065,12 @@ function clearAllFilters() {
   filterPerson = '';
   filterLeadOnly = false;
   filterText = '';
-  filterStatus = 'all';
   const nameEl   = document.getElementById('projFilterName');
   const leadEl   = document.getElementById('projFilterLeadOnly');
   const searchEl = document.getElementById('projFilterSearch');
-  const statusEl = document.getElementById('projFilterStatus');
   if (nameEl)   nameEl.value = '';
   if (leadEl)   leadEl.checked = false;
   if (searchEl) searchEl.value = '';
-  if (statusEl) statusEl.value = 'all';
   saveFilter();
   renderSidebar();
 }
@@ -3149,7 +3127,8 @@ function renderStatusSection(status, sectionId, treeId, countId) {
   const list = state.projects.filter(p =>
     projStatus(p) === status &&
     (!p.parentId || !isEffectivelyInactive(p.parentId)) &&
-    projectMatchesFilter(p));
+    projectMatchesFilter(p))
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
   const section = document.getElementById(sectionId);
   const tree    = document.getElementById(treeId);
   const count   = document.getElementById(countId);
@@ -3184,7 +3163,10 @@ function renderStatusSection(status, sectionId, treeId, countId) {
 }
 
 function renderTreeLevel(parentId, depth, container) {
-  getChildren(parentId).filter(p => !isEffectivelyCompleted(p.id) && subtreeMatchesFilter(p)).forEach(proj => {
+  getChildren(parentId)
+    .filter(p => !isEffectivelyCompleted(p.id) && subtreeMatchesFilter(p))
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }))
+    .forEach(proj => {
     const hasKids     = getChildren(proj.id).length > 0;
     const isCollapsed = !expandedIds.has(proj.id);
 
@@ -3472,7 +3454,11 @@ function renderPalette() {
   revLbl.className = 'pal-label';
   revLbl.textContent = 'Meeting';
   revGrp.appendChild(revLbl);
-  ['Review', 'Meeting', 'Studio Shoot', 'On-Location Shoot'].forEach(label => {
+  // Review is sunset — the Meeting chip covers the same ground, so it's no
+  // longer offered here (existing Review tasks still render fine). Studio Work
+  // used to live only in the Administrative palette; it's copied in here too so
+  // studio work can be logged against a single project when that's the reality.
+  ['Meeting', 'Studio Shoot', 'On-Location Shoot', 'Studio Work'].forEach(label => {
     const chip = document.createElement('div');
     chip.className = 'role-chip';
     chip.draggable = true;
@@ -5193,9 +5179,12 @@ function closeContextMenu() { document.getElementById('ctxMenu').classList.add('
 
 // ── TYPE SWITCHER ──
 const TYPE_SWITCHER_DEFS = [
-  { label: 'Review',            dot: '#c0394f' },
+  // 'Review' is sunset — not offered as a conversion target anymore. Existing
+  // review tasks still display and can be switched to one of these.
+  { label: 'Meeting',           dot: '#c0394f' },
   { label: 'Studio Shoot',      dot: '#c0394f' },
   { label: 'On-Location Shoot', dot: '#c0394f' },
+  { label: 'Studio Work',       dot: '#c0394f' },
   { sep: true },
   { label: 'Project Due Date',  dot: '#555' },
   { label: 'Milestone',         dot: '#555' },
@@ -5233,7 +5222,7 @@ function convertTask(taskId, newType) {
   if (!proj) return;
   const task = proj.tasks.find(t => t.id === taskId);
   if (!task) return;
-  const REVIEW_TYPES = ['Review', 'Studio Shoot', 'On-Location Shoot'];
+  const REVIEW_TYPES = ['Review', 'Meeting', 'Studio Shoot', 'On-Location Shoot', 'Studio Work'];
   if (REVIEW_TYPES.includes(newType)) {
     task.isReview     = true;
     task.isDueDate    = false;
@@ -5368,72 +5357,72 @@ function buildHTMLExport() {
 
   const allForDates = [...sorted, ...dueTasks].sort((a, b) => a.date.localeCompare(b.date));
   const rawDates = allForDates.map(t => fmtDateRange(t));
-  const maxLen   = exportOptAlign && rawDates.length ? Math.max(...rawDates.map(s => s.length)) : 0;
   const sep = '  \u2014  ';
 
-  // HTML alignment: wrap date in inline-block of fixed ch-width so the
-  // separator column lines up regardless of date string length (Open Sans
-  // is proportional, so space-padding alone won't align). tabular-nums on
-  // the container keeps digits uniform-width.
-  const dateColCh = maxLen;
-  const indentColCh = maxLen + sep.length;
-  const fmtHtml = raw => {
-    const inner = exportOptBold ? `<strong>${escHtml(raw)}</strong>` : escHtml(raw);
-    return exportOptAlign
-      ? `<span style="display:inline-block;min-width:${dateColCh}ch">${inner}</span>`
-      : inner;
-  };
-  const htmlIndent = exportOptAlign
-    ? `<span style="display:inline-block;min-width:${indentColCh}ch"></span>`
-    : escHtml('    ');
-
-  // Plain-text alignment: best-effort space-padding. Only reliable in a
-  // monospace reader, but harmless elsewhere.
-  const fmtPlain = raw => {
-    const padded = exportOptAlign ? raw.padEnd(maxLen) : raw;
-    return exportOptBold ? `**${raw}**${' '.repeat(Math.max(0, maxLen - raw.length))}` : padded;
-  };
+  // Plain-text (Slack/Notion) side: best-effort space-padding for alignment.
+  // Only reliable in a monospace reader, but harmless elsewhere.
+  const maxLen   = exportOptAlign && rawDates.length ? Math.max(...rawDates.map(s => s.length)) : 0;
+  const fmtPlain = raw => `**${raw}**${' '.repeat(Math.max(0, maxLen - raw.length))}`;
   const plainIndent = ' '.repeat(exportOptAlign ? maxLen + sep.length : 4);
 
-  const hLines = [], pLines = [];
+  // HTML side is a table, NOT a <pre>. Outlook/Word (and PowerPoint) run every
+  // paste through Word's HTML engine, which ignores `ch` units and inline-block,
+  // so the old <pre>+inline-block-span layout wrapped each header onto two rows
+  // and its line-height:1.7 read as double-spacing. A borderless table gives
+  // Outlook a real column to align the (nowrap) date against, and keeping each
+  // task's invitees inside the same cell \u2014 one <div> per name at line-height 1.2
+  // \u2014 keeps them single-spaced directly under their chip-type header.
+  const NAME_STYLE = "font-weight:bold;font-size:13px";       // chip/type name: larger + bold
+  const DATE_STYLE = "font-weight:bold;font-size:13px;white-space:nowrap";
+  const rowsHtml = [], pLines = [];
 
   allForDates.forEach((t, i) => {
     const raw   = rawDates[i];
     const label = t.reviewLabel || 'Review';
 
+    // Resolve the header text and the list of people for this task.
+    let headText = '';
+    let people   = [];
     if (t.isDueDate) {
       const mE = t.milestoneType === 'milestone' ? '🎯' : t.milestoneType === 'delivery' ? '📦' : t.milestoneType === 'pto' ? '🏖' : '🏁';
       const mDflt = t.milestoneType === 'milestone' ? 'Milestone' : t.milestoneType === 'delivery' ? 'Delivery' : t.milestoneType === 'pto' ? 'PTO' : 'Project Due Date';
-      const dueLbl = mE + ' ' + (t.taskName || mDflt);
-      hLines.push(`${fmtHtml(raw)}${escHtml(sep)}${escHtml(dueLbl)}`);
-      pLines.push(`${fmtPlain(raw)}${sep}${dueLbl}`);
+      headText = mE + ' ' + (t.taskName || mDflt);
     } else if (t.isReview) {
-      const name = t.taskName || label;
-      hLines.push(`${fmtHtml(raw)}${escHtml(sep)}${escHtml(name)} [${escHtml(label.toUpperCase())}]`);
-      pLines.push(`${fmtPlain(raw)}${sep}${name} [${label.toUpperCase()}]`);
-      if (exportOptAttendees && t.attendees && t.attendees.length) {
-        t.attendees.forEach(a => {
-          const role = exportOptRoles ? ` (${a.role})` : '';
-          hLines.push(`${htmlIndent}\u00b7 ${escHtml(a.person || '')}${escHtml(role)}`);
-          pLines.push(`${plainIndent}\u00b7 ${a.person || ''}${role}`);
-        });
-      }
+      headText = (t.taskName || label) + ' [' + label.toUpperCase() + ']';
+      if (exportOptAttendees && t.attendees) people = t.attendees;
     } else {
-      const taskNm = t.taskName || roleVerb(t.role) || '(untitled)';
-      const ppl    = taskPeople(t);
-      hLines.push(`${fmtHtml(raw)}${escHtml(sep)}${escHtml(taskNm)}`);
-      pLines.push(`${fmtPlain(raw)}${sep}${taskNm}`);
-      if (exportOptAttendees && ppl.length) {
-        ppl.forEach(p => {
-          const role = exportOptRoles ? ` (${p.role})` : '';
-          hLines.push(`${htmlIndent}\u00b7 ${escHtml(p.person || '')}${escHtml(role)}`);
-          pLines.push(`${plainIndent}\u00b7 ${p.person || ''}${role}`);
-        });
-      }
+      headText = t.taskName || roleVerb(t.role) || '(untitled)';
+      if (exportOptAttendees) people = taskPeople(t);
+    }
+
+    // Plain text (unchanged shape: bold date, then · invitee lines).
+    pLines.push(`${fmtPlain(raw)}${sep}${headText}`);
+    people.forEach(p => {
+      const role = exportOptRoles ? ` (${p.role})` : '';
+      pLines.push(`${plainIndent}· ${p.person || ''}${role}`);
+    });
+
+    // HTML: one table row per task; invitees single-spaced inside the cell.
+    const attHtml = people.map(p => {
+      const role = exportOptRoles ? ` (${escHtml(p.role)})` : '';
+      return `<div style="margin:0;line-height:1.2">· ${escHtml(p.person || '')}${role}</div>`;
+    }).join('');
+    const nameHtml = `<div style="margin:0;line-height:1.3"><span style="${NAME_STYLE}">${escHtml(headText)}</span></div>`;
+    if (exportOptAlign) {
+      rowsHtml.push(
+        `<tr><td style="${DATE_STYLE};vertical-align:top;padding:0 16px 10px 0">${escHtml(raw)}</td>`
+        + `<td style="vertical-align:top;padding:0 0 10px 0">${nameHtml}${attHtml}</td></tr>`
+      );
+    } else {
+      rowsHtml.push(
+        `<tr><td style="vertical-align:top;padding:0 0 10px 0">`
+        + `<div style="margin:0;line-height:1.3"><span style="${DATE_STYLE}">${escHtml(raw)}</span>${escHtml(sep)}<span style="${NAME_STYLE}">${escHtml(headText)}</span></div>`
+        + `${attHtml}</td></tr>`
+      );
     }
   });
 
-  const html = `<pre style="font-family:'Open Sans',system-ui,sans-serif;font-variant-numeric:tabular-nums;font-size:12px;line-height:1.7;margin:0">${hLines.join('\n')}</pre>`;
+  const html = `<table cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-family:'Open Sans',system-ui,sans-serif;font-variant-numeric:tabular-nums;font-size:12px;line-height:1.2">${rowsHtml.join('')}</table>`;
   return { html, plain: pLines.join('\n') };
 }
 
@@ -6595,7 +6584,6 @@ function renderExportPanel() {
       el.appendChild(document.createTextNode(lbl));
       opts.appendChild(el);
     };
-    mkOpt('Bold dates',       exportOptBold,       v => { exportOptBold       = v; });
     mkOpt('Include roles',    exportOptRoles,      v => { exportOptRoles      = v; });
     mkOpt('Align tasks',      exportOptAlign,      v => { exportOptAlign      = v; });
     mkOpt('Show due date',    exportOptDueDate,    v => { exportOptDueDate    = v; });
