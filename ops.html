@@ -2161,13 +2161,21 @@ function genId() {
   catch (e) { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 }
 
+// Non-work buckets (PTO / Time Off / Holidays / Administrative) — real projects
+// in the data, but they carry no work notes worth a standup, so the standup
+// panel skips them.
+function isStandupHiddenProject(proj) {
+  const name = (proj && proj.name) || '';
+  return /pto|time\s*off|holiday/i.test(name) || /administrative/i.test(name) || /\badmin\b/i.test(name);
+}
+
 // Active projects a video-team person is attached to — via an internal roster
 // role, or a task (task.person or an Internal Team attendee). Same linkage the
-// getTeamHeadsUp person→projects map uses.
+// getTeamHeadsUp person→projects map uses. Non-work buckets are excluded.
 function standupProjectsFor(person) {
   if (!person) return [];
   return (state.projects || []).filter(p => {
-    if (isInactive(p) || p.ghost) return false;
+    if (isInactive(p) || p.ghost || isStandupHiddenProject(p)) return false;
     const roster = p.roster || {};
     for (const [role, names] of Object.entries(roster)) {
       if (STANDUP_INTERNAL_ROLES.has(role) && (names || []).includes(person)) return true;
