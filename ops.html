@@ -296,6 +296,10 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .su-note-body { color: var(--text); word-break: break-word; }
 .su-note-meta { color: var(--dim); font-size: 10px; margin-top: 1px; }
 .su-note-empty { color: var(--dim); font-size: 11px; font-style: italic; }
+.su-more { display: flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; color: var(--dim); cursor: pointer; user-select: none; padding: 1px 0; transition: color .12s; }
+.su-more:hover, .su-more:focus-visible { color: var(--accent); outline: none; }
+.su-more-caret { font-size: 9px; line-height: 1; }
+.su-notes-older { display: flex; flex-direction: column; gap: 7px; margin-top: 7px; }
 .su-add-row { display: flex; gap: 6px; align-items: center; }
 .su-add-row select, .su-add-row input { background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 5px 8px; color: var(--text); font-size: 12px; outline: none; transition: border-color .15s; }
 .su-add-row select { flex-shrink: 0; cursor: pointer; }
@@ -2152,7 +2156,6 @@ const STANDUP_NOTE_TYPES = [
   { key: 'decision',  label: 'Decision Made',        emoji: '✅' },
   { key: 'team',      label: 'Team Change',          emoji: '👥' }
 ];
-const STANDUP_INTERNAL_ROLES = new Set(['Producer', 'Editor', 'Animator']);
 let standupPerson = (() => { try { return localStorage.getItem('ops_standup_person') || null; } catch (_) { return null; } })();
 
 // ops.html has no genId of its own; mirror team.html's.
@@ -2169,22 +2172,30 @@ function isStandupHiddenProject(proj) {
   return /pto|time\s*off|holiday/i.test(name) || /administrative/i.test(name) || /\badmin\b/i.test(name);
 }
 
-// Active projects a video-team person is attached to — via an internal roster
-// role, or a task (task.person or an Internal Team attendee). Same linkage the
-// getTeamHeadsUp person→projects map uses. Non-work buckets are excluded.
-function standupProjectsFor(person) {
+// Projects the standup cares about: active, real (non-ghost) work, minus the
+// PTO/holiday/admin buckets.
+function standupActiveProjects() {
+  return (state.projects || []).filter(p => !isInactive(p) && !p.ghost && !isStandupHiddenProject(p));
+}
+
+// Standup is a producer conversation: a person only shows the projects they
+// LEAD. getPrimaryProducer is the same call the card's "Lead: …" line uses, so
+// the rail and the cards can never disagree.
+function standupLeadProjects(person) {
   if (!person) return [];
-  return (state.projects || []).filter(p => {
-    if (isInactive(p) || p.ghost || isStandupHiddenProject(p)) return false;
-    const roster = p.roster || {};
-    for (const [role, names] of Object.entries(roster)) {
-      if (STANDUP_INTERNAL_ROLES.has(role) && (names || []).includes(person)) return true;
-    }
-    return (p.tasks || []).some(t =>
-      (t.person === person && STANDUP_INTERNAL_ROLES.has(t.role)) ||
-      (t.attendees || []).some(a => a.person === person && a.category === 'Internal Team')
-    );
+  return standupActiveProjects().filter(p => getPrimaryProducer(p) === person);
+}
+
+// The left rail: everyone who leads at least one active project. Ordered by
+// getAllPeople() so the rail keeps the timeline's person order and its
+// sunset/non-internal filtering.
+function standupLeads() {
+  const leads = new Set();
+  standupActiveProjects().forEach(p => {
+    const lead = getPrimaryProducer(p);
+    if (lead) leads.add(lead);
   });
+  return getAllPeople().filter(p => leads.has(p));
 }
 
 // Add a note to a project from the standup tab. Author is the configurable "me"
@@ -2222,7 +2233,7 @@ function renderStandup() {
   if (!view) return;
   view.innerHTML = '';
 
-  const people = getAllPeople();
+  const people = standupLeads();
   if (standupPerson && !people.includes(standupPerson)) standupPerson = null;
   if (!standupPerson && people.length) standupPerson = people[0];
 
@@ -2262,7 +2273,7 @@ function renderStandup() {
     const em = document.createElement('div');
     em.className = 'su-empty';
     em.style.padding = '16px';
-    em.textContent = 'No video-team members found.';
+    em.textContent = 'No lead producers found.';
     list.appendChild(em);
   } else {
     people.forEach(person => {
@@ -2282,14 +2293,14 @@ function renderStandup() {
   // Right: selected person's active projects, each with notes + add box.
   const detail = document.createElement('div');
   detail.className = 'su-detail';
-  const projects = standupPerson ? standupProjectsFor(standupPerson) : [];
+  const projects = standupPerson ? standupLeadProjects(standupPerson) : [];
   if (!standupPerson) {
     const em = document.createElement('div'); em.className = 'su-empty';
-    em.textContent = 'Select a person to see their projects.';
+    em.textContent = 'Select a lead producer to see their projects.';
     detail.appendChild(em);
   } else if (!projects.length) {
     const em = document.createElement('div'); em.className = 'su-empty';
-    em.textContent = standupPerson + ' has no active projects.';
+    em.textContent = standupPerson + ' leads no active projects.';
     detail.appendChild(em);
   } else {
     projects.forEach(proj => detail.appendChild(buildStandupProjectCard(proj)));
@@ -2315,37 +2326,76 @@ function buildStandupProjectCard(proj) {
     card.appendChild(sub);
   }
 
-  // Notes, newest first (date+time descending).
+  // Notes, newest first (date+time descending). Only the latest one shows;
+  // the rest hide behind a caret so long-running projects stay scannable.
   const notesWrap = document.createElement('div');
   notesWrap.className = 'su-notes';
   const notes = [...(proj.notes || [])]
     .filter(n => n && n.date)
     .sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')));
+
+  const buildNoteRow = n => {
+    const row = document.createElement('div');
+    row.className = 'su-note';
+    const emoji = document.createElement('span');
+    emoji.className = 'su-note-emoji';
+    emoji.textContent = n.emoji || '📋';
+    const bodyCol = document.createElement('div');
+    const b = document.createElement('div');
+    b.className = 'su-note-body';
+    b.textContent = n.body || '';
+    const meta = document.createElement('div');
+    meta.className = 'su-note-meta';
+    meta.textContent = (n.person || 'Team') + ' · ' + n.date + (n.time ? ' ' + n.time : '');
+    bodyCol.appendChild(b);
+    bodyCol.appendChild(meta);
+    row.appendChild(emoji);
+    row.appendChild(bodyCol);
+    return row;
+  };
+
   if (!notes.length) {
     const em = document.createElement('div');
     em.className = 'su-note-empty';
     em.textContent = 'No notes yet.';
     notesWrap.appendChild(em);
   } else {
-    notes.forEach(n => {
-      const row = document.createElement('div');
-      row.className = 'su-note';
-      const emoji = document.createElement('span');
-      emoji.className = 'su-note-emoji';
-      emoji.textContent = n.emoji || '📋';
-      const bodyCol = document.createElement('div');
-      const b = document.createElement('div');
-      b.className = 'su-note-body';
-      b.textContent = n.body || '';
-      const meta = document.createElement('div');
-      meta.className = 'su-note-meta';
-      meta.textContent = (n.person || 'Team') + ' · ' + n.date + (n.time ? ' ' + n.time : '');
-      bodyCol.appendChild(b);
-      bodyCol.appendChild(meta);
-      row.appendChild(emoji);
-      row.appendChild(bodyCol);
-      notesWrap.appendChild(row);
-    });
+    notesWrap.appendChild(buildNoteRow(notes[0]));
+    const older = notes.slice(1);
+    if (older.length) {
+      const olderWrap = document.createElement('div');
+      olderWrap.className = 'su-notes-older';
+      olderWrap.style.display = 'none';
+      older.forEach(n => olderWrap.appendChild(buildNoteRow(n)));
+
+      const toggle = document.createElement('div');
+      toggle.className = 'su-more';
+      toggle.setAttribute('role', 'button');
+      toggle.tabIndex = 0;
+      toggle.setAttribute('aria-expanded', 'false');
+      const caret = document.createElement('span');
+      caret.className = 'su-more-caret';
+      caret.textContent = '▸';
+      const lbl = document.createElement('span');
+      lbl.textContent = older.length === 1 ? '1 earlier note' : older.length + ' earlier notes';
+      toggle.appendChild(caret);
+      toggle.appendChild(lbl);
+
+      let expanded = false;
+      const flip = () => {
+        expanded = !expanded;
+        olderWrap.style.display = expanded ? '' : 'none';
+        caret.textContent = expanded ? '▾' : '▸';
+        toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      };
+      toggle.addEventListener('click', flip);
+      toggle.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); }
+      });
+
+      notesWrap.appendChild(toggle);
+      notesWrap.appendChild(olderWrap);
+    }
   }
   card.appendChild(notesWrap);
 
