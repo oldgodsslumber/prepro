@@ -270,6 +270,39 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 /* ── METRICS VIEW ── */
 .metrics-view { flex: 1; overflow-y: auto; padding: 20px 24px; display: none; }
 .metrics-view.visible { display: block; }
+
+/* ── STANDUP VIEW ── master list of people (left) + their projects/notes (right) */
+.standup-view { flex: 1; min-height: 0; display: none; flex-direction: column; overflow: hidden; }
+.standup-view.visible { display: flex; }
+.su-head { display: flex; align-items: center; gap: 12px; padding: 12px 24px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.su-head h2 { font-size: 15px; font-weight: 700; color: var(--text); margin: 0; }
+.su-me { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.su-me label { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+.su-me input { background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 5px 8px; color: var(--text); font-size: 12px; outline: none; width: 150px; transition: border-color .15s; }
+.su-me input:focus { border-color: var(--accent); }
+.su-body { flex: 1; min-height: 0; display: flex; overflow: hidden; }
+.su-people { width: 200px; flex-shrink: 0; border-right: 1px solid var(--border); overflow-y: auto; background: var(--panel); }
+.su-name { padding: 9px 16px; font-size: 12px; font-weight: 600; color: var(--text); cursor: pointer; border-bottom: 1px solid var(--border); border-left: 3px solid transparent; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: background .12s, border-color .12s; }
+.su-name:hover { background: var(--card); }
+.su-name.active { background: var(--card); border-left-color: var(--accent); color: var(--accent); }
+.su-detail { flex: 1; min-width: 0; overflow-y: auto; padding: 16px 24px; }
+.su-empty { color: var(--dim); font-size: 12px; font-style: italic; padding: 24px 4px; }
+.su-proj-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
+.su-proj-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+.su-proj-sub { font-size: 11px; color: var(--dim); margin-bottom: 10px; }
+.su-notes { display: flex; flex-direction: column; gap: 7px; margin-bottom: 10px; }
+.su-note { display: flex; gap: 7px; align-items: flex-start; font-size: 12px; }
+.su-note-emoji { flex-shrink: 0; }
+.su-note-body { color: var(--text); word-break: break-word; }
+.su-note-meta { color: var(--dim); font-size: 10px; margin-top: 1px; }
+.su-note-empty { color: var(--dim); font-size: 11px; font-style: italic; }
+.su-add-row { display: flex; gap: 6px; align-items: center; }
+.su-add-row select, .su-add-row input { background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 5px 8px; color: var(--text); font-size: 12px; outline: none; transition: border-color .15s; }
+.su-add-row select { flex-shrink: 0; cursor: pointer; }
+.su-add-row input { flex: 1; min-width: 0; }
+.su-add-row select:focus, .su-add-row input:focus { border-color: var(--accent); }
+.su-add-btn { background: var(--accent); color: #fff; border: none; border-radius: 5px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; flex-shrink: 0; }
+.su-add-btn:hover { opacity: .9; }
 .m-section { margin-bottom: 28px; }
 .m-section-title { font-size: 11px; font-weight: 700; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 10px; }
 .m-empty { color: var(--dim); font-size: 12px; font-style: italic; }
@@ -478,6 +511,7 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
     <button class="toggle-btn" data-view="person">Gantt Chart</button>
     <button class="toggle-btn" data-view="studio">Studio Calendar</button>
     <button class="toggle-btn" data-view="metrics">Metrics</button>
+    <button class="toggle-btn" data-view="standup">Standup</button>
   </div>
   <div class="ops-header-spacer"></div>
   <div class="toggle-group" id="chipDisplayToggle" title="Chip label: category abbreviation or task name">
@@ -542,6 +576,7 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 <div class="headsup-view" id="headsupView"></div>
 <div class="studio-view" id="studioView"></div>
 <div class="metrics-view" id="metricsView"></div>
+<div class="standup-view" id="standupView"></div>
 
 <div class="ops-bottom">
   <div class="ops-workload">
@@ -621,7 +656,7 @@ let calLatestDate   = null;
 let calObserver     = null;
 let chipDisplay = 'categories'; // 'categories' | 'tasks'
 let personOrder = JSON.parse(localStorage.getItem('ops_person_order') || '[]'); // persisted row order
-const VALID_VIEW_MODES = ['headsup', 'person', 'studio', 'metrics'];
+const VALID_VIEW_MODES = ['headsup', 'person', 'studio', 'metrics', 'standup'];
 let viewMode = (() => {
   const saved = localStorage.getItem('ops_view_mode');
   return VALID_VIEW_MODES.includes(saved) ? saved : 'headsup';
@@ -672,6 +707,7 @@ function reloadState(newState) {
   else if (viewMode === 'headsup') renderHeadsUp();
   else if (viewMode === 'studio') renderStudio();
   else if (viewMode === 'metrics') renderMetrics();
+  else if (viewMode === 'standup') renderStandup();
 }
 
 // ── DRAG / RESIZE STATE ──
@@ -814,6 +850,7 @@ function opsRerender() {
   else if (viewMode === 'headsup') renderHeadsUp();
   else if (viewMode === 'studio') renderStudio();
   else if (viewMode === 'metrics') renderMetrics();
+  else if (viewMode === 'standup') renderStandup();
   renderFilterChips();
   renderWorkload();
 }
@@ -1999,6 +2036,7 @@ function applyViewMode() {
   const headsupView = document.getElementById('headsupView');
   const studioView  = document.getElementById('studioView');
   const metricsView = document.getElementById('metricsView');
+  const standupView = document.getElementById('standupView');
   const calNav      = document.querySelector('.cal-nav');
   const calDow      = document.getElementById('calDowRow');
 
@@ -2011,6 +2049,10 @@ function applyViewMode() {
   chipToggle.style.display = isTimeline ? '' : 'none';
   zoomGroup.style.display = isTimeline ? '' : 'none';
   wkndBtn.style.display = (isTimeline || isStudio) ? '' : 'none';
+
+  // Standup uses the .visible class for display; clear it on every switch and
+  // let the standup branch below re-add it, so we don't have to touch each view.
+  standupView.classList.remove('visible');
 
   if (viewMode === 'headsup') {
     if (tlObserver) { tlObserver.disconnect(); tlObserver = null; }
@@ -2055,6 +2097,17 @@ function applyViewMode() {
     studioView.classList.remove('visible');
     metricsView.classList.add('visible');
     renderMetrics();
+  } else if (viewMode === 'standup') {
+    if (tlObserver) { tlObserver.disconnect(); tlObserver = null; }
+    calScroll.style.display = 'none';
+    calNav.style.display    = 'none';
+    calDow.style.display    = 'none';
+    personView.classList.remove('visible');
+    headsupView.classList.remove('visible');
+    studioView.classList.remove('visible');
+    metricsView.classList.remove('visible');
+    standupView.classList.add('visible');
+    renderStandup();
   }
 }
 
@@ -2079,6 +2132,242 @@ function esc(str) {
   const div = document.createElement('div');
   div.textContent = str || '';
   return div.innerHTML;
+}
+
+// ── STANDUP VIEW ──
+// Per-person standup: pick a video-team member, see their active projects and
+// each project's notes, and drop a fresh note in the moment. Notes written here
+// are ordinary project notes (same shape team.html's addNote writes) so they
+// also surface in team.html's feed and the ops Metrics retrospective.
+
+// Types for the add-note picker — mirrors team.html NOTE_TYPES minus the
+// auto-only 'system' type. emoji is denormalized onto each note at creation so
+// other views render it without a lookup.
+const STANDUP_NOTE_TYPES = [
+  { key: 'update',    label: 'Project Update',       emoji: '📋' },
+  { key: 'delay',     label: 'Project Delay',        emoji: '⏳' },
+  { key: 'direction', label: 'Change in Direction',  emoji: '🔀' },
+  { key: 'feedback',  label: 'Stakeholder Feedback', emoji: '💬' },
+  { key: 'blocker',   label: 'Blocker',              emoji: '🚧' },
+  { key: 'decision',  label: 'Decision Made',        emoji: '✅' },
+  { key: 'team',      label: 'Team Change',          emoji: '👥' }
+];
+const STANDUP_INTERNAL_ROLES = new Set(['Producer', 'Editor', 'Animator']);
+let standupPerson = (() => { try { return localStorage.getItem('ops_standup_person') || null; } catch (_) { return null; } })();
+
+// ops.html has no genId of its own; mirror team.html's.
+function genId() {
+  try { return crypto.randomUUID(); }
+  catch (e) { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+}
+
+// Active projects a video-team person is attached to — via an internal roster
+// role, or a task (task.person or an Internal Team attendee). Same linkage the
+// getTeamHeadsUp person→projects map uses.
+function standupProjectsFor(person) {
+  if (!person) return [];
+  return (state.projects || []).filter(p => {
+    if (isInactive(p) || p.ghost) return false;
+    const roster = p.roster || {};
+    for (const [role, names] of Object.entries(roster)) {
+      if (STANDUP_INTERNAL_ROLES.has(role) && (names || []).includes(person)) return true;
+    }
+    return (p.tasks || []).some(t =>
+      (t.person === person && STANDUP_INTERNAL_ROLES.has(t.role)) ||
+      (t.attendees || []).some(a => a.person === person && a.category === 'Internal Team')
+    );
+  });
+}
+
+// Add a note to a project from the standup tab. Author is the configurable "me"
+// identity (shared dash_me key). Note shape matches team.html addNote exactly,
+// then saveState() persists it to Firebase for every other view.
+function addStandupNote(projectId, type, body) {
+  body = (body || '').trim();
+  if (!body) return;
+  const proj = (state.projects || []).find(p => p.id === projectId);
+  if (!proj) return;
+  const me = (localStorage.getItem('dash_me') || '').trim();
+  if (!me) {
+    const el = document.getElementById('suMeInput');
+    if (el) { el.focus(); el.style.borderColor = 'var(--danger)'; }
+    return;
+  }
+  if (!proj.notes) proj.notes = [];
+  const nt = STANDUP_NOTE_TYPES.find(t => t.key === type) || STANDUP_NOTE_TYPES[0];
+  const now = new Date();
+  proj.notes.push({
+    id: genId(),
+    type: nt.key,
+    emoji: nt.emoji,
+    body: body,
+    person: me,
+    date: fmtDate(now.getFullYear(), now.getMonth() + 1, now.getDate()),
+    time: String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
+  });
+  saveState();
+  renderStandup();
+}
+
+function renderStandup() {
+  const view = document.getElementById('standupView');
+  if (!view) return;
+  view.innerHTML = '';
+
+  const people = getAllPeople();
+  if (standupPerson && !people.includes(standupPerson)) standupPerson = null;
+  if (!standupPerson && people.length) standupPerson = people[0];
+
+  // Header: title + configurable "You" identity (author for notes added here).
+  const head = document.createElement('div');
+  head.className = 'su-head';
+  const h2 = document.createElement('h2');
+  h2.textContent = 'Standup';
+  head.appendChild(h2);
+  const meWrap = document.createElement('div');
+  meWrap.className = 'su-me';
+  const meLbl = document.createElement('label');
+  meLbl.textContent = 'You';
+  const meInput = document.createElement('input');
+  meInput.id = 'suMeInput';
+  meInput.type = 'text';
+  meInput.placeholder = 'Your name';
+  meInput.autocomplete = 'off';
+  meInput.value = localStorage.getItem('dash_me') || '';
+  meInput.title = 'Notes you add are attributed to this name';
+  meInput.addEventListener('input', () => {
+    try { localStorage.setItem('dash_me', meInput.value.trim()); } catch (_) {}
+    meInput.style.borderColor = '';
+  });
+  meWrap.appendChild(meLbl);
+  meWrap.appendChild(meInput);
+  head.appendChild(meWrap);
+  view.appendChild(head);
+
+  const bodyWrap = document.createElement('div');
+  bodyWrap.className = 'su-body';
+
+  // Left: clickable people list.
+  const list = document.createElement('div');
+  list.className = 'su-people';
+  if (!people.length) {
+    const em = document.createElement('div');
+    em.className = 'su-empty';
+    em.style.padding = '16px';
+    em.textContent = 'No video-team members found.';
+    list.appendChild(em);
+  } else {
+    people.forEach(person => {
+      const row = document.createElement('div');
+      row.className = 'su-name' + (person === standupPerson ? ' active' : '');
+      row.textContent = person;
+      row.addEventListener('click', () => {
+        standupPerson = person;
+        try { localStorage.setItem('ops_standup_person', person); } catch (_) {}
+        renderStandup();
+      });
+      list.appendChild(row);
+    });
+  }
+  bodyWrap.appendChild(list);
+
+  // Right: selected person's active projects, each with notes + add box.
+  const detail = document.createElement('div');
+  detail.className = 'su-detail';
+  const projects = standupPerson ? standupProjectsFor(standupPerson) : [];
+  if (!standupPerson) {
+    const em = document.createElement('div'); em.className = 'su-empty';
+    em.textContent = 'Select a person to see their projects.';
+    detail.appendChild(em);
+  } else if (!projects.length) {
+    const em = document.createElement('div'); em.className = 'su-empty';
+    em.textContent = standupPerson + ' has no active projects.';
+    detail.appendChild(em);
+  } else {
+    projects.forEach(proj => detail.appendChild(buildStandupProjectCard(proj)));
+  }
+  bodyWrap.appendChild(detail);
+  view.appendChild(bodyWrap);
+}
+
+function buildStandupProjectCard(proj) {
+  const card = document.createElement('div');
+  card.className = 'su-proj-card';
+
+  const title = document.createElement('div');
+  title.className = 'su-proj-title';
+  title.textContent = proj.name || '(untitled project)';
+  card.appendChild(title);
+
+  const producer = getPrimaryProducer(proj);
+  if (producer) {
+    const sub = document.createElement('div');
+    sub.className = 'su-proj-sub';
+    sub.textContent = 'Lead: ' + producer;
+    card.appendChild(sub);
+  }
+
+  // Notes, newest first (date+time descending).
+  const notesWrap = document.createElement('div');
+  notesWrap.className = 'su-notes';
+  const notes = [...(proj.notes || [])]
+    .filter(n => n && n.date)
+    .sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')));
+  if (!notes.length) {
+    const em = document.createElement('div');
+    em.className = 'su-note-empty';
+    em.textContent = 'No notes yet.';
+    notesWrap.appendChild(em);
+  } else {
+    notes.forEach(n => {
+      const row = document.createElement('div');
+      row.className = 'su-note';
+      const emoji = document.createElement('span');
+      emoji.className = 'su-note-emoji';
+      emoji.textContent = n.emoji || '📋';
+      const bodyCol = document.createElement('div');
+      const b = document.createElement('div');
+      b.className = 'su-note-body';
+      b.textContent = n.body || '';
+      const meta = document.createElement('div');
+      meta.className = 'su-note-meta';
+      meta.textContent = (n.person || 'Team') + ' · ' + n.date + (n.time ? ' ' + n.time : '');
+      bodyCol.appendChild(b);
+      bodyCol.appendChild(meta);
+      row.appendChild(emoji);
+      row.appendChild(bodyCol);
+      notesWrap.appendChild(row);
+    });
+  }
+  card.appendChild(notesWrap);
+
+  // Add-note row: type picker + text + Add.
+  const addRow = document.createElement('div');
+  addRow.className = 'su-add-row';
+  const sel = document.createElement('select');
+  STANDUP_NOTE_TYPES.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t.key;
+    opt.textContent = t.emoji + ' ' + t.label;
+    sel.appendChild(opt);
+  });
+  sel.value = 'update';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.placeholder = 'Add a note…';
+  input.autocomplete = 'off';
+  const btn = document.createElement('button');
+  btn.className = 'su-add-btn';
+  btn.textContent = 'Add';
+  const submit = () => addStandupNote(proj.id, sel.value, input.value);
+  btn.addEventListener('click', submit);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+  addRow.appendChild(sel);
+  addRow.appendChild(input);
+  addRow.appendChild(btn);
+  card.appendChild(addRow);
+
+  return card;
 }
 
 // ── HEADS UP VIEW ──
@@ -4574,6 +4863,7 @@ function init() {
     else if (viewMode === 'studio') renderStudio();
     else if (viewMode === 'headsup') renderHeadsUp();
     else if (viewMode === 'metrics') renderMetrics();
+    else if (viewMode === 'standup') renderStandup();
   });
 
   document.getElementById('filterNoneBtn').addEventListener('click', () => {
@@ -4584,6 +4874,7 @@ function init() {
     else if (viewMode === 'studio') renderStudio();
     else if (viewMode === 'headsup') renderHeadsUp();
     else if (viewMode === 'metrics') renderMetrics();
+    else if (viewMode === 'standup') renderStandup();
   });
 }
 
