@@ -50,6 +50,9 @@ window._fbReady.then(({ db, ref, onValue }) => {
   --cat-edit:  #4cba6a;
   --cat-anim:  #7c5cbf;
   --cat-shoot: #c0394f;
+  /* Alternating week band on the Gantt/timeline — sits over --card. */
+  --tl-band:    rgba(255,255,255,.045);
+  --tl-band-hd: rgba(255,255,255,.05);
 }
 
 /* ── LIGHT THEME ── */
@@ -61,6 +64,8 @@ window._fbReady.then(({ db, ref, onValue }) => {
   --text:    #1b1c26;
   --dim:     #61637a;
   --accent:  #5a51e6;
+  --tl-band:    rgba(27,28,38,.055);
+  --tl-band-hd: rgba(27,28,38,.06);
 }
 :root[data-theme="light"] .m-gantt-track,
 :root[data-theme="light"] .m-cat-bar { background: #e2e4ee; }
@@ -403,6 +408,7 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 
 /* Day header cells */
 .tl-day-cell  { flex-shrink: 0; font-size: 9px; font-weight: 600; color: var(--dim); text-align: center; padding: 4px 0; border-right: 1px solid rgba(44,44,62,.4); overflow: hidden; }
+.tl-day-cell.wk-band { background: var(--tl-band-hd); }
 .tl-day-cell.today   { background: rgba(108,99,255,.18); color: var(--accent); font-weight: 800; }
 .tl-day-cell.weekend { opacity: .4; }
 
@@ -420,8 +426,18 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .tl-person-row.drag-over-above { box-shadow: inset 0 2px 0 0 var(--accent); }
 .tl-person-row.drag-over-below { box-shadow: inset 0 -2px 0 0 var(--accent); }
 
-/* Scrollable track where task bars live */
-.tl-track { flex: 1; position: relative; background: var(--card); }
+/* Scrollable track where task bars live.
+   Alternating week shading comes from a 2-week-wide background tile; its width
+   and phase are set once on #tlInner as --tl-band-w / --tl-band-off and inherit
+   down to every track, so all rows stay in step. */
+.tl-track {
+  flex: 1; position: relative;
+  background-color: var(--card);
+  background-image: linear-gradient(to right, var(--tl-band) 0%, var(--tl-band) 50%, transparent 50%, transparent 100%);
+  background-size: calc(var(--tl-band-w, 0px) * 2) 100%;
+  background-position: var(--tl-band-off, 0px) 0;
+  background-repeat: repeat;
+}
 
 /* Task bars */
 .tl-task-bar { position: absolute; border-radius: 3px; color: #fff; display: flex; align-items: center; overflow: visible; cursor: grab; user-select: none; }
@@ -1782,7 +1798,30 @@ function renderTimeline() {
   const numCols = tlDates.length;
   const totalW  = TL_NAME_W + numCols * tlColW;
 
-  document.getElementById('tlInner').style.width = totalW + 'px';
+  const tlInner = document.getElementById('tlInner');
+  tlInner.style.width = totalW + 'px';
+
+  // ── Week banding ──
+  // Columns are a contiguous date run (weekends optionally filtered out), so a
+  // week is always the same number of columns. Shade odd absolute week numbers
+  // so the stripes don't jump as the visible range grows.
+  const colsPerWeek = showWeekends ? 7 : 5;
+  const bandW       = colsPerWeek * tlColW;
+  const bandWeek    = ds => {
+    const d = new Date(ds + 'T00:00:00');
+    const monOff = (d.getDay() + 6) % 7;                       // Mon = 0
+    const mon = new Date(d); mon.setDate(mon.getDate() - monOff);
+    // Weeks since Mon 1970-01-05; round absorbs DST hour shifts.
+    return { week: Math.round((mon - new Date(1970, 0, 5)) / 6048e5), pos: showWeekends ? monOff : Math.min(monOff, 4) };
+  };
+  if (numCols) {
+    const { week, pos } = bandWeek(tlDates[0]);
+    // Col 0 sits `pos` columns into its week; the tile's shaded half comes first,
+    // so an even (unshaded) starting week gets pushed a further band left.
+    const off = -(pos * tlColW) - (week % 2 === 0 ? bandW : 0);
+    tlInner.style.setProperty('--tl-band-w', bandW + 'px');
+    tlInner.style.setProperty('--tl-band-off', off + 'px');
+  }
 
   // ── Month header row ──
   const monthRow = document.getElementById('tlMonthRow');
@@ -1819,6 +1858,7 @@ function renderTimeline() {
     const dow = d.getDay();
     const cell = document.createElement('div');
     cell.className = 'tl-day-cell'
+      + (bandWeek(ds).week % 2 ? ' wk-band' : '')
       + (ds === today ? ' today' : '')
       + (dow === 0 || dow === 6 ? ' weekend' : '');
     cell.style.width = tlColW + 'px';
