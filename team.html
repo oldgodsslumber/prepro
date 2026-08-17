@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260817a';
+window.PREPRO_BUILD = '20260817b';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,9 +29,9 @@ window.PREPRO_BUILD = '20260817a';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260817a"></script>
+<script type="module" src="./auth.js?v=20260817b"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260817a"></script>
+<script src="./xlsx.full.min.js?v=20260817b"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -346,6 +346,22 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 .cal-day-num span { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; }
 .cal-day.today .cal-day-num span { background: var(--accent); color: #fff; }
 .cal-day-month-label { font-size: 9px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .07em; }
+
+/* ── FOLDER VIEW (folder selected → every child project's schedule, stacked) ── */
+/* One label per project band. The name only prints on the first column of a row;
+   the blank copies keep every band the same height so bands stay aligned. */
+.folder-proj-label {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--dim); background: var(--panel);
+  border-left: 3px solid var(--accent); border-radius: 3px;
+  padding: 2px 5px; margin-top: 4px; height: 16px; line-height: 12px;
+  box-sizing: border-box; flex-shrink: 0; overflow: hidden;
+  white-space: nowrap; text-overflow: ellipsis; cursor: pointer;
+}
+.folder-proj-label:hover { color: var(--text); }
+.ro-chip { cursor: pointer !important; }
+.ro-chip:hover { filter: brightness(1.12); }
+.folder-count-badge { font-size: 11px; font-weight: 600; color: var(--dim); margin-left: 8px; }
 
 /* ── GHOST ROWS (cross-project busyness overlay) ── */
 .ghost-row { font-size: 10px; font-weight: 500; padding: 1px 4px; color: var(--ghost-ink); display: flex; align-items: flex-start; gap: 4px; pointer-events: none; user-select: none; overflow: hidden; min-width: 0; max-width: 100%; }
@@ -2340,6 +2356,18 @@ function getDescendantIds(id) {
   while (q.length) { const c = q.shift(); getChildren(c).forEach(x => { ids.push(x.id); q.push(x.id); }); }
   return ids;
 }
+// A folder is just a project with isFolder set, so selecting one used to render
+// its own (always empty) calendar. Folder view instead stacks the schedules of
+// every project inside it, read-only, so concurrent work is visible at a glance.
+function isFolderView() {
+  const p = getProject(activeProjectId);
+  return !!(p && p.isFolder);
+}
+// Every non-folder descendant of a folder, flattened, in sidebar order.
+function getFolderProjects(folderId) {
+  const ids = new Set(getDescendantIds(folderId));
+  return state.projects.filter(p => ids.has(p.id) && !p.isFolder);
+}
 function addProject(name, parentId, isFolder) {
   const p = { id: genId(), name, parentId: parentId || null, tasks: [], roster: {}, dueDate: null, notes: [],
               ticketId: null, ticketUrl: null, leadProducer: null,
@@ -3558,18 +3586,26 @@ function renderDowHeader() {
 function buildGhostInfo() {
   const empty = { people: [], byDate: new Map() };
   if (!activeProjectId) return empty;
-  const proj = getProject(activeProjectId);
-  if (!proj) return empty;
+  const active = getProject(activeProjectId);
+  if (!active) return empty;
 
-  // Collect Internal Team people associated with the active project (roster + task assignments)
+  // In folder view the scope is every project inside the folder: people come from
+  // the union of their rosters, and their own work isn't counted as a conflict.
+  const scopeProjects = active.isFolder ? getFolderProjects(activeProjectId) : [active];
+  if (!scopeProjects.length) return empty;
+  const scopeIds = new Set(scopeProjects.map(p => p.id));
+
+  // Collect Internal Team people associated with the in-scope projects (roster + task assignments)
   const INTERNAL_ROLES = new Set(['Producer', 'Editor', 'Animator']);
   const rosterPeople = new Set();
-  Object.entries(proj.roster || {}).forEach(([role, names]) => {
-    if (INTERNAL_ROLES.has(role)) names.forEach(n => rosterPeople.add(n));
-  });
-  (proj.tasks || []).forEach(t => {
-    if (t.person && INTERNAL_ROLES.has(t.role)) rosterPeople.add(t.person);
-    (t.attendees || []).forEach(a => { if (a.person && (a.category === 'Internal Team' || isAdminRole(a.role))) rosterPeople.add(a.person); });
+  scopeProjects.forEach(proj => {
+    Object.entries(proj.roster || {}).forEach(([role, names]) => {
+      if (INTERNAL_ROLES.has(role)) names.forEach(n => rosterPeople.add(n));
+    });
+    (proj.tasks || []).forEach(t => {
+      if (t.person && INTERNAL_ROLES.has(t.role)) rosterPeople.add(t.person);
+      (t.attendees || []).forEach(a => { if (a.person && (a.category === 'Internal Team' || isAdminRole(a.role))) rosterPeople.add(a.person); });
+    });
   });
   if (!rosterPeople.size) return empty;
 
@@ -3587,7 +3623,7 @@ function buildGhostInfo() {
   };
 
   state.projects.forEach(p => {
-    if (p.id === activeProjectId || isInactive(p) || p.ghost) return;
+    if (scopeIds.has(p.id) || isInactive(p) || p.ghost) return;
     (p.tasks || []).forEach(t => {
       if (t.isDueDate && t.milestoneType !== 'pto') return; // allow PTO through
       const endDate = t.endDate || t.date;
@@ -3688,7 +3724,9 @@ function rebuildCalGrid(adjustScrollTop) {
     cur.setDate(cur.getDate() + 1);
   }
 
-  const layout    = buildTaskLayout(allDates);
+  const folderMode = isFolderView();
+  const layout     = folderMode ? buildFolderLayout(allDates) : buildTaskLayout(allDates);
+  grid.classList.toggle('folder-mode', folderMode);
   const ghostInfo = showGhosts ? buildGhostInfo() : { people: [], byDate: new Map() };
   let prevMonth = null;
   allDates.forEach(dateStr => {
@@ -3753,7 +3791,17 @@ function updateCalTitle() {
   // title is left empty (acts as a flex spacer for the nav buttons).
   const proj = getProject(activeProjectId);
   const nameBar = document.getElementById('projectNameBar');
-  if (nameBar) nameBar.textContent = proj ? proj.name : '';
+  if (nameBar) {
+    nameBar.textContent = proj ? proj.name : '';
+    nameBar.classList.toggle('is-folder', !!(proj && proj.isFolder));
+    if (proj && proj.isFolder) {
+      const n = getFolderProjects(proj.id).filter(p => (p.tasks || []).length).length;
+      const badge = document.createElement('span');
+      badge.className = 'folder-count-badge';
+      badge.textContent = '📁 ' + n + (n === 1 ? ' project' : ' projects');
+      nameBar.appendChild(badge);
+    }
+  }
   const titleEl = document.getElementById('calTitle');
   if (titleEl) titleEl.textContent = '';
 }
@@ -3763,11 +3811,24 @@ function renderCalendar() {
   if (activeProjectId) localStorage.setItem('prepro_active_project', activeProjectId);
   const empty   = document.getElementById('emptyState');
   const calArea = document.getElementById('calendarArea');
-  if (!activeProjectId || !getProject(activeProjectId)) {
+  const pal     = document.getElementById('palette');
+  const folderMode = isFolderView();
+
+  // Nothing is droppable in a folder overview, so the role palette goes away.
+  if (pal) pal.classList.toggle('hidden', folderMode);
+
+  const noProject = !activeProjectId || !getProject(activeProjectId);
+  const emptyFolder = folderMode && !getFolderProjects(activeProjectId).some(p => (p.tasks || []).length);
+  if (noProject || emptyFolder) {
+    const h2 = empty.querySelector('h2'), p = empty.querySelector('p');
+    if (h2) h2.textContent = emptyFolder ? 'Nothing scheduled in this folder' : 'No project selected';
+    if (p)  p.textContent  = emptyFolder ? 'Projects inside this folder will appear here once they have tasks'
+                                         : 'Create a project to start scheduling';
     empty.classList.remove('hidden');
     calArea.classList.add('hidden');
     teardownCalObserver();
-    renderPalette();
+    if (!folderMode) renderPalette();
+    updateCalTitle();
     return;
   }
   empty.classList.add('hidden');
@@ -3790,6 +3851,7 @@ function renderCalendar() {
 
   updateCalTitle();
   setupCalObserver();
+  if (folderMode) return;   // read-only overview: no palette, no scroll-title hookup needed beyond this
   if (!calScrollRaf) {
     calScroll.addEventListener('scroll', () => {
       if (calScrollRaf) return;
@@ -3830,12 +3892,19 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghostInfo, showMonthLabel)
   }
   cell.appendChild(numDiv);
 
-  laneArr.forEach(taskOrNull => {
+  const folderMode = isFolderView();
+  laneArr.forEach(entry => {
+    // Folder view inserts a band label ahead of each project's lanes and wraps
+    // each task with the id of the project that owns it.
+    if (entry && entry._projLabel) { cell.appendChild(buildFolderLabel(entry._projLabel, dateStr)); return; }
+    const taskOrNull = (entry && entry._task) ? entry._task : entry;
     if (!taskOrNull || taskOrNull._spacerFor !== undefined) {
       const sp = document.createElement('div');
       sp.className = 'chip-spacer';
       if (taskOrNull?._spacerFor) sp.dataset.spacerFor = taskOrNull._spacerFor;
       cell.appendChild(sp);
+    } else if (folderMode) {
+      cell.appendChild(buildReadOnlyChip(taskOrNull, dateStr, entry._projId));
     } else {
       cell.appendChild(buildChip(taskOrNull, dateStr));
     }
@@ -3894,6 +3963,9 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghostInfo, showMonthLabel)
     mkGhostRow('🏝', 'PTO', pto, false);
     TIERS.forEach((t, i) => mkGhostRow(t.e, t.label, tiers[i], true));
   }
+
+  // Folder view is a read-only overview — nothing can be dropped into it.
+  if (folderMode) return cell;
 
   cell.addEventListener('dragover', e => {
     if (!dragPayload && !e.dataTransfer.types.includes('text')) return;
@@ -3984,6 +4056,66 @@ function pickTextColor(hex) {
   const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
   const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   return lum > 0.6 ? '#1b1c26' : '#fff';
+}
+
+// ── FOLDER VIEW CHIPS ──
+// Stable per-project accent so a band is traceable down the calendar.
+const FOLDER_BAND_COLORS = ['#6c63ff', '#2eb8a5', '#e0913a', '#c14b9a', '#3d8bd4', '#8d6ee0', '#4aa564', '#d4655a'];
+function folderBandColor(proj) {
+  const s = proj.id || proj.name || '';
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return FOLDER_BAND_COLORS[h % FOLDER_BAND_COLORS.length];
+}
+
+function buildFolderLabel(proj, dateStr) {
+  const el = document.createElement('div');
+  el.className = 'folder-proj-label';
+  // Name only on the first column of each calendar row — the blank copies keep
+  // every band the same height so the labels stay aligned across the row.
+  el.textContent = isRowStart(dateStr) ? proj.name + statusTag(proj) : '';
+  el.title = proj.name;
+  el.style.borderLeftColor = folderBandColor(proj);
+  el.addEventListener('click', e => { e.stopPropagation(); jumpToProject(proj.id); });
+  return el;
+}
+
+// Clone the normal chip: cloneNode drops every drag/click listener in one move,
+// so the overview reuses all four chip builders without read-only variants.
+function buildReadOnlyChip(task, dateStr, projId) {
+  const el = buildChip(task, dateStr).cloneNode(true);
+  el.classList.add('ro-chip');
+  el.draggable = false;
+  el.querySelectorAll('[draggable]').forEach(n => { n.draggable = false; });
+  el.querySelectorAll('.chip-handle-l, .chip-handle-r, .review-att-rm').forEach(n => n.remove());
+  el.dataset.projId = projId;
+  const proj = getProject(projId);
+  if (proj) el.title = proj.name + (task.taskName ? ' — ' + task.taskName : '');
+  el.addEventListener('click', e => { e.stopPropagation(); jumpToProject(projId, task); });
+  return el;
+}
+
+// Leave the folder overview for the project that actually owns the work.
+function jumpToProject(projId, task) {
+  if (!getProject(projId)) return;
+  activeProjectId = projId;
+  calEarliestDate = null;              // re-anchor the calendar on the target project
+  renderSidebar();
+  renderCalendar();
+  if (exportOpen) renderExportPanel();
+  if (!task) return;
+  if (task.isDueDate)      openPanel('edit-duedate', null, task.id);
+  else if (task.isReview)  openPanel('edit-review', task.date, task.id);
+  else                     openPanel('edit', task.date, task.id);
+  setSelectedTask(task.id);
+  scrollCalToDate(task.date);
+}
+
+function scrollCalToDate(dateStr) {
+  const calScroll = document.getElementById('calScroll');
+  const cell = calScroll && calScroll.querySelector('.cal-day[data-date="' + dateStr + '"]');
+  if (!cell) return;
+  calScroll.scrollTop += cell.getBoundingClientRect().top - calScroll.getBoundingClientRect().top - 20;
 }
 
 function buildChip(task, dateStr) {
@@ -4585,11 +4717,17 @@ function fmtDate(y, m, d) {
 // when solo tasks exist on only some of the days they span.
 function buildTaskLayout(dates) {
   const proj = getProject(activeProjectId);
-  if (!proj || !dates.length) return new Map(dates.map(d => [d, []]));
+  if (!proj) return new Map(dates.map(d => [d, []]));
+  return packTasks(proj.tasks, dates);
+}
+
+// Lane-packs an arbitrary task list across `dates` → Map<dateStr, Array<task|null|spacer>>.
+function packTasks(tasks, dates) {
+  if (!tasks || !dates.length) return new Map(dates.map(d => [d, []]));
 
   const minDate = dates[0];
   const maxDate = dates[dates.length - 1];
-  const visible = proj.tasks.filter(t => t.date <= maxDate && (t.endDate || t.date) >= minDate);
+  const visible = tasks.filter(t => t.date <= maxDate && (t.endDate || t.date) >= minDate);
 
   const isMulti = t => t.endDate && t.endDate > t.date;
   const multi   = visible.filter(isMulti);
@@ -4638,6 +4776,47 @@ function buildTaskLayout(dates) {
     else arr.push(task);
   });
 
+  return layout;
+}
+
+// Folder view: one labelled band per child project, each band lane-packed on its
+// own so a project's bars never interleave with another project's.
+function buildFolderLayout(dates) {
+  const layout = new Map(dates.map(d => [d, []]));
+  if (!dates.length) return layout;
+  const minDate = dates[0], maxDate = dates[dates.length - 1];
+
+  getFolderProjects(activeProjectId).forEach(proj => {
+    const tasks = (proj.tasks || []).filter(t => t.date <= maxDate && (t.endDate || t.date) >= minDate);
+    if (!tasks.length) return;   // nothing in view — don't render an empty band
+    const sub = packTasks(tasks, dates);
+
+    // A band must be the same height every day of a calendar row or its label
+    // stops lining up — but only within that row. Sizing to the busiest day of
+    // the whole scrollback would pad every week to the tallest one.
+    const rowsFor = new Map();   // dateStr → band height for its calendar row
+    let chunk = [];
+    const flush = () => {
+      if (!chunk.length) return;
+      const h = chunk.reduce((m, d) => Math.max(m, (sub.get(d) || []).length), 0);
+      chunk.forEach(d => rowsFor.set(d, h));
+      chunk = [];
+    };
+    dates.forEach(d => { if (isRowStart(d)) flush(); chunk.push(d); });
+    flush();
+
+    dates.forEach(d => {
+      const rows = rowsFor.get(d) || 0;
+      if (!rows) return;         // idle all week — don't render an empty band
+      const arr   = layout.get(d);
+      const cells = sub.get(d) || [];
+      arr.push({ _projLabel: proj });
+      for (let i = 0; i < rows; i++) {
+        const c = cells[i];
+        arr.push(c && c.id ? { _task: c, _projId: proj.id } : (c || null));
+      }
+    });
+  });
   return layout;
 }
 
@@ -6612,6 +6791,15 @@ function renderExportPanel() {
   const titleEl = document.getElementById('toolsPanelTitle');
   if (titleEl) titleEl.textContent = TAB_TITLES[exportTabActive] || '';
   content.innerHTML = '';
+
+  // These tabs render a single project's schedule; a folder has none of its own.
+  if (isFolderView() && ['text', 'table', 'png', 'invites-web'].includes(exportTabActive)) {
+    const e = document.createElement('div');
+    e.className = 'pi-empty';
+    e.textContent = 'Folder view — select a project inside this folder to export its schedule.';
+    content.appendChild(e);
+    return;
+  }
 
   if (exportTabActive === 'projectinfo') {
     renderProjectInfo();
