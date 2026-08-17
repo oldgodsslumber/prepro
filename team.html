@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260817b';
+window.PREPRO_BUILD = '20260817c';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,9 +29,9 @@ window.PREPRO_BUILD = '20260817b';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260817b"></script>
+<script type="module" src="./auth.js?v=20260817c"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260817b"></script>
+<script src="./xlsx.full.min.js?v=20260817c"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -359,8 +359,13 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
   white-space: nowrap; text-overflow: ellipsis; cursor: pointer;
 }
 .folder-proj-label:hover { color: var(--text); }
-.ro-chip { cursor: pointer !important; }
-.ro-chip:hover { filter: brightness(1.12); }
+/* Overview chips are read-only and must stay exactly .task-chip height (22px) —
+   every band's vertical position is the sum of the fixed lane heights above it. */
+.ro-chip { cursor: pointer !important; height: 22px; }
+.ro-chip:hover { filter: brightness(1.12); opacity: 1; }
+/* Caps for spans that wrap across a calendar row (.task-chip had no seg rules) */
+.task-chip.seg-row-start { border-top-left-radius: 4px; border-bottom-left-radius: 4px; margin-left: 0; }
+.task-chip.seg-row-end   { border-top-right-radius: 4px; border-bottom-right-radius: 4px; margin-right: 0; }
 .folder-count-badge { font-size: 11px; font-weight: 600; color: var(--dim); margin-left: 8px; }
 
 /* ── GHOST ROWS (cross-project busyness overlay) ── */
@@ -3904,7 +3909,7 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghostInfo, showMonthLabel)
       if (taskOrNull?._spacerFor) sp.dataset.spacerFor = taskOrNull._spacerFor;
       cell.appendChild(sp);
     } else if (folderMode) {
-      cell.appendChild(buildReadOnlyChip(taskOrNull, dateStr, entry._projId));
+      cell.appendChild(buildFolderChip(taskOrNull, dateStr, entry._projId));
     } else {
       cell.appendChild(buildChip(taskOrNull, dateStr));
     }
@@ -4080,19 +4085,57 @@ function buildFolderLabel(proj, dateStr) {
   return el;
 }
 
-// Clone the normal chip: cloneNode drops every drag/click listener in one move,
-// so the overview reuses all four chip builders without read-only variants.
-function buildReadOnlyChip(task, dateStr, projId) {
-  const el = buildChip(task, dateStr).cloneNode(true);
-  el.classList.add('ro-chip');
-  el.draggable = false;
-  el.querySelectorAll('[draggable]').forEach(n => { n.draggable = false; });
-  el.querySelectorAll('.chip-handle-l, .chip-handle-r, .review-att-rm').forEach(n => n.remove());
-  el.dataset.projId = projId;
+// One-line summary of any task type, for the fixed-height overview chips.
+function folderChipText(task) {
+  const att = (task.attendees || []).map(a => a.person).filter(Boolean);
+  if (task.isDueDate) {
+    const e = task.milestoneType === 'milestone' ? '🎯' : task.milestoneType === 'delivery' ? '📦' : task.milestoneType === 'pto' ? '🏖' : '🏁';
+    const d = task.milestoneType === 'milestone' ? 'Milestone' : task.milestoneType === 'delivery' ? 'Delivery' : task.milestoneType === 'pto' ? 'PTO' : 'Project Due Date';
+    return e + ' ' + (task.taskName || d) + (att.length ? ' · ' + att.join(', ') : '');
+  }
+  if (task.isReview) {
+    return (task.taskName || task.reviewLabel || 'Review') + (att.length ? ' · ' + att.join(', ') : '');
+  }
+  const loe = task.loe ? LOE_EMOJI[task.loe] + ' ' : '';
+  const ppl = taskPeople(task).map(p => p.person).filter(Boolean);
+  return loe + (ppl.length ? ppl.join(', ') + ' · ' : '') + (task.taskName || roleVerb(task.role));
+}
+
+// Folder chips are the fixed-height .task-chip family rather than the normal
+// role/review/key-date blocks. Those blocks grow with their attendee lists, so a
+// lane lands at a different Y in every cell and every band below it drifts — the
+// one thing this view exists to prevent. Every lane here is exactly 22px, in
+// every cell, so bands and their labels line up straight across a row.
+function buildFolderChip(task, dateStr, projId) {
+  const endDate = task.endDate || task.date;
+  const isStart = task.date === dateStr;
+  const isEnd   = endDate === dateStr;
+  const pos = (isStart && isEnd) ? 'solo' : isStart ? 'start' : isEnd ? 'end' : 'mid';
+
+  const chip = document.createElement('div');
+  chip.className = `task-chip chip-${pos} ro-chip`;
+  applyRowCaps(chip, task, dateStr);
+  chip.style.background = task.color || '#3a3a52';
+  chip.dataset.taskId = task.id;
+  chip.dataset.projId = projId;
+
+  const text = folderChipText(task);
+  if (pos === 'solo' || pos === 'start') {
+    chip.textContent = text;
+  } else if (isRowStart(dateStr)) {
+    // Continuation picks the label back up on the first column of each new row
+    chip.classList.add('row-start');
+    const lbl = document.createElement('span');
+    lbl.className = 'cont-label';
+    lbl.textContent = getContLabel(task);
+    chip.appendChild(lbl);
+  }
+
   const proj = getProject(projId);
-  if (proj) el.title = proj.name + (task.taskName ? ' — ' + task.taskName : '');
-  el.addEventListener('click', e => { e.stopPropagation(); jumpToProject(projId, task); });
-  return el;
+  chip.title = (proj ? proj.name + ' — ' : '') + text +
+               (endDate !== task.date ? ' (' + task.date + ' → ' + endDate + ')' : '');
+  chip.addEventListener('click', e => { e.stopPropagation(); jumpToProject(projId, task); });
+  return chip;
 }
 
 // Leave the folder overview for the project that actually owns the work.
