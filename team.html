@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260818b';
+window.PREPRO_BUILD = '20260818c';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,9 +29,9 @@ window.PREPRO_BUILD = '20260818b';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260818b"></script>
+<script type="module" src="./auth.js?v=20260818c"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260818b"></script>
+<script src="./xlsx.full.min.js?v=20260818c"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -101,6 +101,16 @@ input  { font: inherit; }
 /* ── THEME TOGGLE BUTTON ── */
 .theme-toggle { font-size: 14px; line-height: 1; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 6px; width: 30px; height: 28px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: color .15s, border-color .15s; flex-shrink: 0; user-select: none; }
 .theme-toggle:hover { color: var(--text); border-color: var(--accent); }
+
+/* "Who are you" picker — writes the same localStorage key dash.html stars into
+   (dash_me), so the two pages always agree on your identity. */
+.me-picker { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 4px 0 8px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; flex-shrink: 0; transition: border-color .15s; }
+.me-picker:hover { border-color: var(--accent); }
+.me-picker.unset { border-style: dashed; }
+.me-picker-icon { font-size: 11px; line-height: 1; opacity: .75; }
+#meSelect { max-width: 150px; background: transparent; border: none; outline: none; color: var(--text); font-family: inherit; font-size: 11px; font-weight: 600; cursor: pointer; padding: 0 2px; text-overflow: ellipsis; }
+.me-picker.unset #meSelect { color: var(--dim); font-weight: 500; }
+#meSelect option { background: var(--card); color: var(--text); }
 
 /* ── BASE ── */
 html, body { height: 100%; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; font-size: 13px; overflow: hidden; }
@@ -822,6 +832,10 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
     <span id="fbDot" style="width:7px;height:7px;border-radius:50%;background:#555;display:inline-block;"></span>
     <span id="fbLabel">Connecting…</span>
   </span>
+  <span class="me-picker unset" id="mePicker" title="Who are you? Used for note attribution and your PTO invites">
+    <span class="me-picker-icon">👤</span>
+    <select id="meSelect"><option value="">Who are you?</option></select>
+  </span>
   <button class="theme-toggle" id="themeToggle" title="Toggle light / dark mode">☀</button>
 </header>
 
@@ -1231,6 +1245,11 @@ let tlColW     = 50;         // current px per visible day column (zoom)
 let tlDates    = [];         // ordered array of visible date strings
 let tlDateMap  = new Map();  // date string → column index
 
+// ── WHO ARE YOU ──
+// Same localStorage key dash.html stars into, so both pages share one identity.
+// Used for note attribution and to narrow the PTO invites to your own leave.
+let myPerson = localStorage.getItem('dash_me') || null;
+
 // ── ROSTER ──
 let rosterOpen = true;
 // Name history: global record of all names ever used, per role { role: Set-as-array }
@@ -1352,6 +1371,40 @@ function collectAllPeople() {
   });
   Object.keys(peopleEmails || {}).forEach(n => touch(n, null));
   return Object.values(people).sort((a,b) => a.name.localeCompare(b.name));
+}
+
+// Rebuild the header identity picker. Note the deliberate difference from
+// dash.html: it drops dash_me when the person leaves its (narrower, active-only)
+// roster — doing that here would let opening team.html wipe an identity the
+// dashboard set, so an unrecognised name is kept as an extra option instead.
+function renderMePicker() {
+  const sel = document.getElementById('meSelect');
+  const pick = document.getElementById('mePicker');
+  if (!sel) return;
+  const names = collectAllPeople().filter(isVideoTeamPerson).map(p => p.name);
+  if (myPerson && !names.includes(myPerson)) names.push(myPerson);
+  names.sort((a, b) => a.localeCompare(b));
+
+  sel.innerHTML = '';
+  const blank = document.createElement('option');
+  blank.value = '';
+  blank.textContent = 'Who are you?';
+  sel.appendChild(blank);
+  names.forEach(n => {
+    const o = document.createElement('option');
+    o.value = n; o.textContent = n;
+    sel.appendChild(o);
+  });
+  sel.value = myPerson || '';
+  if (pick) pick.classList.toggle('unset', !myPerson);
+}
+
+function setMyPerson(name) {
+  myPerson = (name || '').trim() || null;
+  if (myPerson) localStorage.setItem('dash_me', myPerson);
+  else localStorage.removeItem('dash_me');
+  renderMePicker();
+  if (exportOpen) renderExportPanel();   // PTO invites re-filter immediately
 }
 
 function deletePersonEverywhere(name) {
@@ -3263,6 +3316,8 @@ function escapeHtmlAttr(s) {
 }
 
 function renderSidebar() {
+  // The identity picker draws from the same people list, so refresh it here.
+  renderMePicker();
   // Refresh the filter datalist with everyone we know about.
   const dl = document.getElementById('projFilterNames');
   if (dl) dl.innerHTML = collectAllPeople().filter(isVideoTeamPerson).map(p => '<option value="' + escapeHtmlAttr(p.name) + '">').join('');
@@ -6917,16 +6972,31 @@ const BRAND_CREATIVE_DIST = 'BrandCreative@pega.com';
 // end date passes, then drop off.
 function renderPtoInvitesPanel(content, proj) {
   const today = todayISOStr();
-  const tasks = (proj ? proj.tasks : [])
+  const all = (proj ? proj.tasks : [])
     .filter(t => t.isDueDate && t.milestoneType === 'pto')
     .filter(t => (t.endDate || t.date) >= today) // hide once the leave is fully over
     .sort((a, b) => a.date.localeCompare(b.date));
 
+  // Every row here downloads files meant to be opened by the person on leave, so
+  // once you've said who you are it shows strictly your own — no "show everyone"
+  // override, because grabbing the wrong person's file is the failure to avoid.
+  // A shared entry still counts as yours if you're one of the people on it.
+  const tasks = myPerson ? all.filter(t => ptoInvitePeople(t).includes(myPerson)) : all;
+
   if (!tasks.length) {
     const em = document.createElement('div');
     em.style.cssText = 'color:var(--dim);font-size:12px;padding:14px 2px;';
-    em.textContent = 'No upcoming or in-progress PTO.';
+    // Distinct wording when filtered, so an empty list doesn't read as "no PTO exists"
+    em.textContent = myPerson ? 'No upcoming PTO for ' + myPerson + '.'
+                              : 'No upcoming or in-progress PTO.';
     content.appendChild(em); return;
+  }
+
+  if (!myPerson) {
+    const prompt = document.createElement('div');
+    prompt.style.cssText = 'font-size:11px;color:var(--dim);padding:6px 2px 0;flex-shrink:0;';
+    prompt.textContent = '⚠️ Pick who you are (top right) to see just your own PTO.';
+    content.appendChild(prompt);
   }
 
   const note = document.createElement('div');
@@ -7379,7 +7449,7 @@ function showNoteCompose(container, noteType, addBar) {
     // Attribute to the pinned "This is me" identity from the dashboard, so
     // browsing other people's dashboards never mis-attributes a note. Falls
     // back to the currently-viewed person, then 'Team'.
-    const person = localStorage.getItem('dash_me') || localStorage.getItem('dash_selected_person') || 'Team';
+    const person = myPerson || localStorage.getItem('dash_selected_person') || 'Team';
     _noteDraft = null; // clear before re-render so the compose box doesn't reopen
     addNote(activeProjectId, noteType.key, textarea.value.trim(), person);
     renderExportPanel();
@@ -8263,6 +8333,17 @@ function setupInitListeners() {
 
   // Tools panel opens to Project Info by default (DOM applied in the rail wiring below)
   exportOpen = true;
+
+  // Who-are-you picker. Rendered here too so it works before Firebase data lands.
+  renderMePicker();
+  document.getElementById('meSelect').addEventListener('change', e => setMyPerson(e.target.value));
+  // dash.html is usually open in another tab — keep both in step without a reload.
+  window.addEventListener('storage', e => {
+    if (e.key !== 'dash_me') return;
+    myPerson = e.newValue || null;
+    renderMePicker();
+    if (exportOpen) renderExportPanel();
+  });
 
   // New project
   document.getElementById('btnNewProject').addEventListener('click', () => {
