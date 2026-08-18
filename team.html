@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260817c';
+window.PREPRO_BUILD = '20260818a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,9 +29,9 @@ window.PREPRO_BUILD = '20260817c';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260817c"></script>
+<script type="module" src="./auth.js?v=20260818a"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260817c"></script>
+<script src="./xlsx.full.min.js?v=20260818a"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -68,6 +68,9 @@ input  { font: inherit; }
   --ghost-ink:      rgba(255,255,255,.55);
   --ghost-ink-name: rgba(255,255,255,.7);
   --ghost-ink-idle: rgba(255,255,255,.32);
+  /* Folder Gantt alternating-week shading (mirrors ops.html) */
+  --tl-band:    rgba(255,255,255,.045);
+  --tl-band-hd: rgba(255,255,255,.05);
 }
 
 /* ── LIGHT THEME ── */
@@ -91,6 +94,8 @@ input  { font: inherit; }
   --ghost-ink:      rgba(27,28,38,.62);
   --ghost-ink-name: rgba(27,28,38,.82);
   --ghost-ink-idle: rgba(27,28,38,.38);
+  --tl-band:    rgba(27,28,38,.055);
+  --tl-band-hd: rgba(27,28,38,.06);
 }
 
 /* ── THEME TOGGLE BUTTON ── */
@@ -325,7 +330,7 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 
 /* ── CALENDAR WRAPPER ── */
 .cal-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 12px 14px 0; min-height: 0; }
-#calendarArea { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+#calendarArea { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
 .cal-nav { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-shrink: 0; flex-wrap: wrap; }
 .cal-nav-title { font-size: 15px; font-weight: 700; flex: 1; }
 .cal-dow-row { display: grid; flex-shrink: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 8px 8px 0 0; border-bottom: none; }
@@ -347,26 +352,91 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 .cal-day.today .cal-day-num span { background: var(--accent); color: #fff; }
 .cal-day-month-label { font-size: 9px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .07em; }
 
-/* ── FOLDER VIEW (folder selected → every child project's schedule, stacked) ── */
-/* One label per project band. The name only prints on the first column of a row;
-   the blank copies keep every band the same height so bands stay aligned. */
-.folder-proj-label {
-  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
-  color: var(--dim); background: var(--panel);
-  border-left: 3px solid var(--accent); border-radius: 3px;
-  padding: 2px 5px; margin-top: 4px; height: 16px; line-height: 12px;
-  box-sizing: border-box; flex-shrink: 0; overflow: hidden;
-  white-space: nowrap; text-overflow: ellipsis; cursor: pointer;
-}
-.folder-proj-label:hover { color: var(--text); }
-/* Overview chips are read-only and must stay exactly .task-chip height (22px) —
-   every band's vertical position is the sum of the fixed lane heights above it. */
-.ro-chip { cursor: pointer !important; height: 22px; }
-.ro-chip:hover { filter: brightness(1.12); opacity: 1; }
 /* Caps for spans that wrap across a calendar row (.task-chip had no seg rules) */
 .task-chip.seg-row-start { border-top-left-radius: 4px; border-bottom-left-radius: 4px; margin-left: 0; }
 .task-chip.seg-row-end   { border-top-right-radius: 4px; border-bottom-right-radius: 4px; margin-right: 0; }
 .folder-count-badge { font-size: 11px; font-weight: 600; color: var(--dim); margin-left: 8px; }
+
+/* ── FOLDER GANTT ──
+   Selecting a folder shows every project inside it as a group of person
+   swimlanes on one shared date axis. Ported from ops.html's person timeline
+   (.tl-* there too), with project group headers added. Name-column width is a
+   custom property so the header and every row cell stay in step — in ops.html
+   it is a magic 130px repeated in three rules. */
+.folder-gantt { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; --tl-name-w: 170px; }
+.tl-scroll { flex: 1; overflow: auto; position: relative; min-height: 0; }
+.tl-inner  { position: relative; display: inline-block; min-width: 100%; }
+
+.tl-header { position: sticky; top: 0; z-index: 20; background: var(--panel); border-bottom: 1px solid var(--border); user-select: none; }
+.tl-month-row, .tl-day-row { display: flex; }
+.tl-name-hd { flex-shrink: 0; width: var(--tl-name-w); position: sticky; left: 0; z-index: 25; background: var(--panel); border-right: 1px solid var(--border); }
+.tl-month-row .tl-name-hd { height: 20px; }
+.tl-day-row   .tl-name-hd { height: 26px; display: flex; align-items: center; justify-content: center; font-size: 9px; color: var(--dim); letter-spacing: .06em; }
+/* A month spans many columns, so its label would sit off-screen to the left as
+   soon as you scroll into the month. Sticky keeps it in view for its whole span. */
+/* No overflow:hidden here — it would become the sticky scope and pin the label
+   to the cell instead of the scroll container. */
+.tl-month-cell { position: relative; height: 20px; border-right: 1px solid var(--border); flex-shrink: 0; }
+.tl-month-label { position: sticky; left: calc(var(--tl-name-w) + 6px); display: inline-block; padding: 4px 0; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--accent); white-space: nowrap; }
+.tl-day-cell { flex-shrink: 0; font-size: 9px; font-weight: 600; color: var(--dim); text-align: center; padding: 4px 0; border-right: 1px solid rgba(44,44,62,.4); overflow: hidden; }
+.tl-day-cell.wk-band { background: var(--tl-band-hd); }
+.tl-day-cell.today   { background: rgba(108,99,255,.18); color: var(--accent); font-weight: 800; }
+.tl-day-cell.weekend { opacity: .4; }
+
+/* Project group header — spans the full width, sticky left so the name stays put */
+.tl-group-row { display: flex; background: var(--panel); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.tl-group-row:first-child { border-top: none; }
+.tl-group-name { position: sticky; left: 0; z-index: 15; display: flex; align-items: center; gap: 7px; height: 26px; padding: 0 10px; background: var(--panel); font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--text); cursor: pointer; white-space: nowrap; }
+.tl-group-name:hover { color: var(--accent); }
+.tl-group-strip { width: 3px; height: 14px; border-radius: 2px; flex-shrink: 0; }
+.tl-group-count { font-size: 10px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--dim); }
+
+/* Person rows */
+.tl-person-row { display: flex; border-bottom: 1px solid var(--border); }
+.tl-row-name { flex-shrink: 0; width: var(--tl-name-w); position: sticky; left: 0; z-index: 10; background: var(--card); border-right: 1px solid var(--border); display: flex; align-items: center; gap: 7px; padding: 0 6px 0 18px; font-size: 11px; font-weight: 600; color: var(--text); word-break: break-word; }
+.tl-row-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.tl-row-name-text { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.tl-row-name.unassigned .tl-row-name-text { color: var(--dim); font-style: italic; font-weight: 500; }
+.tl-person-row.drop-target { background: rgba(108,99,255,.12); }
+.tl-track.drag-over { box-shadow: inset 0 0 0 2px var(--accent); }
+
+/* Track: alternating week shading from one 2-week background tile, phased by
+   --tl-band-w / --tl-band-off set once on .tl-inner so all rows stay in step. */
+.tl-track {
+  flex: 1; position: relative;
+  background-color: var(--card);
+  background-image: linear-gradient(to right, var(--tl-band) 0%, var(--tl-band) 50%, transparent 50%, transparent 100%);
+  background-size: calc(var(--tl-band-w, 0px) * 2) 100%;
+  background-position: var(--tl-band-off, 0px) 0;
+  background-repeat: repeat;
+}
+.tl-group-row .tl-track { background-color: transparent; background-image: none; }
+
+/* Task bars */
+.tl-task-bar { position: absolute; border-radius: 3px; color: #fff; display: flex; align-items: center; overflow: visible; cursor: grab; user-select: none; }
+.tl-task-bar:active { cursor: grabbing; }
+.tl-task-bar.dragging { opacity: .6; z-index: 50 !important; }
+.tl-task-bar.drag-accepting { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tl-pto-bar { cursor: default; background: repeating-linear-gradient(45deg, #3a8fb7 0, #3a8fb7 6px, #2e7396 6px, #2e7396 12px); border: 1px solid #57b0d4; }
+.tl-pto-bar .tl-bar-name { font-weight: 700; opacity: 1; }
+.tl-resize-handle { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; z-index: 3; }
+.tl-resize-handle.left  { left: -3px; }
+.tl-resize-handle.right { right: -3px; }
+.tl-resize-handle::after { content: '⋮⋮'; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 8px; opacity: 0; color: #fff; pointer-events: none; }
+.tl-task-bar:hover .tl-resize-handle::after { opacity: .7; }
+.tl-bar-inner { padding: 0 5px; display: flex; align-items: center; gap: 3px; overflow: hidden; min-width: 0; width: 100%; }
+.tl-bar-name { font-size: 9px; opacity: .95; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.tl-bar-loe  { font-size: 8px; flex-shrink: 0; margin-left: auto; }
+.tl-today-col { position: absolute; top: 0; bottom: 0; background: rgba(108,99,255,.07); pointer-events: none; z-index: 1; }
+.tl-sentinel-lr { position: absolute; top: 0; bottom: 0; width: 1px; pointer-events: none; }
+.tl-empty { padding: 20px; color: var(--dim); font-size: 12px; }
+
+/* Zoom controls in the calendar nav bar */
+.tl-zoom { display: flex; align-items: center; gap: 3px; }
+.tl-zoom-btn { width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--dim); background: var(--panel); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; padding: 0; line-height: 1; }
+.tl-zoom-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.tl-zoom-btn:disabled { opacity: .35; cursor: default; }
+.tl-zoom-label { font-size: 10px; color: var(--dim); min-width: 30px; text-align: center; }
 
 /* ── GHOST ROWS (cross-project busyness overlay) ── */
 .ghost-row { font-size: 10px; font-weight: 500; padding: 1px 4px; color: var(--ghost-ink); display: flex; align-items: flex-start; gap: 4px; pointer-events: none; user-select: none; overflow: hidden; min-width: 0; max-width: 100%; }
@@ -845,21 +915,44 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
         <h2>No project selected</h2>
         <p>Create a project to start scheduling</p>
       </div>
-      <div id="calendarArea" class="hidden">
-        <div class="cal-nav">
-          <div class="cal-nav-title" id="calTitle"></div>
-          <button class="btn btn-ghost" id="btnUndo" style="font-size:11px;padding:4px 9px;" title="Undo (Ctrl/⌘+Z)" disabled>↶ Undo</button>
-          <button class="btn btn-ghost" id="btnRedo" style="font-size:11px;padding:4px 9px;margin-right:4px;" title="Redo (Ctrl/⌘+Shift+Z)" disabled>↷ Redo</button>
-          <button class="btn-toggle" id="calToday">Today</button>
-          <button class="btn-toggle on" id="ghostToggle">Team Conflicts</button>
-          <button class="btn-toggle on" id="wkndToggle">Show Weekends</button>
-          <span class="htip">?<span class="htip-popup">Scroll up/down to move through time. Today snaps back to the current week. Toggle weekends to show or hide Sat/Sun columns. Drag tasks to move them; hold Alt while dragging to duplicate.</span></span>
+      <!-- Nav bar is shared by the calendar and the folder Gantt so undo/redo,
+           Today and Show Weekends exist once, not twice with duplicate ids. -->
+      <div class="cal-nav hidden" id="calNav">
+        <div class="cal-nav-title" id="calTitle"></div>
+        <button class="btn btn-ghost" id="btnUndo" style="font-size:11px;padding:4px 9px;" title="Undo (Ctrl/⌘+Z)" disabled>↶ Undo</button>
+        <button class="btn btn-ghost" id="btnRedo" style="font-size:11px;padding:4px 9px;margin-right:4px;" title="Redo (Ctrl/⌘+Shift+Z)" disabled>↷ Redo</button>
+        <button class="btn-toggle" id="calToday">Today</button>
+        <button class="btn-toggle on" id="ghostToggle">Team Conflicts</button>
+        <button class="btn-toggle on" id="wkndToggle">Show Weekends</button>
+        <div class="tl-zoom hidden" id="tlZoom">
+          <button class="tl-zoom-btn" id="zoomOutBtn" title="Zoom out">−</button>
+          <span class="tl-zoom-label" id="zoomLabel"></span>
+          <button class="tl-zoom-btn" id="zoomInBtn" title="Zoom in">+</button>
         </div>
+        <span class="htip" id="calHelpTip">?<span class="htip-popup">Scroll up/down to move through time. Today snaps back to the current week. Toggle weekends to show or hide Sat/Sun columns. Drag tasks to move them; hold Alt while dragging to duplicate.</span></span>
+        <span class="htip hidden" id="ganttHelpTip">?<span class="htip-popup">Every project inside this folder, one row per person. Scroll sideways to move through time. Drag a bar to reschedule it, drag its edges to change the duration, or drag it onto another person in the same project to reassign. Drag a chip from the palette onto a row to add work to that project.</span></span>
+      </div>
+      <div id="calendarArea" class="hidden">
         <div class="cal-dow-row" id="calDowRow"></div>
         <div class="cal-scroll" id="calScroll">
           <div id="calTopSentinel" class="cal-sentinel"></div>
           <div class="cal-grid" id="calGrid"></div>
           <div id="calBottomSentinel" class="cal-sentinel"></div>
+        </div>
+      </div>
+
+      <!-- FOLDER GANTT -->
+      <div class="folder-gantt hidden" id="folderGantt">
+        <div class="tl-scroll" id="tlScroll">
+          <div class="tl-inner" id="tlInner">
+            <div class="tl-header" id="tlHeader">
+              <div class="tl-month-row" id="tlMonthRow"></div>
+              <div class="tl-day-row" id="tlDayRow"></div>
+            </div>
+            <div id="tlRows"></div>
+            <div class="tl-sentinel-lr" id="tlSentinelL" style="left:0"></div>
+            <div class="tl-sentinel-lr" id="tlSentinelR" style="right:0"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -1122,6 +1215,21 @@ let calEarliestDate = null; // YYYY-MM-DD, first rendered date
 let calLatestDate   = null; // YYYY-MM-DD, first day of last rendered week
 let calObserver     = null;
 let calScrollRaf    = null;
+
+// ── FOLDER GANTT (ported from ops.html's person timeline) ──
+const TL_NAME_W     = 170;   // must match --tl-name-w in .folder-gantt
+const TL_BAR_H      = 22;
+const TL_LANE_H     = TL_BAR_H + 3;
+const TL_PAD        = 6;
+const TL_WEEKS_INIT = 16;
+const TL_WEEKS_EXT  = 8;
+const TL_ZOOM_STEPS = [18, 26, 36, 50, 70, 100]; // px per visible day column
+let tlStart    = '';
+let tlEnd      = '';
+let tlObserver = null;
+let tlColW     = 50;         // current px per visible day column (zoom)
+let tlDates    = [];         // ordered array of visible date strings
+let tlDateMap  = new Map();  // date string → column index
 
 // ── ROSTER ──
 let rosterOpen = true;
@@ -3729,9 +3837,7 @@ function rebuildCalGrid(adjustScrollTop) {
     cur.setDate(cur.getDate() + 1);
   }
 
-  const folderMode = isFolderView();
-  const layout     = folderMode ? buildFolderLayout(allDates) : buildTaskLayout(allDates);
-  grid.classList.toggle('folder-mode', folderMode);
+  const layout    = buildTaskLayout(allDates);
   const ghostInfo = showGhosts ? buildGhostInfo() : { people: [], byDate: new Map() };
   let prevMonth = null;
   allDates.forEach(dateStr => {
@@ -3816,27 +3922,51 @@ function renderCalendar() {
   if (activeProjectId) localStorage.setItem('prepro_active_project', activeProjectId);
   const empty   = document.getElementById('emptyState');
   const calArea = document.getElementById('calendarArea');
-  const pal     = document.getElementById('palette');
+  const gantt   = document.getElementById('folderGantt');
+  const nav     = document.getElementById('calNav');
   const folderMode = isFolderView();
 
-  // Nothing is droppable in a folder overview, so the role palette goes away.
-  if (pal) pal.classList.toggle('hidden', folderMode);
+  // Nav bar is shared: swap the view-specific controls rather than duplicating ids.
+  document.getElementById('ghostToggle').classList.toggle('hidden', folderMode);
+  document.getElementById('tlZoom').classList.toggle('hidden', !folderMode);
+  document.getElementById('calHelpTip').classList.toggle('hidden', folderMode);
+  document.getElementById('ganttHelpTip').classList.toggle('hidden', !folderMode);
 
   const noProject = !activeProjectId || !getProject(activeProjectId);
-  const emptyFolder = folderMode && !getFolderProjects(activeProjectId).some(p => (p.tasks || []).length);
-  if (noProject || emptyFolder) {
+  if (noProject) {
     const h2 = empty.querySelector('h2'), p = empty.querySelector('p');
-    if (h2) h2.textContent = emptyFolder ? 'Nothing scheduled in this folder' : 'No project selected';
-    if (p)  p.textContent  = emptyFolder ? 'Projects inside this folder will appear here once they have tasks'
-                                         : 'Create a project to start scheduling';
+    if (h2) h2.textContent = 'No project selected';
+    if (p)  p.textContent  = 'Create a project to start scheduling';
     empty.classList.remove('hidden');
     calArea.classList.add('hidden');
+    gantt.classList.add('hidden');
+    nav.classList.add('hidden');
     teardownCalObserver();
-    if (!folderMode) renderPalette();
+    teardownTlObserver();
+    renderPalette();
     updateCalTitle();
     return;
   }
   empty.classList.add('hidden');
+  nav.classList.remove('hidden');
+
+  // ── Folder → Gantt ──
+  if (folderMode) {
+    calArea.classList.add('hidden');
+    gantt.classList.remove('hidden');
+    teardownCalObserver();
+    if (!tlStart) resetTlRange();
+    const firstOpen = !tlDates.length;
+    renderFolderGantt();
+    renderPalette();          // chips stay draggable — drop onto a row to add work
+    updateCalTitle();
+    // clientWidth is 0 until the view is actually displayed, so defer the scroll
+    setTimeout(() => { if (firstOpen) scrollTlToToday(); setupTlObserver(); }, 30);
+    return;
+  }
+
+  gantt.classList.add('hidden');
+  teardownTlObserver();
   calArea.classList.remove('hidden');
 
   const isFirst = !calEarliestDate;
@@ -3856,7 +3986,6 @@ function renderCalendar() {
 
   updateCalTitle();
   setupCalObserver();
-  if (folderMode) return;   // read-only overview: no palette, no scroll-title hookup needed beyond this
   if (!calScrollRaf) {
     calScroll.addEventListener('scroll', () => {
       if (calScrollRaf) return;
@@ -3897,19 +4026,12 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghostInfo, showMonthLabel)
   }
   cell.appendChild(numDiv);
 
-  const folderMode = isFolderView();
-  laneArr.forEach(entry => {
-    // Folder view inserts a band label ahead of each project's lanes and wraps
-    // each task with the id of the project that owns it.
-    if (entry && entry._projLabel) { cell.appendChild(buildFolderLabel(entry._projLabel, dateStr)); return; }
-    const taskOrNull = (entry && entry._task) ? entry._task : entry;
+  laneArr.forEach(taskOrNull => {
     if (!taskOrNull || taskOrNull._spacerFor !== undefined) {
       const sp = document.createElement('div');
       sp.className = 'chip-spacer';
       if (taskOrNull?._spacerFor) sp.dataset.spacerFor = taskOrNull._spacerFor;
       cell.appendChild(sp);
-    } else if (folderMode) {
-      cell.appendChild(buildFolderChip(taskOrNull, dateStr, entry._projId));
     } else {
       cell.appendChild(buildChip(taskOrNull, dateStr));
     }
@@ -3968,9 +4090,6 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghostInfo, showMonthLabel)
     mkGhostRow('🏝', 'PTO', pto, false);
     TIERS.forEach((t, i) => mkGhostRow(t.e, t.label, tiers[i], true));
   }
-
-  // Folder view is a read-only overview — nothing can be dropped into it.
-  if (folderMode) return cell;
 
   cell.addEventListener('dragover', e => {
     if (!dragPayload && !e.dataTransfer.types.includes('text')) return;
@@ -4063,79 +4182,22 @@ function pickTextColor(hex) {
   return lum > 0.6 ? '#1b1c26' : '#fff';
 }
 
-// ── FOLDER VIEW CHIPS ──
-// Stable per-project accent so a band is traceable down the calendar.
-const FOLDER_BAND_COLORS = ['#6c63ff', '#2eb8a5', '#e0913a', '#c14b9a', '#3d8bd4', '#8d6ee0', '#4aa564', '#d4655a'];
-function folderBandColor(proj) {
-  const s = proj.id || proj.name || '';
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return FOLDER_BAND_COLORS[h % FOLDER_BAND_COLORS.length];
-}
-
-function buildFolderLabel(proj, dateStr) {
-  const el = document.createElement('div');
-  el.className = 'folder-proj-label';
-  // Name only on the first column of each calendar row — the blank copies keep
-  // every band the same height so the labels stay aligned across the row.
-  el.textContent = isRowStart(dateStr) ? proj.name + statusTag(proj) : '';
-  el.title = proj.name;
-  el.style.borderLeftColor = folderBandColor(proj);
-  el.addEventListener('click', e => { e.stopPropagation(); jumpToProject(proj.id); });
-  return el;
-}
-
-// One-line summary of any task type, for the fixed-height overview chips.
-function folderChipText(task) {
+// One-line summary of any task type. On a person's Gantt row the row already
+// names them, so omitPeople drops the redundant prefix; the project-level row
+// keeps it, since nothing else there says who is involved.
+function folderChipText(task, omitPeople) {
   const att = (task.attendees || []).map(a => a.person).filter(Boolean);
+  const suffix = (omitPeople || !att.length) ? '' : ' · ' + att.join(', ');
   if (task.isDueDate) {
     const e = task.milestoneType === 'milestone' ? '🎯' : task.milestoneType === 'delivery' ? '📦' : task.milestoneType === 'pto' ? '🏖' : '🏁';
     const d = task.milestoneType === 'milestone' ? 'Milestone' : task.milestoneType === 'delivery' ? 'Delivery' : task.milestoneType === 'pto' ? 'PTO' : 'Project Due Date';
-    return e + ' ' + (task.taskName || d) + (att.length ? ' · ' + att.join(', ') : '');
+    return e + ' ' + (task.taskName || d) + suffix;
   }
-  if (task.isReview) {
-    return (task.taskName || task.reviewLabel || 'Review') + (att.length ? ' · ' + att.join(', ') : '');
-  }
-  const loe = task.loe ? LOE_EMOJI[task.loe] + ' ' : '';
+  if (task.isReview) return (task.taskName || task.reviewLabel || 'Review') + suffix;
+  const name = task.taskName || roleVerb(task.role);
+  if (omitPeople) return name;
   const ppl = taskPeople(task).map(p => p.person).filter(Boolean);
-  return loe + (ppl.length ? ppl.join(', ') + ' · ' : '') + (task.taskName || roleVerb(task.role));
-}
-
-// Folder chips are the fixed-height .task-chip family rather than the normal
-// role/review/key-date blocks. Those blocks grow with their attendee lists, so a
-// lane lands at a different Y in every cell and every band below it drifts — the
-// one thing this view exists to prevent. Every lane here is exactly 22px, in
-// every cell, so bands and their labels line up straight across a row.
-function buildFolderChip(task, dateStr, projId) {
-  const endDate = task.endDate || task.date;
-  const isStart = task.date === dateStr;
-  const isEnd   = endDate === dateStr;
-  const pos = (isStart && isEnd) ? 'solo' : isStart ? 'start' : isEnd ? 'end' : 'mid';
-
-  const chip = document.createElement('div');
-  chip.className = `task-chip chip-${pos} ro-chip`;
-  applyRowCaps(chip, task, dateStr);
-  chip.style.background = task.color || '#3a3a52';
-  chip.dataset.taskId = task.id;
-  chip.dataset.projId = projId;
-
-  const text = folderChipText(task);
-  if (pos === 'solo' || pos === 'start') {
-    chip.textContent = text;
-  } else if (isRowStart(dateStr)) {
-    // Continuation picks the label back up on the first column of each new row
-    chip.classList.add('row-start');
-    const lbl = document.createElement('span');
-    lbl.className = 'cont-label';
-    lbl.textContent = getContLabel(task);
-    chip.appendChild(lbl);
-  }
-
-  const proj = getProject(projId);
-  chip.title = (proj ? proj.name + ' — ' : '') + text +
-               (endDate !== task.date ? ' (' + task.date + ' → ' + endDate + ')' : '');
-  chip.addEventListener('click', e => { e.stopPropagation(); jumpToProject(projId, task); });
-  return chip;
+  return (ppl.length ? ppl.join(', ') + ' · ' : '') + name;
 }
 
 // Leave the folder overview for the project that actually owns the work.
@@ -4159,6 +4221,659 @@ function scrollCalToDate(dateStr) {
   const cell = calScroll && calScroll.querySelector('.cal-day[data-date="' + dateStr + '"]');
   if (!cell) return;
   calScroll.scrollTop += cell.getBoundingClientRect().top - calScroll.getBoundingClientRect().top - 20;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  FOLDER GANTT
+//  Selecting a folder shows every project inside it as a group of person
+//  swimlanes on one shared horizontal date axis. The column/lane/bar machinery
+//  is ported from ops.html's person timeline; the project grouping is new.
+//  Bars are positioned relative to their TRACK; scroll math is relative to
+//  .tl-inner and therefore includes TL_NAME_W. Mixing the two is the classic
+//  off-by-one-name-column bug.
+// ══════════════════════════════════════════════════════════════════════════
+
+function todayDateStr() {
+  const t = new Date();
+  return fmtDate(t.getFullYear(), t.getMonth() + 1, t.getDate());
+}
+
+function resetTlRange() {
+  const ws = getWeekStart();
+  const before = new Date(ws + 'T00:00:00');
+  before.setDate(before.getDate() - TL_WEEKS_INIT * 7);
+  tlStart = fmtDate(before.getFullYear(), before.getMonth() + 1, before.getDate());
+  const after = new Date(ws + 'T00:00:00');
+  after.setDate(after.getDate() + TL_WEEKS_INIT * 7);
+  tlEnd = fmtDate(after.getFullYear(), after.getMonth() + 1, after.getDate());
+}
+
+// Build the ordered array of visible dates and the date→column map
+function buildTlDates() {
+  tlDates = [];
+  const d = new Date(tlStart + 'T00:00:00');
+  const end = new Date(tlEnd + 'T00:00:00');
+  while (d <= end) {
+    if (showWeekends || !isWeekend(d.getDay())) tlDates.push(fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate()));
+    d.setDate(d.getDate() + 1);
+  }
+  tlDateMap = new Map(tlDates.map((ds, i) => [ds, i]));
+}
+
+// Nearest visible column for a date (weekends may be hidden, so snap inward)
+function nearestCol(dateStr, snapForward) {
+  if (tlDateMap.has(dateStr)) return tlDateMap.get(dateStr);
+  const d = new Date(dateStr + 'T00:00:00');
+  for (let i = 1; i <= 3; i++) {
+    d.setDate(d.getDate() + (snapForward ? 1 : -1));
+    const ds = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+    if (tlDateMap.has(ds)) return tlDateMap.get(ds);
+  }
+  return null;
+}
+
+function colToDate(col) {
+  if (col < 0) col = 0;
+  if (col >= tlDates.length) col = tlDates.length - 1;
+  return tlDates[col] || null;
+}
+
+// Folder bars span several projects, so every mutation resolves its owner first.
+function findTask(projectId, taskId) {
+  const proj = getProject(projectId);
+  if (!proj) return null;
+  const task = (proj.tasks || []).find(t => t.id === taskId);
+  return task ? { proj, task } : null;
+}
+
+// Shift a date by N visible columns, stepping over hidden weekends
+function shiftByCols(dateStr, colShift) {
+  const d = new Date(dateStr + 'T00:00:00');
+  let remaining = Math.abs(colShift);
+  const dir = colShift > 0 ? 1 : -1;
+  while (remaining > 0) {
+    d.setDate(d.getDate() + dir);
+    if (!showWeekends && isWeekend(d.getDay())) continue;
+    remaining--;
+  }
+  return fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+}
+
+// Greedy lane packing: stack overlapping bars within one row
+function assignLanes(entries) {
+  const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
+  const laneEnds = [];
+  return sorted.map(entry => {
+    const end = entry.endDate || entry.date;
+    let lane = laneEnds.findIndex(le => le < entry.date);
+    if (lane === -1) { lane = laneEnds.length; laneEnds.push(end); }
+    else laneEnds[lane] = end;
+    return { ...entry, lane };
+  });
+}
+
+// One entry per (task, person). person '' routes to the project-level row, which
+// carries key dates, milestones, deliveries and anything nobody is assigned to.
+// attIdx MUST be the real index into task.attendees — reassignment writes back by
+// index, so a filtered index would rewrite the wrong attendee.
+function getFolderEntries() {
+  const out = [];
+  getFolderProjects(activeProjectId).forEach(proj => {
+    (proj.tasks || []).forEach(task => {
+      const base = {
+        projectId: proj.id, projectName: proj.name, taskId: task.id,
+        date: task.date, endDate: task.endDate || task.date,
+        label: folderChipText(task, true),          // on a person's row
+        projectLabel: folderChipText(task, false),  // on the project-level row
+        loe: task.loe || 'low',
+        color: task.color || '#3a3a52',
+        isReview: !!task.isReview, isDueDate: !!task.isDueDate,
+        isPTO: !!(task.isDueDate && task.milestoneType === 'pto'),
+      };
+      // Key dates stay on the project row even when they carry attendees — they
+      // are project facts, not somebody's workload.
+      if (task.isDueDate) { out.push({ ...base, person: '', attIdx: null }); return; }
+
+      const people = [];
+      if (task.person && !isSunset(task.person)) people.push({ person: task.person, attIdx: null });
+      (task.attendees || []).forEach((a, attIdx) => {
+        if (!a.person || isSunset(a.person)) return;
+        if (people.some(p => p.person === a.person)) return;
+        people.push({ person: a.person, attIdx });
+      });
+
+      if (!people.length) { out.push({ ...base, person: '', attIdx: null }); return; }
+      people.forEach(p => out.push({ ...base, person: p.person, attIdx: p.attIdx }));
+    });
+  });
+  return out;
+}
+
+// Rows are (project, person) pairs in render order.
+function buildGanttRows() {
+  const entries = getFolderEntries();
+  const byProject = new Map();
+  entries.forEach(e => {
+    if (!byProject.has(e.projectId)) byProject.set(e.projectId, []);
+    byProject.get(e.projectId).push(e);
+  });
+
+  const groups = [];
+  getFolderProjects(activeProjectId).forEach(proj => {
+    const mine = byProject.get(proj.id) || [];
+    if (!mine.length) return;                 // no work at all — skip the group
+    const people = [...new Set(mine.map(e => e.person).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    const rows = [];
+    const projectLevel = mine.filter(e => !e.person);
+    if (projectLevel.length) rows.push({ person: '', entries: projectLevel });
+    people.forEach(person => rows.push({ person, entries: mine.filter(e => e.person === person) }));
+    groups.push({ proj, rows, count: mine.length });
+  });
+  return groups;
+}
+
+function updateZoomButtons() {
+  const idx = TL_ZOOM_STEPS.indexOf(tlColW);
+  const out = document.getElementById('zoomOutBtn'), inn = document.getElementById('zoomInBtn'),
+        lbl = document.getElementById('zoomLabel');
+  if (out) out.disabled = idx <= 0;
+  if (inn) inn.disabled = idx >= TL_ZOOM_STEPS.length - 1;
+  if (lbl) lbl.textContent = tlColW + 'px';
+}
+
+// Which absolute week a date falls in, and how far into that week it sits.
+// Used to phase the alternating-week background so stripes don't jump as the
+// visible range grows.
+function tlBandWeek(ds) {
+  const d = new Date(ds + 'T00:00:00');
+  const monOff = (d.getDay() + 6) % 7;                    // Mon = 0
+  const mon = new Date(d); mon.setDate(mon.getDate() - monOff);
+  return { week: Math.round((mon - new Date(1970, 0, 5)) / 6048e5), pos: showWeekends ? monOff : Math.min(monOff, 4) };
+}
+
+function renderFolderGantt() {
+  buildTlDates();
+  updateZoomButtons();
+
+  const today   = todayDateStr();
+  const numCols = tlDates.length;
+  const totalW  = TL_NAME_W + numCols * tlColW;
+
+  const tlInner = document.getElementById('tlInner');
+  tlInner.style.width = totalW + 'px';
+
+  const colsPerWeek = showWeekends ? 7 : 5;
+  const bandW = colsPerWeek * tlColW;
+  if (numCols) {
+    const { week, pos } = tlBandWeek(tlDates[0]);
+    // Col 0 sits `pos` columns into its week; the tile's shaded half comes first,
+    // so an even (unshaded) starting week gets pushed a further band left.
+    const off = -(pos * tlColW) - (week % 2 === 0 ? bandW : 0);
+    tlInner.style.setProperty('--tl-band-w', bandW + 'px');
+    tlInner.style.setProperty('--tl-band-off', off + 'px');
+  }
+
+  // ── Month header (spanning cells) ──
+  const monthRow = document.getElementById('tlMonthRow');
+  monthRow.innerHTML = '';
+  const mNameHd = document.createElement('div');
+  mNameHd.className = 'tl-name-hd';
+  monthRow.appendChild(mNameHd);
+  let curMonth = -1, curYear = -1, curCell = null, curCount = 0;
+  tlDates.forEach(ds => {
+    const d = new Date(ds + 'T00:00:00');
+    const m = d.getMonth(), y = d.getFullYear();
+    if (m !== curMonth || y !== curYear) {
+      if (curCell) { curCell.style.width = (curCount * tlColW) + 'px'; monthRow.appendChild(curCell); }
+      curCell = document.createElement('div');
+      curCell.className = 'tl-month-cell';
+      const lbl = document.createElement('span');
+      lbl.className = 'tl-month-label';
+      lbl.textContent = MONTHS[m].slice(0, 3).toUpperCase() + ' ' + y;
+      curCell.appendChild(lbl);
+      curMonth = m; curYear = y; curCount = 0;
+    }
+    curCount++;
+  });
+  if (curCell) { curCell.style.width = (curCount * tlColW) + 'px'; monthRow.appendChild(curCell); }
+
+  // ── Day header ──
+  const dayRow = document.getElementById('tlDayRow');
+  dayRow.innerHTML = '';
+  const dNameHd = document.createElement('div');
+  dNameHd.className = 'tl-name-hd';
+  dNameHd.textContent = 'PROJECT / PERSON';
+  dayRow.appendChild(dNameHd);
+  tlDates.forEach(ds => {
+    const d = new Date(ds + 'T00:00:00');
+    const cell = document.createElement('div');
+    cell.className = 'tl-day-cell'
+      + (tlBandWeek(ds).week % 2 ? ' wk-band' : '')
+      + (ds === today ? ' today' : '')
+      + (isWeekend(d.getDay()) ? ' weekend' : '');
+    cell.style.width = tlColW + 'px';
+    cell.textContent = (tlColW >= 36 && d.getDate() === 1) ? MONTHS[d.getMonth()].slice(0, 1) : d.getDate();
+    dayRow.appendChild(cell);
+  });
+
+  // ── Body ──
+  const rowsEl = document.getElementById('tlRows');
+  rowsEl.innerHTML = '';
+  const groups = buildGanttRows();
+  if (!groups.length) {
+    rowsEl.innerHTML = '<div class="tl-empty">No scheduled work inside this folder yet.</div>';
+    return;
+  }
+  const todayCol = tlDateMap.get(today) ?? null;
+
+  groups.forEach(group => {
+    // Project group header
+    const gRow = document.createElement('div');
+    gRow.className = 'tl-group-row';
+    const gName = document.createElement('div');
+    gName.className = 'tl-group-name';
+    gName.style.width = TL_NAME_W + 'px';
+    const strip = document.createElement('span');
+    strip.className = 'tl-group-strip';
+    strip.style.background = 'var(--accent)';
+    const gLabel = document.createElement('span');
+    gLabel.textContent = group.proj.name + statusTag(group.proj);
+    const gCount = document.createElement('span');
+    gCount.className = 'tl-group-count';
+    gCount.textContent = group.count;
+    gName.appendChild(strip); gName.appendChild(gLabel); gName.appendChild(gCount);
+    gName.title = 'Open ' + group.proj.name;
+    gName.addEventListener('click', () => jumpToProject(group.proj.id));
+    gRow.appendChild(gName);
+    const gTrack = document.createElement('div');
+    gTrack.className = 'tl-track';
+    gRow.appendChild(gTrack);
+    rowsEl.appendChild(gRow);
+
+    group.rows.forEach(rowDef => {
+      const laned   = assignLanes(rowDef.entries);
+      const numLanes = laned.length ? Math.max(...laned.map(e => e.lane)) + 1 : 1;
+      const trackH  = TL_PAD * 2 + numLanes * TL_LANE_H;
+
+      const row = document.createElement('div');
+      row.className = 'tl-person-row';
+      row.dataset.projectId = group.proj.id;
+      row.dataset.person    = rowDef.person;
+
+      const nameCell = document.createElement('div');
+      nameCell.className = 'tl-row-name' + (rowDef.person ? '' : ' unassigned');
+      nameCell.style.height = trackH + 'px';
+      const dot = document.createElement('span');
+      dot.className = 'tl-row-dot';
+      const firstColored = rowDef.entries.find(e => e.color);
+      dot.style.background = rowDef.person ? (firstColored ? firstColored.color : 'var(--accent)') : 'var(--dim)';
+      const nameText = document.createElement('span');
+      nameText.className = 'tl-row-name-text';
+      nameText.textContent = rowDef.person || 'Project dates';
+      nameCell.appendChild(dot); nameCell.appendChild(nameText);
+      row.appendChild(nameCell);
+
+      const track = document.createElement('div');
+      track.className = 'tl-track';
+      track.style.height = trackH + 'px';
+      if (todayCol !== null) {
+        const todayEl = document.createElement('div');
+        todayEl.className = 'tl-today-col';
+        todayEl.style.left  = (todayCol * tlColW) + 'px';
+        todayEl.style.width = tlColW + 'px';
+        track.appendChild(todayEl);
+      }
+      wireTrackDrop(track, group.proj.id, rowDef.person);
+
+      laned.forEach(entry => {
+        const bar = buildGanttBar(entry, row);
+        if (bar) track.appendChild(bar);
+      });
+
+      row.appendChild(track);
+      rowsEl.appendChild(row);
+    });
+  });
+}
+
+function buildGanttBar(entry, row) {
+  const visStart = entry.date < tlStart ? tlStart : entry.date;
+  const visEnd   = entry.endDate > tlEnd ? tlEnd : entry.endDate;
+  if (visEnd < visStart) return null;
+  const startCol = nearestCol(visStart, true);
+  const endCol   = nearestCol(visEnd, false);
+  if (startCol === null || endCol === null || endCol < startCol) return null;
+
+  const left  = startCol * tlColW + 2;
+  const width = Math.max(TL_BAR_H, (endCol - startCol + 1) * tlColW - 4);
+  const top   = TL_PAD + entry.lane * TL_LANE_H;
+
+  const bar = document.createElement('div');
+  bar.className = 'tl-task-bar' + (entry.isPTO ? ' tl-pto-bar' : '');
+  bar.style.cssText = `left:${left}px;width:${width}px;top:${top}px;height:${TL_BAR_H}px;z-index:2;`
+                    + (entry.isPTO ? '' : `background:${entry.color};`);
+  bar.dataset.projectId = entry.projectId;
+  bar.dataset.taskId    = entry.taskId;
+  // The row names the person, so the bar carries just the work; the tooltip and
+  // the project-level row spell out who is on it.
+  const label = entry.person ? entry.label : entry.projectLabel;
+  bar.title = entry.projectName + ' — ' + entry.projectLabel
+            + (entry.endDate !== entry.date ? '\n' + entry.date + ' → ' + entry.endDate : '\n' + entry.date);
+
+  const inner = document.createElement('div');
+  inner.className = 'tl-bar-inner';
+  inner.style.pointerEvents = 'none';
+  const nameSp = document.createElement('span');
+  nameSp.className = 'tl-bar-name';
+  nameSp.textContent = label;
+  inner.appendChild(nameSp);
+  if (!entry.isPTO && !entry.isDueDate) {
+    const loeSp = document.createElement('span');
+    loeSp.className = 'tl-bar-loe';
+    loeSp.textContent = LOE_EMOJI[entry.loe] || '🟢';
+    inner.appendChild(loeSp);
+  }
+  bar.appendChild(inner);
+
+  // PTO is read-only here — it belongs to a PTO project, not to this work.
+  if (entry.isPTO) return bar;
+
+  if (entry.endDate !== entry.date) {
+    const lh = document.createElement('div');
+    lh.className = 'tl-resize-handle left';
+    lh.addEventListener('mousedown', e => startTlResize(e, entry, bar, 'left'));
+    bar.appendChild(lh);
+  }
+  const rh = document.createElement('div');
+  rh.className = 'tl-resize-handle right';
+  rh.addEventListener('mousedown', e => startTlResize(e, entry, bar, 'right'));
+  bar.appendChild(rh);
+
+  bar.addEventListener('mousedown', e => {
+    if (e.target.classList.contains('tl-resize-handle')) return;
+    startTlDrag(e, entry, bar, row);
+  });
+  wireBarPersonDrop(bar, entry);
+  return bar;
+}
+
+// Commit tail for every Gantt mutation. team's saveState() records undo history,
+// which ops.html's does not — so Gantt edits get Ctrl+Z for free.
+function ganttCommit() {
+  saveState();
+  renderFolderGantt();
+  renderSidebar();
+  if (exportOpen) renderExportPanel();
+}
+
+// ── Drag a bar: reschedule horizontally, reassign vertically ──
+// Reassignment is confined to rows in the SAME project group; dropping onto
+// another project would mean moving work between projects, which this view
+// deliberately doesn't do.
+function startTlDrag(e, entry, bar, row) {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  const sc = document.getElementById('tlScroll');
+  const startX = e.clientX, startY = e.clientY;
+  const startScrollLeft = sc.scrollLeft;
+  let moved = false;
+  let lastHighlight = null;
+
+  const targetRowAt = y => {
+    const rows = document.querySelectorAll('.tl-person-row');
+    for (const r of rows) {
+      const rect = r.getBoundingClientRect();
+      if (y >= rect.top && y <= rect.bottom) return r;
+    }
+    return null;
+  };
+  const legalTarget = y => {
+    const r = targetRowAt(y);
+    if (!r || r.dataset.projectId !== entry.projectId) return null;
+    if (r.dataset.person === (entry.person || '')) return null;
+    return r;
+  };
+  const colShiftFrom = ev => Math.round((ev.clientX - startX + (sc.scrollLeft - startScrollLeft)) / tlColW);
+
+  function onMove(ev) {
+    // Dead-zone must cover BOTH axes: reassigning is a straight-down drag with no
+    // horizontal travel, and a horizontal-only test would read it as a click.
+    if (!moved && Math.abs(ev.clientX - startX) < 4 && Math.abs(ev.clientY - startY) < 4) return;
+    moved = true;
+    bar.classList.add('dragging');
+
+    const colShift = colShiftFrom(ev);
+    const origStart = nearestCol(entry.date, true);
+    const origEnd   = nearestCol(entry.endDate, false);
+    if (origStart === null) return;
+    const newStart = origStart + colShift;
+    const newEnd   = (origEnd !== null ? origEnd : origStart) + colShift;
+    bar.style.left  = (newStart * tlColW + 2) + 'px';
+    bar.style.width = Math.max(TL_BAR_H, (newEnd - newStart + 1) * tlColW - 4) + 'px';
+
+    if (lastHighlight) lastHighlight.classList.remove('drop-target');
+    lastHighlight = legalTarget(ev.clientY);
+    if (lastHighlight) lastHighlight.classList.add('drop-target');
+  }
+
+  function onUp(ev) {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    bar.classList.remove('dragging');
+    if (lastHighlight) lastHighlight.classList.remove('drop-target');
+
+    if (!moved) {                                   // a click, not a drag
+      jumpToProject(entry.projectId, findTask(entry.projectId, entry.taskId)?.task);
+      return;
+    }
+
+    const found = findTask(entry.projectId, entry.taskId);
+    if (!found) return;
+    const { task } = found;
+
+    const colShift = colShiftFrom(ev);
+    if (colShift !== 0) {
+      const newStart = shiftByCols(task.date, colShift);
+      if (task.endDate && task.endDate !== task.date) {
+        const durMs = new Date(task.endDate + 'T00:00:00') - new Date(task.date + 'T00:00:00');
+        const newEndD = new Date(new Date(newStart + 'T00:00:00').getTime() + durMs);
+        task.endDate = fmtDate(newEndD.getFullYear(), newEndD.getMonth() + 1, newEndD.getDate());
+      }
+      task.date = newStart;
+    }
+
+    const target = legalTarget(ev.clientY);
+    if (target) {
+      const newPerson = target.dataset.person || null;
+      if (entry.attIdx != null) {
+        const att = (task.attendees || [])[entry.attIdx];
+        if (att) att.person = newPerson;
+      } else {
+        task.person = newPerson;
+      }
+    }
+
+    ganttCommit();
+  }
+
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+// ── Drag a bar edge to change its duration ──
+function startTlResize(e, entry, bar, side) {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const sc = document.getElementById('tlScroll');
+  const startX = e.clientX;
+  const startScrollLeft = sc.scrollLeft;
+  const origLeft  = parseFloat(bar.style.left);
+  const origWidth = parseFloat(bar.style.width);
+  const dxOf = ev => ev.clientX - startX + (sc.scrollLeft - startScrollLeft);
+
+  function onMove(ev) {
+    const dx = dxOf(ev);
+    if (side === 'right') {
+      bar.style.width = Math.max(TL_BAR_H, origWidth + dx) + 'px';
+    } else {
+      const newWidth = origWidth - dx;
+      if (newWidth >= TL_BAR_H) {
+        bar.style.left  = (origLeft + dx) + 'px';
+        bar.style.width = newWidth + 'px';
+      }
+    }
+  }
+
+  function onUp(ev) {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    const found = findTask(entry.projectId, entry.taskId);
+    if (!found) return renderFolderGantt();
+    const { task } = found;
+
+    const colShift = Math.round(dxOf(ev) / tlColW);
+    if (colShift === 0) return renderFolderGantt();
+
+    if (side === 'right') {
+      const newEnd = shiftByCols(task.endDate || task.date, colShift);
+      if (newEnd < task.date) return renderFolderGantt();
+      if (newEnd === task.date) delete task.endDate;   // collapsed back to one day
+      else task.endDate = newEnd;
+    } else {
+      const newStart = shiftByCols(task.date, colShift);
+      if (newStart > (task.endDate || task.date)) return renderFolderGantt();
+      task.date = newStart;
+      if (task.endDate === task.date) delete task.endDate;
+    }
+    ganttCommit();
+  }
+
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+// ── Drop a palette chip onto a row to create work in that row's project ──
+// Mirrors the day-cell handler; note that role chips carry NO `type` field, so
+// the final else is the role case. Switching only on known types would silently
+// drop them.
+function wireTrackDrop(track, projectId, person) {
+  track.addEventListener('dragover', e => {
+    if (!dragPayload && !e.dataTransfer.types.includes('text')) return;
+    if (dragPayload && (dragPayload.type === 'dup-project' || dragPayload.type === 'tree-move' ||
+                        dragPayload.type === 'person' || dragPayload.type === 'move' || dragPayload.type === 'copy')) return;
+    e.preventDefault();
+    track.classList.add('drag-over');
+  });
+  track.addEventListener('dragleave', e => {
+    if (!track.contains(e.relatedTarget)) track.classList.remove('drag-over');
+  });
+  track.addEventListener('drop', e => {
+    e.preventDefault();
+    track.classList.remove('drag-over');
+    let pl = dragPayload;
+    if (!pl) { try { pl = JSON.parse(e.dataTransfer.getData('text')); } catch(_) { return; } }
+    if (!pl || pl.type === 'dup-project' || pl.type === 'tree-move' || pl.type === 'person') return;
+
+    const proj = getProject(projectId);
+    if (!proj) return;
+    const col = Math.floor((e.clientX - track.getBoundingClientRect().left) / tlColW);
+    const dateStr = colToDate(col);
+    if (!dateStr) return;
+
+    if (pl.type === 'duedate') {
+      proj.tasks.push({ id: genId(), date: dateStr, isDueDate: true,
+        milestoneType: pl.defaultLabel === 'Milestone' ? 'milestone' : pl.defaultLabel === 'Delivery' ? 'delivery' : pl.defaultLabel === 'PTO' ? 'pto' : 'due-date',
+        color: '#3a3a52', role: '', roleCategory: '', attendees: [], taskName: pl.defaultLabel || null });
+    } else if (pl.type === 'review') {
+      proj.tasks.push({ id: genId(), date: dateStr, isReview: true, reviewLabel: pl.label || 'Review',
+        taskName: null, color: REVIEW_COLOR, attendees: person ? [{ id: genId(), person, role: pl.label || 'Review', category: 'Internal Team', color: REVIEW_COLOR }] : [] });
+    } else {
+      // Role chip → a role block on this row's person (the row IS the assignee)
+      const autoPerson = person || ((pl.role || '').toLowerCase() === 'producer' ? (proj.leadProducer || null) : null);
+      proj.tasks.push({ id: genId(), date: dateStr, role: pl.role, roleCategory: pl.category,
+        color: pl.color, person: autoPerson, taskName: null, loe: 'low', attendees: [] });
+    }
+    ganttCommit();
+  });
+}
+
+// Dropping a person chip onto a bar adds them as an attendee, same as the calendar.
+function wireBarPersonDrop(bar, entry) {
+  bar.addEventListener('dragover', e => {
+    if (!dragPayload || dragPayload.type !== 'person') return;
+    e.preventDefault(); e.stopPropagation();
+    bar.classList.add('drag-accepting');
+  });
+  bar.addEventListener('dragleave', e => {
+    if (!bar.contains(e.relatedTarget)) bar.classList.remove('drag-accepting');
+  });
+  bar.addEventListener('drop', e => {
+    e.preventDefault(); e.stopPropagation();
+    bar.classList.remove('drag-accepting');
+    let pl = dragPayload;
+    if (!pl) { try { pl = JSON.parse(e.dataTransfer.getData('text')); } catch(_) { return; } }
+    if (!pl || pl.type !== 'person') return;
+    const found = findTask(entry.projectId, entry.taskId);
+    if (!found) return;
+    const { task } = found;
+    if ((task.attendees || []).some(a => a.person === pl.person)) return;
+    task.attendees = task.attendees || [];
+    task.attendees.push({ id: genId(), person: pl.person, role: pl.role, category: pl.category, color: pl.color });
+    ganttCommit();
+  });
+}
+
+// ── Scroll / infinite horizontal extension ──
+function scrollTlToToday() {
+  const sc = document.getElementById('tlScroll');
+  if (!sc) return;
+  buildTlDates();
+  const col = tlDateMap.get(todayDateStr()) ?? 0;
+  sc.scrollLeft = Math.max(0, TL_NAME_W + col * tlColW - Math.round((sc.clientWidth - TL_NAME_W) / 2));
+}
+
+// Keep whatever date is centred stationary while columns change width or count.
+function tlCentreDate() {
+  const sc = document.getElementById('tlScroll');
+  if (!sc) return todayDateStr();
+  const centrePixel = sc.scrollLeft - TL_NAME_W + (sc.clientWidth - TL_NAME_W) / 2;
+  const idx = Math.max(0, Math.min(tlDates.length - 1, Math.round(centrePixel / tlColW)));
+  return tlDates[idx] || todayDateStr();
+}
+function tlRestoreCentre(dateStr) {
+  const sc = document.getElementById('tlScroll');
+  if (!sc) return;
+  const col = tlDateMap.get(dateStr) ?? tlDateMap.get(todayDateStr()) ?? 0;
+  sc.scrollLeft = Math.max(0, TL_NAME_W + col * tlColW - Math.round((sc.clientWidth - TL_NAME_W) / 2));
+}
+
+function extendTimeline(direction) {
+  const sc = document.getElementById('tlScroll');
+  const prevSL = sc.scrollLeft, prevSW = sc.scrollWidth;
+  const d = new Date((direction === 'right' ? tlEnd : tlStart) + 'T00:00:00');
+  d.setDate(d.getDate() + (direction === 'right' ? 1 : -1) * TL_WEEKS_EXT * 7);
+  const ds = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+  if (direction === 'right') tlEnd = ds; else tlStart = ds;
+  renderFolderGantt();
+  if (direction === 'left') sc.scrollLeft = prevSL + (sc.scrollWidth - prevSW);
+}
+
+function setupTlObserver() {
+  teardownTlObserver();
+  const sc = document.getElementById('tlScroll');
+  tlObserver = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (!e.isIntersecting) return;
+      if (e.target.id === 'tlSentinelL') extendTimeline('left');
+      if (e.target.id === 'tlSentinelR') extendTimeline('right');
+    });
+  }, { root: sc, rootMargin: '0px 600px', threshold: 0 });
+  tlObserver.observe(document.getElementById('tlSentinelL'));
+  tlObserver.observe(document.getElementById('tlSentinelR'));
+}
+function teardownTlObserver() {
+  if (tlObserver) { tlObserver.disconnect(); tlObserver = null; }
 }
 
 function buildChip(task, dateStr) {
@@ -4819,47 +5534,6 @@ function packTasks(tasks, dates) {
     else arr.push(task);
   });
 
-  return layout;
-}
-
-// Folder view: one labelled band per child project, each band lane-packed on its
-// own so a project's bars never interleave with another project's.
-function buildFolderLayout(dates) {
-  const layout = new Map(dates.map(d => [d, []]));
-  if (!dates.length) return layout;
-  const minDate = dates[0], maxDate = dates[dates.length - 1];
-
-  getFolderProjects(activeProjectId).forEach(proj => {
-    const tasks = (proj.tasks || []).filter(t => t.date <= maxDate && (t.endDate || t.date) >= minDate);
-    if (!tasks.length) return;   // nothing in view — don't render an empty band
-    const sub = packTasks(tasks, dates);
-
-    // A band must be the same height every day of a calendar row or its label
-    // stops lining up — but only within that row. Sizing to the busiest day of
-    // the whole scrollback would pad every week to the tallest one.
-    const rowsFor = new Map();   // dateStr → band height for its calendar row
-    let chunk = [];
-    const flush = () => {
-      if (!chunk.length) return;
-      const h = chunk.reduce((m, d) => Math.max(m, (sub.get(d) || []).length), 0);
-      chunk.forEach(d => rowsFor.set(d, h));
-      chunk = [];
-    };
-    dates.forEach(d => { if (isRowStart(d)) flush(); chunk.push(d); });
-    flush();
-
-    dates.forEach(d => {
-      const rows = rowsFor.get(d) || 0;
-      if (!rows) return;         // idle all week — don't render an empty band
-      const arr   = layout.get(d);
-      const cells = sub.get(d) || [];
-      arr.push({ _projLabel: proj });
-      for (let i = 0; i < rows; i++) {
-        const c = cells[i];
-        arr.push(c && c.id ? { _task: c, _projId: proj.id } : (c || null));
-      }
-    });
-  });
   return layout;
 }
 
@@ -7595,9 +8269,29 @@ function setupInitListeners() {
 
   // Calendar nav
   document.getElementById('calToday').addEventListener('click', () => {
+    if (isFolderView()) {
+      const today = todayDateStr();
+      // Snap the range back if today has scrolled out of the built window
+      if (today < tlStart || today > tlEnd) { resetTlRange(); renderFolderGantt(); }
+      scrollTlToToday();
+      return;
+    }
     const todayCell = document.getElementById('calScroll')?.querySelector('.cal-day.today');
     if (!todayCell) { calEarliestDate = null; renderCalendar(); } else { scrollToToday(); }
   });
+
+  // Gantt zoom — hold the centred date steady across the column-width change
+  const stepZoom = dir => {
+    const idx = TL_ZOOM_STEPS.indexOf(tlColW);
+    const next = idx + dir;
+    if (next < 0 || next >= TL_ZOOM_STEPS.length) return;
+    const centre = tlCentreDate();
+    tlColW = TL_ZOOM_STEPS[next];
+    renderFolderGantt();
+    tlRestoreCentre(centre);
+  };
+  document.getElementById('zoomInBtn').addEventListener('click', () => stepZoom(1));
+  document.getElementById('zoomOutBtn').addEventListener('click', () => stepZoom(-1));
 
   // Ghost chip toggle
   const ghostBtn = document.getElementById('ghostToggle');
@@ -7615,6 +8309,13 @@ function setupInitListeners() {
     viewStart = getWeekStart();
     wkBtn.textContent = showWeekends ? 'Hide Weekends' : 'Show Weekends';
     wkBtn.classList.toggle('on', !showWeekends);
+    if (isFolderView()) {
+      // Column count changes, so hold the centred date rather than the scroll offset
+      const centre = tlCentreDate();
+      renderFolderGantt();
+      tlRestoreCentre(centre);
+      return;
+    }
     calEarliestDate = null;
     renderCalendar();
   });
