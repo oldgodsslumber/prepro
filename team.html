@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260818a';
+window.PREPRO_BUILD = '20260818b';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,9 +29,9 @@ window.PREPRO_BUILD = '20260818a';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260818a"></script>
+<script type="module" src="./auth.js?v=20260818b"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260818a"></script>
+<script src="./xlsx.full.min.js?v=20260818b"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -6675,6 +6675,26 @@ function isMeetingTask(t) {
   return MEETING_KEYWORDS.some(kw => name.includes(kw));
 }
 
+// Invite text lives in one place so the Outlook link and the ICS file can't drift.
+// Subject leads with the project's V number (Case ID) so a calendar full of
+// "Kickoff Call" and "Review" still says which project each one belongs to.
+function meetingName(t) { return t.taskName || t.reviewLabel || 'Meeting'; }
+
+function inviteSubject(t, proj) {
+  const tid = ((proj && proj.ticketId) || '').trim();
+  return tid ? tid + ' ' + meetingName(t) : meetingName(t);
+}
+
+function inviteBody(t, proj) {
+  const tid = ((proj && proj.ticketId) || '').trim();
+  // ticketLabelOf strips any ticket prefix off the name, and returns the plain
+  // name when there's no ticket — so rebuilding from the id keeps the V number
+  // even if the project was renamed in-app and lost its prefix.
+  const label = ticketLabelOf(proj);
+  const full  = tid ? (tid + ' ' + label).trim() : label;
+  return 'This meeting is a ' + meetingName(t) + ' for ' + full + '.';
+}
+
 function makeICS(tasks, proj) {
   function pad(n) { return String(n).padStart(2,'0'); }
   function fmtD(s) { return s.replace(/-/g,''); }
@@ -6703,13 +6723,13 @@ function makeICS(tasks, proj) {
       dtstart = 'DTSTART:' + fmtDT(t.date, 9, 0);
       dtend   = 'DTEND:'   + fmtDT(t.date, 9, 30);
     }
-    const summary  = esc(t.taskName || t.reviewLabel || 'Meeting');
     const attendees = (t.attendees || []);
     const lines = [
       'BEGIN:VEVENT',
       'UID:' + (t.id || genId()) + '@prepro',
       dtstart, dtend,
-      'SUMMARY:' + summary,
+      'SUMMARY:' + esc(inviteSubject(t, proj)),
+      'DESCRIPTION:' + esc(inviteBody(t, proj)),
     ];
     attendees.forEach(a => {
       const email = getPersonEmail(a.person);
@@ -6759,7 +6779,6 @@ function makeOutlookURL(t, proj) {
     startdt = fmtDT(t.date, 9, 0);
     enddt   = fmtDT(t.date, 9, 30);
   }
-  const subject  = t.taskName || t.reviewLabel || 'Meeting';
   const attendees = (t.attendees || []);
   // Only pass real emails to Outlook. Bare names without an email get
   // dropped into the compose body by some Outlook versions instead of
@@ -6768,7 +6787,8 @@ function makeOutlookURL(t, proj) {
   const recipients = attendees
     .map(a => getPersonEmail(a.person))
     .filter(em => em && em.includes('@'));
-  const params = new URLSearchParams({ subject, startdt, enddt });
+  const params = new URLSearchParams({ subject: inviteSubject(t, proj), startdt, enddt });
+  params.set('body', inviteBody(t, proj));
   if (recipients.length) params.set('to', recipients.join(','));
   return 'https://outlook.office.com/calendar/action/compose?' + params.toString();
 }
