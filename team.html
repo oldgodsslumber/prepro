@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260818d';
+window.PREPRO_BUILD = '20260818e';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,9 +29,9 @@ window.PREPRO_BUILD = '20260818d';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260818d"></script>
+<script type="module" src="./auth.js?v=20260818e"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260818d"></script>
+<script src="./xlsx.full.min.js?v=20260818e"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1154,7 +1154,9 @@ function isVideoTeamPerson(person) {
   return !!(person && person.roles && [...person.roles].some(r => VIDEO_TEAM_ROLES.includes(r)));
 }
 function catLabelForRole(role) { const c = ROLE_CATS.find(c => c.roles.includes(role)); return c ? c.label : ''; }
-function isPtoProject(proj) { return !!(proj && /pto|time\s*off/i.test(proj.name || '')); }
+// Matches "holiday" too, so the combined project works under any of the obvious
+// names — "PTO", "Time Off", "Holidays", "Holidays & PTO".
+function isPtoProject(proj) { return !!(proj && /pto|time\s*off|holiday/i.test(proj.name || '')); }
 
 // ── HOLIDAYS ──
 // A Holiday is a key date that behaves like PTO — same project, same attendee
@@ -6344,7 +6346,13 @@ function openTypeSwitcher(e, taskId, currentType) {
   e.stopPropagation();
   const sw = document.getElementById('typeSwitcher');
   sw.innerHTML = '';
-  TYPE_SWITCHER_DEFS.forEach(def => {
+  // Inside a Time Off project the only meaningful swap is PTO ↔ Holiday — that
+  // project's palette can't even create the other types, so offering Studio
+  // Shoot here is a mis-click waiting to happen.
+  const defs = isPtoProject(getProject(activeProjectId))
+    ? TYPE_SWITCHER_DEFS.filter(d => d.label === 'PTO' || d.label === 'Holiday')
+    : TYPE_SWITCHER_DEFS;
+  defs.forEach(def => {
     if (def.sep) { const s = document.createElement('div'); s.className = 'type-sw-sep'; sw.appendChild(s); return; }
     const item = document.createElement('div');
     item.className = 'type-sw-item' + (def.label === currentType ? ' current' : '');
@@ -6371,6 +6379,15 @@ function convertTask(taskId, newType) {
   const task = proj.tasks.find(t => t.id === taskId);
   if (!task) return;
   const REVIEW_TYPES = ['Review', 'Meeting', 'Studio Shoot', 'On-Location Shoot', 'Studio Work'];
+  // Chips are created with taskName preset to their type's own name, so a PTO
+  // converted to a Holiday would otherwise keep reading "PTO" under the new
+  // badge. A label the user never customised is not a name worth preserving —
+  // re-default it. Anything they actually typed ("Diwali", "Sam — Italy") stays.
+  const oldDefault = task.isDueDate ? milestoneLabel(task.milestoneType) : (task.reviewLabel || '');
+  // Only a name that literally matches the old type's label counts as stale. A
+  // null name is a different case: it renders ghosted as the type's own default
+  // and must stay null so it keeps tracking whatever the type now is.
+  const staleName = !!task.taskName && task.taskName === oldDefault;
   if (REVIEW_TYPES.includes(newType)) {
     task.isReview     = true;
     task.isDueDate    = false;
@@ -6381,7 +6398,7 @@ function convertTask(taskId, newType) {
     task.role         = task.role || '';
     task.roleCategory = task.roleCategory || '';
     if (!task.attendees) task.attendees = [];
-    if (!task.taskName) task.taskName = newType;
+    if (!task.taskName || staleName) task.taskName = newType;
   } else {
     task.isDueDate    = true;
     task.isReview     = false;
@@ -6391,6 +6408,7 @@ function convertTask(taskId, newType) {
     task.role         = '';
     task.roleCategory = '';
     if (!task.attendees) task.attendees = [];
+    if (staleName) task.taskName = newType;
     // Country codes only mean something on a Holiday — drop them on the way out
     // so a task converted back to Holiday later doesn't resurrect stale flags.
     if (task.milestoneType === 'holiday') { if (!Array.isArray(task.flags)) task.flags = []; }
