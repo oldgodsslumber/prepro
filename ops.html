@@ -6,7 +6,27 @@
 <title>PRE-PRO — Ops Mode</title>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js"></script>
+<!-- Cache-bust / auto-update: bump PREPRO_BUILD + version.json + the ?v= tokens
+     on each deploy. If the deployed build is newer than this cached page, reload
+     once so users always get the latest without a manual hard refresh. -->
+<script>
+window.PREPRO_BUILD = '20260818f';
+(function () {
+  try {
+    fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (v) {
+        if (v && v.build && v.build !== window.PREPRO_BUILD) {
+          var k = 'prepro_reloaded_' + v.build;
+          if (!sessionStorage.getItem(k)) { sessionStorage.setItem(k, '1'); location.reload(); }
+        }
+      })
+      .catch(function () {});
+  } catch (e) {}
+})();
+</script>
+
+<script type="module" src="./auth.js?v=20260818f"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -659,6 +679,32 @@ function isStudioLabel(label) {
   return label.includes('Shoot') || STUDIO_LABELS.includes(label);
 }
 
+// ── TASK TYPE DISPLAY (mirrors team.html) ──
+// Keep these in step with team.html's MILESTONE_DISPLAY / TYPE_ABBR. Ops reads
+// the same data, so a type team.html can create has to be legible here too.
+const MILESTONE_LABEL = { milestone: 'Milestone', delivery: 'Delivery', pto: 'PTO', holiday: 'Holiday', 'due-date': 'Project Due Date' };
+const MILESTONE_EMOJI = { milestone: '🎯', delivery: '📦', pto: '🏖', holiday: '🎆', 'due-date': '🏁' };
+function milestoneLabel(type) { return MILESTONE_LABEL[type] || MILESTONE_LABEL['due-date']; }
+// Holidays behave like PTO everywhere in Ops: nobody is working, and they are
+// not a project deliverable. Anything that used to test milestoneType === 'pto'
+// wants this instead.
+function isHolidayTask(t) { return !!(t && t.isDueDate && t.milestoneType === 'holiday'); }
+function isTimeOffTask(t) { return !!(t && t.isDueDate && (t.milestoneType === 'pto' || t.milestoneType === 'holiday')); }
+// Three-letter badge labels, matching team.html.
+const TYPE_ABBR = {
+  'Review':            'REV',
+  'Meeting':           'MTG',
+  'Studio Shoot':      'STS',
+  'On-Location Shoot': 'OLS',
+  'Studio Work':       'STW',
+  'Project Due Date':  'DUE',
+  'Milestone':         'MLS',
+  'Delivery':          'DEL',
+  'PTO':               'PTO',
+  'Holiday':           'HOL',
+};
+function typeAbbr(label) { return TYPE_ABBR[label] || String(label || '').slice(0, 3).toUpperCase(); }
+
 // ── TIMELINE CONSTANTS ──
 const TL_NAME_W     = 130;
 const TL_BAR_H      = 22;
@@ -1236,10 +1282,7 @@ function opsTaskTitle(task) {
   if (!task) return 'Task';
   if (task.taskName) return task.taskName;
   if (task.isReview) return task.reviewLabel || 'Review';
-  if (task.isDueDate) {
-    const t = task.milestoneType;
-    return t === 'milestone' ? 'Milestone' : t === 'delivery' ? 'Delivery' : t === 'pto' ? 'PTO' : 'Project Due Date';
-  }
+  if (task.isDueDate) return milestoneLabel(task.milestoneType);
   return roleVerb(task.role);
 }
 
@@ -1289,7 +1332,7 @@ function getPtoEntries() {
   const out = [];
   (state.projects || []).filter(p => !isInactive(p) && !p.ghost).forEach(proj => {
     (proj.tasks || []).forEach(t => {
-      if (!t.isDueDate || t.milestoneType !== 'pto') return;
+      if (!isTimeOffTask(t)) return;
       const end = t.endDate || t.date;
       (t.attendees || []).forEach(a => {
         if (!a.person || isSunset(a.person)) return;
@@ -1358,7 +1401,7 @@ function isPersonPTO(person, dateStr) {
   const lowerPerson = person.toLowerCase();
   for (const proj of (state.projects || [])) {
     for (const t of (proj.tasks || [])) {
-      if (!t.isDueDate || t.milestoneType !== 'pto') continue;
+      if (!isTimeOffTask(t)) continue;
       const end = t.endDate || t.date;
       if (dateStr < t.date || dateStr > end) continue;
       // Match only explicit attendees. A taskName substring check ("John PTO")
@@ -1494,7 +1537,9 @@ function renderFilterChips() {
 }
 
 // ── CHIP BUILDER (shared by calendar + person view) ──
-const SHORT_CAT = { 'Pre-Production':'PRE','Producing':'PROD','Post-Producing':'POST','Editing':'EDIT','Animation':'ANIM','Production':'SHOOT','Administrative':'ADMIN' };
+// Three letters each, matching team.html's ROLE_ABBR where the concepts line up
+// (Producing→PRD like Producer, Editing→EDT like Editor, Animation→ANM).
+const SHORT_CAT = { 'Pre-Production':'PRE','Producing':'PRD','Post-Producing':'PST','Editing':'EDT','Animation':'ANM','Production':'SHT','Administrative':'ADM' };
 
 function buildOpsChip(entry) {
   const chip = document.createElement('div');
@@ -2010,7 +2055,9 @@ function renderTimeline() {
       if (chipDisplay === 'categories') {
         const catSp = document.createElement('span');
         catSp.className = 'tl-bar-cat';
-        catSp.textContent = entry.cat;
+        // Same abbreviation the calendar chips use — the toggle promises a
+        // "category abbreviation", and the full name is already in the tooltip.
+        catSp.textContent = SHORT_CAT[entry.cat] || entry.cat;
         inner.appendChild(catSp);
       } else {
         const nameSp = document.createElement('span');
@@ -2538,7 +2585,7 @@ function getTeamHeadsUp() {
       }
 
       // Milestones with action keywords
-      if (task.isDueDate && task.milestoneType !== 'pto') {
+      if (task.isDueDate && !isTimeOffTask(task)) {
         const tn = (task.taskName || '').toLowerCase();
         const actionKW = ['kick-off','kick off','kickoff','delivery','deliverable','deliver','handoff','hand-off','hand off','launch','go live','go-live','golive','final','finalize','lock','approval','sign-off','sign off','signoff','presentation','present','pitch','onboard','on-board','onboarding','start','begins','begin','deadline'];
         if (actionKW.some(kw => tn.includes(kw))) {
@@ -2556,8 +2603,8 @@ function getTeamHeadsUp() {
         }
       }
 
-      // PTO
-      if (task.isDueDate && task.milestoneType === 'pto') {
+      // PTO and holidays — both mean the person is not working
+      if (isTimeOffTask(task)) {
         (task.attendees || []).forEach(a => {
           if (!a.person || isSunset(a.person)) return;
           // Find which projects this person is on
@@ -3430,7 +3477,7 @@ function renderDeliveriesPanel() {
   const items = [];
   (state.projects || []).filter(p => !isInactive(p) && !p.ghost).forEach(proj => {
     (proj.tasks || []).forEach(t => {
-      if (!t.isDueDate || t.milestoneType === 'pto') return;
+      if (!t.isDueDate || isTimeOffTask(t)) return;
       if (!t.date || t.date < today || t.date > horizonEnd) return;
       items.push({ t, date: t.date, projectName: proj.name, producer: getPrimaryProducer(proj) });
     });
@@ -3908,8 +3955,8 @@ function computeRecapStats(start, end) {
 // icons, milestone/review markers, and a slippage callout when it ran
 // past a planned Delivery / Due Date.
 // ══════════════════════════════════════════════════════════════════
-const PM_MS_EMOJI = { milestone: '🎯', delivery: '📦', pto: '🏖', 'due-date': '🏁' };
-const PM_MS_LABEL = { milestone: 'Milestone', delivery: 'Delivery', pto: 'PTO', 'due-date': 'Due Date' };
+const PM_MS_EMOJI = MILESTONE_EMOJI;
+const PM_MS_LABEL = { milestone: 'Milestone', delivery: 'Delivery', pto: 'PTO', holiday: 'Holiday', 'due-date': 'Due Date' };
 const PM_NOTE_EMOJI = { update: '📋', delay: '⏳', direction: '🔀', feedback: '💬', blocker: '🚧', decision: '✅', team: '👥' };
 const PM_NOTE_LABEL = { update: 'Update', delay: 'Delay', direction: 'Change in Direction', feedback: 'Feedback', blocker: 'Blocker', decision: 'Decision', team: 'Team Change' };
 const PM_MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -3968,8 +4015,9 @@ function buildProjectMetrics(proj) {
     const s = t.date, e = t.endDate || t.date;
 
     if (t.isDueDate) {
-      if (t.milestoneType === 'pto') {
-        (t.attendees || []).forEach(a => { if (a.person) lane(a.person).segments.push({ start: s, end: e, kind: 'pto', label: 'PTO' }); });
+      if (isTimeOffTask(t)) {
+        const offLabel = isHolidayTask(t) ? (t.taskName || 'Holiday') : 'PTO';
+        (t.attendees || []).forEach(a => { if (a.person) lane(a.person).segments.push({ start: s, end: e, kind: 'pto', label: offLabel }); });
       } else {
         const mt = t.milestoneType || 'due-date';
         markers.push({ date: s, kind: mt, emoji: PM_MS_EMOJI[mt] || '🏁', label: t.taskName || PM_MS_LABEL[mt] || 'Key date' });
@@ -4413,7 +4461,7 @@ function renderProjectHealth() {
     const pct = totalTasks ? Math.round((pastTasks / totalTasks) * 100) : 0;
 
     const upcoming = tasks
-      .filter(t => (t.isReview || t.isDueDate) && t.date && t.date >= today && t.milestoneType !== 'pto')
+      .filter(t => (t.isReview || t.isDueDate) && t.date && t.date >= today && !isTimeOffTask(t))
       .sort((a, b) => a.date.localeCompare(b.date))[0];
     const nextLabel = upcoming
       ? (upcoming.taskName || upcoming.reviewLabel || 'Milestone') + ' · ' + fmtDateShort(upcoming.date)

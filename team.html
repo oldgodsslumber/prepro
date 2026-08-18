@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260818e';
+window.PREPRO_BUILD = '20260818f';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,9 +29,9 @@ window.PREPRO_BUILD = '20260818e';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260818e"></script>
+<script type="module" src="./auth.js?v=20260818f"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260818e"></script>
+<script src="./xlsx.full.min.js?v=20260818f"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1116,7 +1116,26 @@ const ROLE_CATS = [
 ];
 const REVIEW_COLOR = '#c0394f';
 const LOE_EMOJI    = { low: '🟢', medium: '🟡', high: '🔴' };
-const ROLE_ABBR    = { 'Producer': 'PRD', 'Editor': 'EDT', 'Animator': 'ANM', 'Copywriter': 'CPY', 'Designer': 'DSN', 'Stakeholder': 'STK', 'External Vendor': 'VND', 'Other': 'OTH', 'Administrative': 'ADMIN', 'Team/Other Event': 'EVENT' };
+const ROLE_ABBR    = { 'Producer': 'PRD', 'Editor': 'EDT', 'Animator': 'ANM', 'Copywriter': 'CPY', 'Designer': 'DSN', 'Stakeholder': 'STK', 'External Vendor': 'VND', 'Other': 'OTH', 'Administrative': 'ADM', 'Team/Other Event': 'EVT' };
+// Every other chip badge gets the same three-letter treatment the roles have,
+// so a badge is always the same width and the title carries the full name.
+// Keyed by the human label, which is what both the review types and the
+// milestone types are identified by everywhere else.
+const TYPE_ABBR = {
+  'Review':            'REV',
+  'Meeting':           'MTG',
+  'Studio Shoot':      'STS',
+  'On-Location Shoot': 'OLS',
+  'Studio Work':       'STW',
+  'Project Due Date':  'DUE',
+  'Milestone':         'MLS',
+  'Delivery':          'DEL',
+  'PTO':               'PTO',
+  'Holiday':           'HOL',
+};
+// Falls back to the first three letters so a type without an entry still gets a
+// badge-shaped badge rather than a full sentence.
+function typeAbbr(label) { return TYPE_ABBR[label] || String(label || '').slice(0, 3).toUpperCase(); }
 // Verb form a role-task name defaults to when left blank.
 const ROLE_VERB    = { 'Producer': 'Producing', 'Editor': 'Editing', 'Animator': 'Animating', 'Copywriter': 'Copywriting', 'Designer': 'Designing', 'Stakeholder': 'Reviewing', 'External Vendor': 'Vendor Work', 'Other': 'Working', 'Administrative': 'Administrative', 'Team/Other Event': 'Team Event' };
 function roleVerb(role) { return ROLE_VERB[role] || role || 'Task'; }
@@ -5339,8 +5358,8 @@ function buildDueDateMarker(task, dateStr) {
   const badge = document.createElement('span');
   badge.className = 'review-badge';
   badge.style.cssText = 'background:var(--dd-badge);cursor:pointer;';
-  badge.textContent = mEmoji + ' ' + (mType === 'due-date' ? 'Key Date' : mLabel);
-  badge.title = 'Click to change type';
+  badge.textContent = mEmoji + ' ' + typeAbbr(mLabel);
+  badge.title = mLabel + ' · Click to change type';
   badge.addEventListener('click', e => { e.stopPropagation(); openTypeSwitcher(e, task.id, mLabel); });
   const titleSpan = document.createElement('span');
   titleSpan.className = 'review-title' + (task.taskName ? '' : ' title-default');
@@ -5539,8 +5558,8 @@ function buildReviewBlock(task, dateStr) {
   hd.className = 'review-hd';
   const badge = document.createElement('span');
   badge.className = 'review-badge';
-  badge.textContent = task.reviewLabel || 'Review';
-  badge.title = 'Click to change type';
+  badge.textContent = typeAbbr(task.reviewLabel || 'Review');
+  badge.title = (task.reviewLabel || 'Review') + ' · Click to change type';
   badge.style.cursor = 'pointer';
   badge.addEventListener('click', e => { e.stopPropagation(); openTypeSwitcher(e, task.id, task.reviewLabel || 'Review'); });
   const title = document.createElement('span');
@@ -6065,10 +6084,10 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     panelContext = { mode: 'edit-review', taskId, date: task.date };
     const lbl = task.reviewLabel || 'Review';
     const badge = document.getElementById('panelRoleBadge');
-    badge.textContent      = lbl;
+    badge.textContent      = typeAbbr(lbl);
     badge.style.background = REVIEW_COLOR;
     badge.style.cursor     = 'pointer';
-    badge.title            = 'Click to change type';
+    badge.title            = lbl + ' · Click to change type';
     badge.onclick          = e => { closePanel(); openTypeSwitcher(e, taskId, lbl); };
     document.getElementById('panelDateLabel').textContent      = fmtDateLabel(task.date);
     setPanelDateRange(task);
@@ -6120,10 +6139,10 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     const mLabel2 = milestoneLabel(mType2);
     panelContext = { mode: 'edit-duedate', taskId };
     const badge2 = document.getElementById('panelRoleBadge');
-    badge2.textContent      = mEmoji2;
+    badge2.textContent      = mEmoji2 + ' ' + typeAbbr(mLabel2);
     badge2.style.background = 'var(--dd-badge)';
     badge2.style.cursor     = 'pointer';
-    badge2.title            = 'Click to change type';
+    badge2.title            = mLabel2 + ' · Click to change type';
     badge2.onclick          = e => { closePanel(); openTypeSwitcher(e, taskId, mLabel2); };
     document.getElementById('panelDateLabel').textContent      = fmtDateLabel(task.date);
     fieldPerson.style.display = 'none';
@@ -6374,10 +6393,17 @@ function openTypeSwitcher(e, taskId, currentType) {
 function closeTypeSwitcher() { document.getElementById('typeSwitcher').classList.add('hidden'); }
 
 function convertTask(taskId, newType) {
-  const proj = getProject(activeProjectId);
-  if (!proj) return;
-  const task = proj.tasks.find(t => t.id === taskId);
-  if (!task) return;
+  // Look in the active project first, then anywhere. The switcher can outlive
+  // the selection that opened it (closePanel runs before it opens, and a remote
+  // sync can re-home a task mid-menu), and scoping the lookup to the active
+  // project made that failure completely silent — the click just did nothing.
+  let proj = getProject(activeProjectId);
+  let task = proj && (proj.tasks || []).find(t => t.id === taskId);
+  if (!task) {
+    proj = (state.projects || []).find(p => (p.tasks || []).some(t => t.id === taskId));
+    task = proj && proj.tasks.find(t => t.id === taskId);
+  }
+  if (!task) { console.warn('convertTask: task not found', taskId); return; }
   const REVIEW_TYPES = ['Review', 'Meeting', 'Studio Shoot', 'On-Location Shoot', 'Studio Work'];
   // Chips are created with taskName preset to their type's own name, so a PTO
   // converted to a Holiday would otherwise keep reading "PTO" under the new

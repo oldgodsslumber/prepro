@@ -6,7 +6,27 @@
 <title>PRE-PRO — Dashboard</title>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js"></script>
+<!-- Cache-bust / auto-update: bump PREPRO_BUILD + version.json + the ?v= tokens
+     on each deploy. If the deployed build is newer than this cached page, reload
+     once so users always get the latest without a manual hard refresh. -->
+<script>
+window.PREPRO_BUILD = '20260818f';
+(function () {
+  try {
+    fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (v) {
+        if (v && v.build && v.build !== window.PREPRO_BUILD) {
+          var k = 'prepro_reloaded_' + v.build;
+          if (!sessionStorage.getItem(k)) { sessionStorage.setItem(k, '1'); location.reload(); }
+        }
+      })
+      .catch(function () {});
+  } catch (e) {}
+})();
+</script>
+
+<script type="module" src="./auth.js?v=20260818f"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -526,14 +546,40 @@ const LOE_PTS   = { low: 1, medium: 2, high: 3 };
 // otherwise. Without this, unnamed work tasks fell through to '(untitled)'.
 const ROLE_VERB = { 'Producer': 'Producing', 'Editor': 'Editing', 'Animator': 'Animating', 'Copywriter': 'Copywriting', 'Designer': 'Designing', 'Stakeholder': 'Reviewing', 'External Vendor': 'Vendor Work', 'Other': 'Working', 'Administrative': 'Administrative', 'Team/Other Event': 'Team Event' };
 function roleVerb(role) { return ROLE_VERB[role] || role || 'Task'; }
+// ── TASK TYPE DISPLAY (mirrors team.html / ops.html) ──
+const MILESTONE_LABEL = { milestone: 'Milestone', delivery: 'Delivery', pto: 'PTO', holiday: 'Holiday', 'due-date': 'Project Due Date' };
+function milestoneLabel(type) { return MILESTONE_LABEL[type] || MILESTONE_LABEL['due-date']; }
+// Holidays mean nobody is working, exactly like PTO — every PTO test here wants
+// this, or a holiday would be counted as a project deliverable instead.
+function isHolidayTask(t) { return !!(t && t.isDueDate && t.milestoneType === 'holiday'); }
+function isTimeOffTask(t) { return !!(t && t.isDueDate && (t.milestoneType === 'pto' || t.milestoneType === 'holiday')); }
+// Three-letter badge labels, matching team.html.
+const TYPE_ABBR = {
+  'Review':            'REV',
+  'Meeting':           'MTG',
+  'Studio Shoot':      'STS',
+  'On-Location Shoot': 'OLS',
+  'Studio Work':       'STW',
+  'Project Due Date':  'DUE',
+  'Milestone':         'MLS',
+  'Delivery':          'DEL',
+  'PTO':               'PTO',
+  'Holiday':           'HOL',
+};
+function typeAbbr(label) { return TYPE_ABBR[label] || String(label || '').slice(0, 3).toUpperCase(); }
+const BADGE_STYLE = {
+  pto:        'background:rgba(108,99,255,.2);color:var(--accent)',
+  holiday:    'background:rgba(240,180,41,.2);color:#f0b429',
+  'due-date': 'background:rgba(224,123,57,.2);color:#e07b39',
+  delivery:   'background:rgba(76,186,106,.2);color:#4cba6a',
+  milestone:  'background:rgba(108,99,255,.2);color:var(--accent)',
+};
+
 function taskDisplayName(task) {
   if (!task) return 'Task';
   if (task.taskName) return task.taskName;
   if (task.isReview) return task.reviewLabel || 'Review';
-  if (task.isDueDate) {
-    const t = task.milestoneType;
-    return t === 'milestone' ? 'Milestone' : t === 'delivery' ? 'Delivery' : t === 'pto' ? 'PTO' : 'Project Due Date';
-  }
+  if (task.isDueDate) return milestoneLabel(task.milestoneType);
   return roleVerb(task.role);
 }
 const DOW_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -1324,7 +1370,7 @@ function getTasksForPerson(personName, dateStr) {
       }
 
       // PTO: check attendees + taskName
-      if (task.isDueDate && task.milestoneType === 'pto') {
+      if (isTimeOffTask(task)) {
         const lp = personName.toLowerCase();
         if ((task.attendees || []).some(a => a.person && a.person.toLowerCase() === lp)) isMatch = true;
         if (task.taskName && task.taskName.toLowerCase().includes(lp)) isMatch = true;
@@ -1727,7 +1773,7 @@ function buildTaskContext(task, personName, dateStr, proj) {
   const lp = (personName || '').toLowerCase();
   const isForPerson = t => t.person === personName
     || (t.attendees || []).some(a => a.person === personName);
-  const isPTOForPerson = t => t.isDueDate && t.milestoneType === 'pto' && (
+  const isPTOForPerson = t => isTimeOffTask(t) && (
     (t.attendees || []).some(a => a.person && a.person.toLowerCase() === lp)
     || (t.taskName && t.taskName.toLowerCase().includes(lp))
   );
@@ -1744,7 +1790,7 @@ function buildTaskContext(task, personName, dateStr, proj) {
     return lbl.includes('shoot') && daysBetween(today, t.date) <= 7;
   });
   const nextKeyDate = future.find(t => {
-    if (!t.isDueDate || t.milestoneType === 'pto') return false;
+    if (!t.isDueDate || isTimeOffTask(t)) return false;
     return daysBetween(today, t.date) <= 7;
   });
   const personPTO = future.find(t => isPTOForPerson(t) && daysBetween(today, t.date) <= 5);
@@ -1798,7 +1844,7 @@ function patternKeyDateApproaching(task, personName, dateStr, proj, ctx) {
   if (!ctx.nextKeyDate) return null;
   if (daysBetween(dateStr, ctx.nextKeyDate.date) > 3) return null;
   const type = ctx.nextKeyDate.milestoneType;
-  const label = type === 'delivery' ? 'Delivery' : type === 'due-date' ? 'Project due' : 'Milestone';
+  const label = type === 'due-date' ? 'Project due' : milestoneLabel(type);
   const day = fmtDayShort(ctx.nextKeyDate.date, dateStr);
   return `${label} lands ${day} — is today's work on the critical path?`;
 }
@@ -1944,19 +1990,12 @@ function renderTodaySection() {
 
       if (task.isReview) {
         const label = task.reviewLabel || 'Review';
-        html += `<span class="task-badge">${esc(label)}</span>`;
+        html += `<span class="task-badge" title="${esc(label)}">${esc(typeAbbr(label))}</span>`;
       }
-      if (task.isDueDate && task.milestoneType === 'pto') {
-        html += `<span class="task-badge" style="background:rgba(108,99,255,.2);color:var(--accent)">PTO</span>`;
-      }
-      if (task.isDueDate && task.milestoneType === 'due-date') {
-        html += `<span class="task-badge" style="background:rgba(224,123,57,.2);color:#e07b39">Due Date</span>`;
-      }
-      if (task.isDueDate && task.milestoneType === 'delivery') {
-        html += `<span class="task-badge" style="background:rgba(76,186,106,.2);color:#4cba6a">Delivery</span>`;
-      }
-      if (task.isDueDate && task.milestoneType === 'milestone') {
-        html += `<span class="task-badge" style="background:rgba(108,99,255,.2);color:var(--accent)">Milestone</span>`;
+      if (task.isDueDate) {
+        const mt = task.milestoneType || 'due-date';
+        const mLabel = milestoneLabel(mt);
+        html += `<span class="task-badge" style="${BADGE_STYLE[mt] || BADGE_STYLE['due-date']}" title="${esc(mLabel)}">${esc(typeAbbr(mLabel))}</span>`;
       }
 
       const contentSpan = document.createElement('span');
@@ -2140,7 +2179,7 @@ function getHeadsUpItems(personName, afterDate) {
       }
 
       // Milestones with action keywords on my projects
-      if (task.isDueDate && task.milestoneType !== 'pto' && myProjectIds.has(proj.id)) {
+      if (task.isDueDate && !isTimeOffTask(task) && myProjectIds.has(proj.id)) {
         const tn = (task.taskName || '').toLowerCase();
         const actionKeywords = [
           'kick-off','kick off','kickoff',
@@ -2167,7 +2206,7 @@ function getHeadsUpItems(personName, afterDate) {
       }
 
       // Teammate PTO on projects I'm involved in
-      if (task.isDueDate && task.milestoneType === 'pto' && myProjectIds.has(proj.id)) {
+      if (isTimeOffTask(task) && myProjectIds.has(proj.id)) {
         (task.attendees || []).forEach(a => {
           if (!a.person || a.person === personName) return;
           items.push({
@@ -2203,7 +2242,7 @@ function getHeadsUpItems(personName, afterDate) {
   // Also find teammate PTO from OTHER projects where a teammate overlaps
   (state.projects || []).filter(p => isActiveProject(p) && !myProjectIds.has(p.id)).forEach(proj => {
     (proj.tasks || []).forEach(task => {
-      if (!task.isDueDate || task.milestoneType !== 'pto') return;
+      if (!isTimeOffTask(task)) return;
       const start = task.date;
       const end = task.endDate || task.date;
       if (!start || end <= afterDate || start > cutoff) return;
@@ -2570,7 +2609,7 @@ function renderComingUpSection() {
           }
         });
       }
-      if (task.isDueDate && task.milestoneType === 'pto') {
+      if (isTimeOffTask(task)) {
         if ((task.attendees || []).some(a => a.person && a.person.toLowerCase() === lp)) isMatch = true;
         if (task.taskName && task.taskName.toLowerCase().includes(lp)) isMatch = true;
       }
@@ -2657,7 +2696,7 @@ function renderComingUpSection() {
     const bar = document.createElement('div');
     let barClass = 'gantt-bar';
     if (task.isDueDate) {
-      barClass += task.milestoneType === 'pto' ? ' pto' : ' milestone';
+      barClass += isTimeOffTask(task) ? ' pto' : ' milestone';
     } else if (task.isReview) {
       barClass += ' review';
     }
@@ -2708,7 +2747,7 @@ function taskIsForSelected(t) {
   const lp = (selectedPerson || '').toLowerCase();
   if (t.person === selectedPerson) return true;
   if ((t.attendees || []).some(a => a.person === selectedPerson)) return true;
-  if (t.isDueDate && t.milestoneType === 'pto') {
+  if (isTimeOffTask(t)) {
     if ((t.attendees || []).some(a => a.person && a.person.toLowerCase() === lp)) return true;
     if (t.taskName && t.taskName.toLowerCase().includes(lp)) return true;
   }
@@ -3113,8 +3152,8 @@ function aggregateLookback(start, end) {
       const to   = e > end   ? end   : e;
 
       if (t.isDueDate) {
-        // Milestones / PTO carry no effort; count PTO days.
-        if (t.milestoneType === 'pto') ptoDays += daysBetween(from, to) + 1;
+        // Milestones / time off carry no effort; count days out (PTO + holidays).
+        if (isTimeOffTask(t)) ptoDays += daysBetween(from, to) + 1;
         return;
       }
 
