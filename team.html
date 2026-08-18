@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260818f';
+window.PREPRO_BUILD = '20260818g';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,9 +29,9 @@ window.PREPRO_BUILD = '20260818f';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260818f"></script>
+<script type="module" src="./auth.js?v=20260818g"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260818f"></script>
+<script src="./xlsx.full.min.js?v=20260818g"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -2552,10 +2552,23 @@ function recordHistory() {
   updateUndoRedoButtons();
 }
 
+// Firebase's set() REJECTS undefined anywhere in the payload, and it does so by
+// throwing synchronously — .catch() never sees it. One stray `undefined` on one
+// task therefore used to take down every save from then on, and because callers
+// run saveState() before renderCalendar(), the throw also skipped the repaint:
+// the change looked like it simply never happened. The JSON round-trip drops
+// undefined properties the same way it does for the undo snapshots, so no
+// individual writer has to remember the rule, and the try/catch keeps a bad
+// value from wedging the session.
 function _pushStateToFirebase() {
   if (!window._fb) return;
   const { db, ref, set } = window._fb;
-  set(ref(db, 'prepro/state'), state).catch(err => console.error('saveState:', err));
+  try {
+    set(ref(db, 'prepro/state'), JSON.parse(JSON.stringify(state)))
+      .catch(err => console.error('saveState:', err));
+  } catch (err) {
+    console.error('saveState (not written):', err);
+  }
 }
 
 function saveState() {
@@ -6417,7 +6430,10 @@ function convertTask(taskId, newType) {
   if (REVIEW_TYPES.includes(newType)) {
     task.isReview     = true;
     task.isDueDate    = false;
-    task.milestoneType = undefined;
+    // delete, never `= undefined`: Firebase's set() throws on an undefined value
+    // anywhere in the payload, which would wedge every later save (see
+    // _pushStateToFirebase).
+    delete task.milestoneType;
     delete task.flags;
     task.reviewLabel  = newType;
     task.color        = REVIEW_COLOR;
@@ -6429,7 +6445,7 @@ function convertTask(taskId, newType) {
     task.isDueDate    = true;
     task.isReview     = false;
     task.milestoneType = milestoneTypeFor(newType);
-    task.reviewLabel  = undefined;
+    delete task.reviewLabel;   // not `= undefined` — see the note above
     task.color        = '#3a3a52';
     task.role         = '';
     task.roleCategory = '';
