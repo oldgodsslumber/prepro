@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260818g';
+window.PREPRO_BUILD = '20260818h';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,9 +29,9 @@ window.PREPRO_BUILD = '20260818g';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260818g"></script>
+<script type="module" src="./auth.js?v=20260818h"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260818g"></script>
+<script src="./xlsx.full.min.js?v=20260818h"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1670,19 +1670,31 @@ function mergeProjects(alphaId, betaIds, fieldChoices) {
     // Merged result inherits the strongest inactive status of any project in the merge.
     mergedStatus = strongerStatus(mergedStatus, projStatus(beta));
     const nT = (beta.tasks || []).length, nN = (beta.notes || []).length;
+    // Copy, don't adopt the same objects. Beta is about to be removed so aliasing
+    // is usually harmless, but it means alpha and beta briefly share every task —
+    // anything that edits one edits the other, and a merge that fails partway
+    // leaves two projects wired together.
+    const clone = x => JSON.parse(JSON.stringify(x));
     // Schedules (tasks)
-    (beta.tasks || []).forEach(t => alpha.tasks.push(t));
+    (beta.tasks || []).forEach(t => alpha.tasks.push(clone(t)));
     // Notes
-    (beta.notes || []).forEach(n => alpha.notes.push(n));
+    (beta.notes || []).forEach(n => alpha.notes.push(clone(n)));
     // Role assignees (union per role)
     Object.entries(beta.roster || {}).forEach(([role, names]) => {
       if (!alpha.roster[role]) alpha.roster[role] = [];
       (names || []).forEach(n => { if (!alpha.roster[role].includes(n)) alpha.roster[role].push(n); });
     });
+    // Lift alpha clear of beta's subtree FIRST. If alpha sits below beta at any
+    // depth, re-parenting beta's children onto alpha would hand alpha's own
+    // ancestor to alpha as a child — a parentId cycle, which drops both branches
+    // out of the sidebar (neither is a root, neither is reachable) and used to
+    // hang the tree walkers. Only the direct-child case was handled before, and
+    // it was handled after the re-parent, too late to prevent the deeper one.
+    if (alpha.parentId === bid || isDescendantOf(alphaId, bid)) {
+      alpha.parentId = beta.parentId || null;
+    }
     // Re-parent any subprojects of beta onto alpha so they aren't orphaned
     state.projects.forEach(p => { if (p.parentId === bid && p.id !== alphaId) p.parentId = alphaId; });
-    // If alpha was itself a child of beta, promote it to beta's parent
-    if (alpha.parentId === bid) alpha.parentId = beta.parentId || null;
     // Record the merge in alpha's notes, then remove beta
     addSystemNote(alphaId, 'Merged in project "' + beta.name + '" (' + nT + ' tasks, ' + nN + ' notes)');
     state.projects = state.projects.filter(p => p.id !== bid);
@@ -2634,8 +2646,14 @@ function getProject(id) { return state.projects.find(p => p.id === id) || null; 
 function getChildren(pid) { return state.projects.filter(p => p.parentId === pid); }
 function getRootProjects() { return getChildren(null); }
 function getDescendantIds(id) {
-  const ids = [], q = [id];
-  while (q.length) { const c = q.shift(); getChildren(c).forEach(x => { ids.push(x.id); q.push(x.id); }); }
+  const ids = [], q = [id], seen = new Set([id]);
+  while (q.length) {
+    const c = q.shift();
+    getChildren(c).forEach(x => {
+      if (seen.has(x.id)) return;       // cycle guard — see isDescendantOf
+      seen.add(x.id); ids.push(x.id); q.push(x.id);
+    });
+  }
   return ids;
 }
 // A folder is just a project with isFolder set, so selecting one used to render
@@ -3640,10 +3658,16 @@ function renderTreeLevel(parentId, depth, container) {
 }
 
 // ── TREE DRAG-TO-REORDER ──
+// Both tree walkers carry a seen-set. A malformed tree (a parentId cycle) used
+// to hang or crash them rather than degrade — and a hard throw in here takes out
+// deleteProject, which calls getDescendantIds before it removes anything.
 function isDescendantOf(childId, ancestorId) {
+  const seen = new Set();
   let p = getProject(childId);
   while (p && p.parentId) {
     if (p.parentId === ancestorId) return true;
+    if (seen.has(p.id)) return false;   // cycle — not a real ancestry
+    seen.add(p.id);
     p = getProject(p.parentId);
   }
   return false;
