@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260818c';
+window.PREPRO_BUILD = '20260818d';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,9 +29,9 @@ window.PREPRO_BUILD = '20260818c';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260818c"></script>
+<script type="module" src="./auth.js?v=20260818d"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260818c"></script>
+<script src="./xlsx.full.min.js?v=20260818d"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -71,6 +71,11 @@ input  { font: inherit; }
   /* Folder Gantt alternating-week shading (mirrors ops.html) */
   --tl-band:    rgba(255,255,255,.045);
   --tl-band-hd: rgba(255,255,255,.05);
+  /* Holiday country codes. Written as letters, not flag emoji — Chrome/Edge on
+     Windows have no regional-indicator glyphs, so 🇺🇸 renders as a letterbox.
+     The colour is what marks them as holiday markings at a glance. */
+  --holiday:      #f0b429;
+  --holiday-soft: rgba(240,180,41,.16);
 }
 
 /* ── LIGHT THEME ── */
@@ -96,6 +101,8 @@ input  { font: inherit; }
   --ghost-ink-idle: rgba(27,28,38,.38);
   --tl-band:    rgba(27,28,38,.055);
   --tl-band-hd: rgba(27,28,38,.06);
+  --holiday:      #a06a00;
+  --holiday-soft: rgba(160,106,0,.14);
 }
 
 /* ── THEME TOGGLE BUTTON ── */
@@ -332,6 +339,15 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 .duedate-marker.drag-accepting { outline: 2px solid rgba(128,128,160,.5); outline-offset: -1px; }
 .duedate-marker.drag-accepting .review-drop-hint { display: block; }
 .duedate-marker .review-drop-hint { color: var(--dd-hint); }
+/* Holiday country codes: all four always shown, the unpicked ones greyed. They
+   only become clickable once the chip is the selected task — otherwise a click
+   anywhere on the chip should open the editor, as it does for every key date. */
+.holiday-flags { display: flex; gap: 3px; flex-wrap: wrap; margin-top: 1px; }
+.holiday-flag { font-size: 9px; font-weight: 800; letter-spacing: .04em; line-height: 1; padding: 2px 4px; border-radius: 3px; border: 1px solid transparent; color: var(--dim); user-select: none; }
+.holiday-flag.on { color: var(--holiday); border-color: var(--holiday); background: var(--holiday-soft); }
+.duedate-marker.task-selected .holiday-flag { cursor: pointer; }
+.duedate-marker.task-selected .holiday-flag:hover { border-color: var(--holiday); }
+.holiday-flags-empty { font-size: 9px; font-style: italic; color: var(--dd-hint); }
 /* continuation bars for multi-day key dates — full height */
 .duedate-bar { flex-shrink: 0; position: relative; cursor: pointer; background: var(--dd-bg); border: 1.5px solid var(--dd-edge); border-left: none; font-size: 0; display: flex; align-items: center; min-height: 30px; box-sizing: border-box; }
 .duedate-bar-mid { border-radius: 0; border-right: none; margin-left: -5px; margin-right: -6px; }
@@ -429,6 +445,8 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 .tl-task-bar.drag-accepting { outline: 2px solid var(--accent); outline-offset: 1px; }
 .tl-pto-bar { cursor: default; background: repeating-linear-gradient(45deg, #3a8fb7 0, #3a8fb7 6px, #2e7396 6px, #2e7396 12px); border: 1px solid #57b0d4; }
 .tl-pto-bar .tl-bar-name { font-weight: 700; opacity: 1; }
+.tl-holiday-bar { cursor: default; background: repeating-linear-gradient(45deg, #b58017 0, #b58017 6px, #8f6410 6px, #8f6410 12px); border: 1px solid #f0b429; }
+.tl-holiday-bar .tl-bar-name { font-weight: 700; opacity: 1; }
 .tl-resize-handle { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; z-index: 3; }
 .tl-resize-handle.left  { left: -3px; }
 .tl-resize-handle.right { right: -3px; }
@@ -452,6 +470,10 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 .ghost-row { font-size: 10px; font-weight: 500; padding: 1px 4px; color: var(--ghost-ink); display: flex; align-items: flex-start; gap: 4px; pointer-events: none; user-select: none; overflow: hidden; min-width: 0; max-width: 100%; }
 .ghost-row .ghost-name { font-weight: 600; color: var(--ghost-ink-name); overflow: hidden; white-space: normal; line-height: 1.3; word-break: break-word; }
 .ghost-effort { font-size: 9px; line-height: 1.3; flex-shrink: 0; width: 11px; text-align: center; }
+/* Holiday overlay rows carry country codes instead of a single emoji, so they
+   need room to grow past the fixed-width effort column. */
+.ghost-row.holiday .ghost-effort { width: auto; white-space: nowrap; }
+.ghost-row.holiday .ghost-code { color: var(--holiday); font-weight: 800; letter-spacing: .03em; }
 .ghost-row.idle .ghost-name { color: var(--ghost-ink-idle); }
 
 /* ── TASK CHIPS ── */
@@ -1133,6 +1155,66 @@ function isVideoTeamPerson(person) {
 }
 function catLabelForRole(role) { const c = ROLE_CATS.find(c => c.roles.includes(role)); return c ? c.label : ''; }
 function isPtoProject(proj) { return !!(proj && /pto|time\s*off/i.test(proj.name || '')); }
+
+// ── HOLIDAYS ──
+// A Holiday is a key date that behaves like PTO — same project, same attendee
+// drops, same invites — but carries a set of country codes saying who it's for
+// (a single office, or the whole company when several are picked). Codes are
+// written out as letters rather than flag emoji: Chrome and Edge on Windows
+// ship no regional-indicator glyphs, so a flag emoji renders as a letterbox.
+const HOLIDAY_FLAGS = [
+  { code: 'US', label: 'United States' },
+  { code: 'IN', label: 'India' },
+  { code: 'PL', label: 'Poland' },
+  { code: 'UK', label: 'United Kingdom' },
+];
+const HOLIDAY_CODES = HOLIDAY_FLAGS.map(f => f.code);
+function isHolidayTask(t) { return !!(t && t.isDueDate && t.milestoneType === 'holiday'); }
+// Both kinds of "nobody's working" key date. The export toggles treat them as
+// one thing — a reader either wants time off on the sheet or they don't.
+function isTimeOffTask(t) { return !!(t && t.isDueDate && (t.milestoneType === 'pto' || t.milestoneType === 'holiday')); }
+// Stored order is normalised to HOLIDAY_FLAGS order so two holidays picked in a
+// different sequence still group together in the calendar overlay.
+function holidayFlags(task) {
+  const picked = new Set(task && Array.isArray(task.flags) ? task.flags : []);
+  return HOLIDAY_CODES.filter(c => picked.has(c));
+}
+// "US" / "US, IN" / "" when nothing is picked (reads as company-wide).
+function holidayFlagText(task) { return holidayFlags(task).join(', '); }
+
+// ── MILESTONE TYPE DISPLAY ──
+// One table instead of the emoji/label ternary chain that used to be copy-pasted
+// across the chip, the panel, the type switcher, the exports and the PNG render.
+const MILESTONE_DISPLAY = {
+  'milestone': { emoji: '🎯', label: 'Milestone' },
+  'delivery':  { emoji: '📦', label: 'Delivery' },
+  'pto':       { emoji: '🏖', label: 'PTO' },
+  'holiday':   { emoji: '🎆', label: 'Holiday' },
+  'due-date':  { emoji: '🏁', label: 'Project Due Date' },
+};
+function milestoneEmoji(type) { return (MILESTONE_DISPLAY[type] || MILESTONE_DISPLAY['due-date']).emoji; }
+function milestoneLabel(type) { return (MILESTONE_DISPLAY[type] || MILESTONE_DISPLAY['due-date']).label; }
+// "🎆 US, IN Diwali" / "🏁 Final Cut" — the one-line name of a key date, used by
+// every export path so the country codes can't go missing from one of them.
+function milestoneHeadText(task) {
+  const codes = isHolidayTask(task) ? holidayFlagText(task) : '';
+  return milestoneEmoji(task.milestoneType) + ' ' + (codes ? codes + ' ' : '')
+       + (task.taskName || milestoneLabel(task.milestoneType));
+}
+// Palette / type-switcher label → stored milestoneType.
+function milestoneTypeFor(label) {
+  const hit = Object.keys(MILESTONE_DISPLAY).find(k => MILESTONE_DISPLAY[k].label === label);
+  return hit || 'due-date';
+}
+// Shared by both key-date drop handlers (calendar cell and folder timeline) so a
+// new type only has to be taught to MILESTONE_DISPLAY.
+function newDueDateTask(dateStr, defaultLabel) {
+  const mType = milestoneTypeFor(defaultLabel);
+  const task = { id: genId(), date: dateStr, isDueDate: true, milestoneType: mType,
+    color: '#3a3a52', role: '', roleCategory: '', attendees: [], taskName: defaultLabel || null };
+  if (mType === 'holiday') task.flags = [];
+  return task;
+}
 // Administrative is a special project too: its palette carries only the admin /
 // team-event attendee chips (used to track outings, off-sites, admin blocks).
 function isAdminProject(proj) { return !!(proj && (/administrative/i.test(proj.name || '') || /\badmin\b/i.test(proj.name || ''))); }
@@ -3559,26 +3641,33 @@ function renderPalette() {
   const pal = document.getElementById('palette');
   pal.innerHTML = '';
 
-  // PTO / Time-Off projects only get the single PTO chip — hide everything else.
+  // PTO / Time-Off projects only get the PTO + Holiday chips — hide everything
+  // else. Both drop as key dates and take attendee drops the same way; the
+  // Holiday additionally carries country codes (see HOLIDAY_FLAGS).
   if (isPtoProject(getProject(activeProjectId))) {
-    const ptoGrp = document.createElement('div');
-    ptoGrp.className = 'pal-cat';
-    const ptoLbl = document.createElement('span');
-    ptoLbl.className = 'pal-label';
-    ptoLbl.textContent = 'Time Off';
-    ptoGrp.appendChild(ptoLbl);
-    const ptoChip = document.createElement('div');
-    ptoChip.className = 'role-chip chip-duedate';
-    ptoChip.draggable = true;
-    ptoChip.textContent = '🏖 PTO';
-    ptoChip.addEventListener('dragstart', e => {
-      dragPayload = { type: 'duedate', defaultLabel: 'PTO' };
-      e.dataTransfer.setData('text', JSON.stringify(dragPayload));
-      e.dataTransfer.effectAllowed = 'copy';
+    [
+      { group: 'Time Off', label: 'PTO' },
+      { group: 'Holidays', label: 'Holiday' },
+    ].forEach(spec => {
+      const grp = document.createElement('div');
+      grp.className = 'pal-cat';
+      const lbl = document.createElement('span');
+      lbl.className = 'pal-label';
+      lbl.textContent = spec.group;
+      grp.appendChild(lbl);
+      const chip = document.createElement('div');
+      chip.className = 'role-chip chip-duedate';
+      chip.draggable = true;
+      chip.textContent = milestoneEmoji(milestoneTypeFor(spec.label)) + ' ' + spec.label;
+      chip.addEventListener('dragstart', e => {
+        dragPayload = { type: 'duedate', defaultLabel: spec.label };
+        e.dataTransfer.setData('text', JSON.stringify(dragPayload));
+        e.dataTransfer.effectAllowed = 'copy';
+      });
+      chip.addEventListener('dragend', () => { dragPayload = null; });
+      grp.appendChild(chip);
+      pal.appendChild(grp);
     });
-    ptoChip.addEventListener('dragend', () => { dragPayload = null; });
-    ptoGrp.appendChild(ptoChip);
-    pal.appendChild(ptoGrp);
     return;
   }
 
@@ -3779,12 +3868,19 @@ function buildGhostInfo() {
 
   const LOE_PTS = { low: 1, medium: 2, high: 3 };
   const byDate = new Map(); // dateStr → Map<person, {pts, isPTO, projects:Set, roles:Set}>
-  const addEntry = (dateStr, person, role, projectName, isPTO, loe) => {
+  // `holiday` (when present) is { key, name }: key is the normalised country-code
+  // string the day groups by, name is the holiday's own label for the tooltip.
+  const addEntry = (dateStr, person, role, projectName, isPTO, loe, holiday) => {
     if (!byDate.has(dateStr)) byDate.set(dateStr, new Map());
     const m = byDate.get(dateStr);
-    if (!m.has(person)) m.set(person, { pts: 0, isPTO: false, projects: new Set(), roles: new Set() });
+    if (!m.has(person)) m.set(person, { pts: 0, isPTO: false, projects: new Set(), roles: new Set(), holidays: new Map() });
     const e = m.get(person);
-    if (isPTO) e.isPTO = true;
+    if (holiday) {
+      // Holidays carry no workload, so they never add points.
+      if (!e.holidays.has(holiday.key)) e.holidays.set(holiday.key, new Set());
+      e.holidays.get(holiday.key).add(holiday.name);
+    }
+    else if (isPTO) e.isPTO = true;
     else e.pts += LOE_PTS[loe] || 2;
     e.projects.add(projectName);
     e.roles.add(role);
@@ -3793,18 +3889,23 @@ function buildGhostInfo() {
   state.projects.forEach(p => {
     if (scopeIds.has(p.id) || isInactive(p) || p.ghost) return;
     (p.tasks || []).forEach(t => {
-      if (t.isDueDate && t.milestoneType !== 'pto') return; // allow PTO through
+      const isPtoTask = t.isDueDate && t.milestoneType === 'pto';
+      const isHoliTask = isHolidayTask(t);
+      if (t.isDueDate && !isPtoTask && !isHoliTask) return; // allow PTO + Holidays through
       const endDate = t.endDate || t.date;
 
-      // PTO: show for any attendee who's on this project's roster
-      if (t.isDueDate && t.milestoneType === 'pto') {
+      // PTO / Holiday: show for any attendee who's on this project's roster
+      if (isPtoTask || isHoliTask) {
+        const holiday = isHoliTask
+          ? { key: holidayFlagText(t), name: t.taskName || 'Holiday' }
+          : null;
         (t.attendees || []).forEach(a => {
           if (!a.person || !rosterPeople.has(a.person)) return;
           let d = new Date(t.date + 'T00:00:00');
           const end = new Date(endDate + 'T00:00:00');
           while (d <= end) {
             const ds = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
-            addEntry(ds, a.person, 'PTO', p.name, true, null);
+            addEntry(ds, a.person, isHoliTask ? 'Holiday' : 'PTO', p.name, !isHoliTask, null, holiday);
             d.setDate(d.getDate() + 1);
           }
         });
@@ -4113,10 +4214,22 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghostInfo, showMonthLabel)
     ];
     const pto   = [];                 // [{ person, projects }]
     const tiers = [[], [], [], [], []];
+    // Holidays group by country-code set, so a US holiday and an India holiday
+    // falling on the same day stay on separate lines instead of merging.
+    const holidayRows = new Map();    // codeKey → { names:Set, people:[] }
     ghostInfo.people.forEach(person => {
       const e = dayMap.get(person);
-      if (!e || (!e.isPTO && e.pts <= 0)) return;
+      if (!e) return;
       const projects = Array.from(e.projects);
+      if (e.holidays && e.holidays.size) {
+        e.holidays.forEach((names, key) => {
+          if (!holidayRows.has(key)) holidayRows.set(key, { names: new Set(), people: [] });
+          const row = holidayRows.get(key);
+          names.forEach(n => row.names.add(n));
+          row.people.push(person);
+        });
+      }
+      if (!e.isPTO && e.pts <= 0) return;
       if (e.isPTO) pto.push({ person, projects });
       else tiers[tierFor(e.pts)].push({ person, projects, pts: e.pts });
     });
@@ -4141,7 +4254,33 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghostInfo, showMonthLabel)
       cell.appendChild(row);
     };
 
-    // PTO first (who's out), then workload levels busiest → lightest.
+    // Holidays get the country codes where PTO gets its island, so it's obvious
+    // at a glance that the office is closed rather than one person being away.
+    Array.from(holidayRows.keys()).sort().forEach(key => {
+      const data = holidayRows.get(key);
+      const row = document.createElement('div');
+      row.className = 'ghost-row holiday';
+      const eff = document.createElement('span');
+      eff.className = 'ghost-effort';
+      eff.textContent = milestoneEmoji('holiday');
+      if (key) {
+        const codes = document.createElement('span');
+        codes.className = 'ghost-code';
+        codes.textContent = ' ' + key;
+        eff.appendChild(codes);
+      }
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'ghost-name';
+      nameSpan.textContent = data.people.join(', ');
+      row.title = Array.from(data.names).join(', ')
+                + (key ? ' (' + key + ')' : ' (company-wide)')
+                + ' — ' + data.people.join(', ');
+      row.appendChild(eff);
+      row.appendChild(nameSpan);
+      cell.appendChild(row);
+    });
+
+    // Then PTO (who's out), then workload levels busiest → lightest.
     mkGhostRow('🏝', 'PTO', pto, false);
     TIERS.forEach((t, i) => mkGhostRow(t.e, t.label, tiers[i], true));
   }
@@ -4168,7 +4307,7 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghostInfo, showMonthLabel)
     } else if (pl.type === 'duedate') {
       const proj = getProject(activeProjectId);
       if (!proj) return;
-      proj.tasks.push({ id: genId(), date: dateStr, isDueDate: true, milestoneType: pl.defaultLabel === 'Milestone' ? 'milestone' : pl.defaultLabel === 'Delivery' ? 'delivery' : pl.defaultLabel === 'PTO' ? 'pto' : 'due-date', color: '#3a3a52', role: '', roleCategory: '', attendees: [], taskName: pl.defaultLabel || null });
+      proj.tasks.push(newDueDateTask(dateStr, pl.defaultLabel));
       saveState(); renderCalendar(); if (exportOpen) renderExportPanel();
     } else if (pl.type === 'review') {
       openPanel('create-review', dateStr, null, pl.label || 'Review', null, REVIEW_COLOR);
@@ -4221,6 +4360,18 @@ function getContLabel(task) {
   return ppl[0] || task.reviewLabel || (task.role ? roleVerb(task.role) : '');
 }
 function getActiveTask(id) { const p = getProject(activeProjectId); return p ? (p.tasks || []).find(t => t.id === id) : null; }
+// Toggle one country code on a Holiday chip. Stored normalised, so the calendar
+// overlay groups holidays picked in a different order onto the same row.
+function toggleHolidayFlag(taskId, code) {
+  const task = getActiveTask(taskId);
+  if (!isHolidayTask(task)) return;
+  const picked = new Set(holidayFlags(task));
+  if (picked.has(code)) picked.delete(code); else picked.add(code);
+  task.flags = HOLIDAY_CODES.filter(c => picked.has(c));
+  saveState();
+  renderCalendar();
+  if (exportOpen) renderExportPanel();
+}
 function hexToRgba(hex, a) {
   const h = String(hex || '').replace('#', '');
   if (h.length !== 6) return hex || 'transparent';
@@ -4243,11 +4394,7 @@ function pickTextColor(hex) {
 function folderChipText(task, omitPeople) {
   const att = (task.attendees || []).map(a => a.person).filter(Boolean);
   const suffix = (omitPeople || !att.length) ? '' : ' · ' + att.join(', ');
-  if (task.isDueDate) {
-    const e = task.milestoneType === 'milestone' ? '🎯' : task.milestoneType === 'delivery' ? '📦' : task.milestoneType === 'pto' ? '🏖' : '🏁';
-    const d = task.milestoneType === 'milestone' ? 'Milestone' : task.milestoneType === 'delivery' ? 'Delivery' : task.milestoneType === 'pto' ? 'PTO' : 'Project Due Date';
-    return e + ' ' + (task.taskName || d) + suffix;
-  }
+  if (task.isDueDate) return milestoneHeadText(task) + suffix;
   if (task.isReview) return (task.taskName || task.reviewLabel || 'Review') + suffix;
   const name = task.taskName || roleVerb(task.role);
   if (omitPeople) return name;
@@ -4384,6 +4531,7 @@ function getFolderEntries() {
         color: task.color || '#3a3a52',
         isReview: !!task.isReview, isDueDate: !!task.isDueDate,
         isPTO: !!(task.isDueDate && task.milestoneType === 'pto'),
+        isHoliday: isHolidayTask(task),
       };
       // Key dates stay on the project row even when they carry attendees — they
       // are project facts, not somebody's workload.
@@ -4604,9 +4752,9 @@ function buildGanttBar(entry, row) {
   const top   = TL_PAD + entry.lane * TL_LANE_H;
 
   const bar = document.createElement('div');
-  bar.className = 'tl-task-bar' + (entry.isPTO ? ' tl-pto-bar' : '');
+  bar.className = 'tl-task-bar' + (entry.isPTO ? ' tl-pto-bar' : '') + (entry.isHoliday ? ' tl-holiday-bar' : '');
   bar.style.cssText = `left:${left}px;width:${width}px;top:${top}px;height:${TL_BAR_H}px;z-index:2;`
-                    + (entry.isPTO ? '' : `background:${entry.color};`);
+                    + (entry.isPTO || entry.isHoliday ? '' : `background:${entry.color};`);
   bar.dataset.projectId = entry.projectId;
   bar.dataset.taskId    = entry.taskId;
   // The row names the person, so the bar carries just the work; the tooltip and
@@ -4622,7 +4770,7 @@ function buildGanttBar(entry, row) {
   nameSp.className = 'tl-bar-name';
   nameSp.textContent = label;
   inner.appendChild(nameSp);
-  if (!entry.isPTO && !entry.isDueDate) {
+  if (!entry.isPTO && !entry.isHoliday && !entry.isDueDate) {
     const loeSp = document.createElement('span');
     loeSp.className = 'tl-bar-loe';
     loeSp.textContent = LOE_EMOJI[entry.loe] || '🟢';
@@ -4630,8 +4778,9 @@ function buildGanttBar(entry, row) {
   }
   bar.appendChild(inner);
 
-  // PTO is read-only here — it belongs to a PTO project, not to this work.
-  if (entry.isPTO) return bar;
+  // PTO and Holidays are read-only here — they belong to the Time Off project,
+  // not to this work.
+  if (entry.isPTO || entry.isHoliday) return bar;
 
   if (entry.endDate !== entry.date) {
     const lh = document.createElement('div');
@@ -4837,9 +4986,7 @@ function wireTrackDrop(track, projectId, person) {
     if (!dateStr) return;
 
     if (pl.type === 'duedate') {
-      proj.tasks.push({ id: genId(), date: dateStr, isDueDate: true,
-        milestoneType: pl.defaultLabel === 'Milestone' ? 'milestone' : pl.defaultLabel === 'Delivery' ? 'delivery' : pl.defaultLabel === 'PTO' ? 'pto' : 'due-date',
-        color: '#3a3a52', role: '', roleCategory: '', attendees: [], taskName: pl.defaultLabel || null });
+      proj.tasks.push(newDueDateTask(dateStr, pl.defaultLabel));
     } else if (pl.type === 'review') {
       proj.tasks.push({ id: genId(), date: dateStr, isReview: true, reviewLabel: pl.label || 'Review',
         taskName: null, color: REVIEW_COLOR, attendees: person ? [{ id: genId(), person, role: pl.label || 'Review', category: 'Internal Team', color: REVIEW_COLOR }] : [] });
@@ -5185,8 +5332,8 @@ function buildDueDateMarker(task, dateStr) {
   const hd = document.createElement('div');
   hd.className = 'duedate-hd';
   const mType = task.milestoneType || 'due-date';
-  const mEmoji = mType === 'milestone' ? '🎯' : mType === 'delivery' ? '📦' : mType === 'pto' ? '🏖' : '🏁';
-  const mLabel = mType === 'milestone' ? 'Milestone' : mType === 'delivery' ? 'Delivery' : mType === 'pto' ? 'PTO' : 'Project Due Date';
+  const mEmoji = milestoneEmoji(mType);
+  const mLabel = milestoneLabel(mType);
   const badge = document.createElement('span');
   badge.className = 'review-badge';
   badge.style.cssText = 'background:var(--dd-badge);cursor:pointer;';
@@ -5199,6 +5346,37 @@ function buildDueDateMarker(task, dateStr) {
   hd.appendChild(badge);
   hd.appendChild(titleSpan);
   el.appendChild(hd);
+
+  // Holiday country codes — who the holiday is for. All four always render; the
+  // unpicked ones sit greyed so the row reads the same width every time. They
+  // only take clicks while this chip is the selected task, otherwise a click
+  // anywhere on the chip has to keep opening the editor like every other key date.
+  if (mType === 'holiday') {
+    const picked = new Set(holidayFlags(task));
+    const row = document.createElement('div');
+    row.className = 'holiday-flags';
+    HOLIDAY_FLAGS.forEach(f => {
+      const code = document.createElement('span');
+      code.className = 'holiday-flag' + (picked.has(f.code) ? ' on' : '');
+      code.textContent = f.code;
+      code.title = f.label + ' — click the chip, then click here to toggle';
+      code.addEventListener('click', e => {
+        // Unselected: fall through so the chip's own handler selects it and opens
+        // the editor. Selected: this click is the toggle.
+        if (selectedTaskId !== task.id) return;
+        e.stopPropagation();
+        toggleHolidayFlag(task.id, f.code);
+      });
+      row.appendChild(code);
+    });
+    el.appendChild(row);
+    if (!picked.size) {
+      const note = document.createElement('div');
+      note.className = 'holiday-flags-empty';
+      note.textContent = 'company-wide';
+      el.appendChild(note);
+    }
+  }
 
   // Attendees list
   if (task.attendees && task.attendees.length) {
@@ -5936,8 +6114,8 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     const task = proj.tasks.find(t => t.id === taskId);
     if (!task) return;
     const mType2 = task.milestoneType || 'due-date';
-    const mEmoji2 = mType2 === 'milestone' ? '🎯' : mType2 === 'delivery' ? '📦' : mType2 === 'pto' ? '🏖' : '🏁';
-    const mLabel2 = mType2 === 'milestone' ? 'Milestone' : mType2 === 'delivery' ? 'Delivery' : mType2 === 'pto' ? 'PTO' : 'Project Due Date';
+    const mEmoji2 = milestoneEmoji(mType2);
+    const mLabel2 = milestoneLabel(mType2);
     panelContext = { mode: 'edit-duedate', taskId };
     const badge2 = document.getElementById('panelRoleBadge');
     badge2.textContent      = mEmoji2;
@@ -6159,6 +6337,7 @@ const TYPE_SWITCHER_DEFS = [
   { label: 'Milestone',         dot: '#555' },
   { label: 'Delivery',          dot: '#555' },
   { label: 'PTO',               dot: '#555' },
+  { label: 'Holiday',           dot: 'var(--holiday)' },
 ];
 
 function openTypeSwitcher(e, taskId, currentType) {
@@ -6196,6 +6375,7 @@ function convertTask(taskId, newType) {
     task.isReview     = true;
     task.isDueDate    = false;
     task.milestoneType = undefined;
+    delete task.flags;
     task.reviewLabel  = newType;
     task.color        = REVIEW_COLOR;
     task.role         = task.role || '';
@@ -6205,12 +6385,16 @@ function convertTask(taskId, newType) {
   } else {
     task.isDueDate    = true;
     task.isReview     = false;
-    task.milestoneType = newType === 'Milestone' ? 'milestone' : newType === 'Delivery' ? 'delivery' : newType === 'PTO' ? 'pto' : 'due-date';
+    task.milestoneType = milestoneTypeFor(newType);
     task.reviewLabel  = undefined;
     task.color        = '#3a3a52';
     task.role         = '';
     task.roleCategory = '';
     if (!task.attendees) task.attendees = [];
+    // Country codes only mean something on a Holiday — drop them on the way out
+    // so a task converted back to Holiday later doesn't resurrect stale flags.
+    if (task.milestoneType === 'holiday') { if (!Array.isArray(task.flags)) task.flags = []; }
+    else delete task.flags;
   }
   saveState();
   renderCalendar();
@@ -6319,7 +6503,7 @@ function buildHTMLExport() {
   const proj = getProject(activeProjectId);
   if (!proj) return { html: '', plain: '' };
   const dueTasks = exportOptDueDate
-    ? [...proj.tasks].filter(t => t.isDueDate && (exportOptPTO || t.milestoneType !== 'pto')).sort((a, b) => a.date.localeCompare(b.date))
+    ? [...proj.tasks].filter(t => t.isDueDate && (exportOptPTO || !isTimeOffTask(t))).sort((a, b) => a.date.localeCompare(b.date))
     : [];
   const sorted = [...proj.tasks].filter(t => !t.isDueDate).sort((a, b) => a.date.localeCompare(b.date));
   if (!sorted.length && !dueTasks.length) return { html: '<em>(No tasks scheduled)</em>', plain: '(No tasks scheduled)' };
@@ -6353,9 +6537,7 @@ function buildHTMLExport() {
     let headText = '';
     let people   = [];
     if (t.isDueDate) {
-      const mE = t.milestoneType === 'milestone' ? '🎯' : t.milestoneType === 'delivery' ? '📦' : t.milestoneType === 'pto' ? '🏖' : '🏁';
-      const mDflt = t.milestoneType === 'milestone' ? 'Milestone' : t.milestoneType === 'delivery' ? 'Delivery' : t.milestoneType === 'pto' ? 'PTO' : 'Project Due Date';
-      headText = mE + ' ' + (t.taskName || mDflt);
+      headText = milestoneHeadText(t);
     } else if (t.isReview) {
       headText = (t.taskName || label) + ' [' + label.toUpperCase() + ']';
       if (exportOptAttendees && t.attendees) people = t.attendees;
@@ -6410,9 +6592,7 @@ function buildTSV() {
     const sl = toDate(t.date);
     const el = t.endDate ? toDate(t.endDate) : sl;
     if (t.isDueDate) {
-      const tE = t.milestoneType === 'milestone' ? '🎯' : t.milestoneType === 'delivery' ? '📦' : t.milestoneType === 'pto' ? '🏖' : '🏁';
-      const tD = t.milestoneType === 'milestone' ? 'Milestone' : t.milestoneType === 'delivery' ? 'Delivery' : t.milestoneType === 'pto' ? 'PTO' : 'Project Due Date';
-      rows.push([sl, sl, tE + ' ' + (t.taskName || tD), '', '', '', 'Due Date'].join('\t'));
+      rows.push([sl, sl, milestoneHeadText(t), '', '', '', 'Due Date'].join('\t'));
     } else if (t.isReview) {
       const rName = esc(t.taskName || t.reviewLabel || 'Review');
       rows.push([sl, el, rName, '', 'Review', 'Review', 'Review'].join('\t'));
@@ -6937,10 +7117,12 @@ function buildPtoICS(opts) {
 }
 
 // "Jason on PTO" / "Jason and Reggie on PTO" / "Jason, Reggie and Sam on PTO".
-function ptoOnSubject(names) {
-  if (!names.length) return 'PTO';
-  if (names.length === 1) return names[0] + ' on PTO';
-  return names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] + ' on PTO';
+// `what` lets a Holiday use its own name — "Reggie and Priya on Diwali".
+function ptoOnSubject(names, what) {
+  const w = what || 'PTO';
+  if (!names.length) return w;
+  if (names.length === 1) return names[0] + ' on ' + w;
+  return names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] + ' on ' + w;
 }
 
 // People on a given PTO entry (legacy single person + attendees), deduped.
@@ -6970,10 +7152,12 @@ const BRAND_CREATIVE_DIST = 'BrandCreative@pega.com';
 //   2) a "Notify Team" invite to the whole video team (subject = "<names>'s PTO").
 // Both are all-day, spanning the full PTO range. Entries stay until the PTO's
 // end date passes, then drop off.
+// Holidays ride the same two-file treatment: the office being closed still needs
+// an OOF block on your own calendar and a heads-up to the team.
 function renderPtoInvitesPanel(content, proj) {
   const today = todayISOStr();
   const all = (proj ? proj.tasks : [])
-    .filter(t => t.isDueDate && t.milestoneType === 'pto')
+    .filter(isTimeOffTask)
     .filter(t => (t.endDate || t.date) >= today) // hide once the leave is fully over
     .sort((a, b) => a.date.localeCompare(b.date));
 
@@ -6987,22 +7171,22 @@ function renderPtoInvitesPanel(content, proj) {
     const em = document.createElement('div');
     em.style.cssText = 'color:var(--dim);font-size:12px;padding:14px 2px;';
     // Distinct wording when filtered, so an empty list doesn't read as "no PTO exists"
-    em.textContent = myPerson ? 'No upcoming PTO for ' + myPerson + '.'
-                              : 'No upcoming or in-progress PTO.';
+    em.textContent = myPerson ? 'No upcoming PTO or holidays for ' + myPerson + '.'
+                              : 'No upcoming or in-progress PTO or holidays.';
     content.appendChild(em); return;
   }
 
   if (!myPerson) {
     const prompt = document.createElement('div');
     prompt.style.cssText = 'font-size:11px;color:var(--dim);padding:6px 2px 0;flex-shrink:0;';
-    prompt.textContent = '⚠️ Pick who you are (top right) to see just your own PTO.';
+    prompt.textContent = '⚠️ Pick who you are (top right) to see just your own PTO and holidays.';
     content.appendChild(prompt);
   }
 
   const note = document.createElement('div');
   note.style.cssText = 'font-size:11px;color:var(--dim);padding:6px 2px 8px;flex-shrink:0;line-height:1.55;';
   note.innerHTML =
-    'Two files per PTO entry. Each downloads an <b>.ics</b> with the status, reminder, and responses already set.' +
+    'Two files per PTO or holiday entry. Each downloads an <b>.ics</b> with the status, reminder, and responses already set.' +
     '<div style="margin:7px 0;padding:6px 8px;border-radius:6px;background:var(--warn-bg,rgba(230,160,30,.14));border:1px solid var(--warn,rgba(230,160,30,.5));color:var(--text);">' +
     '⚠️ <b>Each person downloads and opens their own files.</b> Both open as your own appointment, ' +
     'already filled in — you just send the team one.</div>' +
@@ -7019,7 +7203,11 @@ function renderPtoInvitesPanel(content, proj) {
   list.className = 'export-table-wrap';
   tasks.forEach(t => {
     const people = ptoInvitePeople(t);
-    const subjectSelf = t.taskName || 'PTO';
+    const isHoli = isHolidayTask(t);
+    // The label doubles as the "on X" wording of the team invite, so a holiday
+    // named Diwali reads "Reggie and Priya on Diwali" rather than "on PTO".
+    const subjectSelf = t.taskName || (isHoli ? 'Holiday' : 'PTO');
+    const codes = isHoli ? holidayFlagText(t) : '';
     const startDate = t.date, endDate = t.endDate || t.date;
 
     // No ORGANIZER on either file — both are METHOD:PUBLISH and Outlook assigns
@@ -7036,7 +7224,10 @@ function renderPtoInvitesPanel(content, proj) {
 
     const badge = document.createElement('span');
     badge.className = 'invite-badge';
-    badge.textContent = '🏖 PTO';
+    badge.textContent = isHoli
+      ? milestoneEmoji('holiday') + ' ' + (codes || 'All')
+      : '🏖 PTO';
+    badge.title = isHoli ? subjectSelf + (codes ? ' · ' + codes : ' · company-wide') : 'PTO';
 
     const nameEl = document.createElement('span');
     nameEl.className = 'invite-name';
@@ -7050,7 +7241,8 @@ function renderPtoInvitesPanel(content, proj) {
     btn1.className = 'btn btn-ghost';
     btn1.style.flexShrink = '0';
     btn1.textContent = '🏖 Out of Office';
-    btn1.title = 'For the person on PTO to open on their own machine';
+    btn1.title = isHoli ? 'For anyone observing this holiday to open on their own machine'
+                        : 'For the person on PTO to open on their own machine';
     btn1.addEventListener('click', () => {
       // First working day back = day after the PTO ends, skipping Sat/Sun.
       const back = new Date(endDate + 'T00:00:00');
@@ -7070,7 +7262,7 @@ function renderPtoInvitesPanel(content, proj) {
         subject: subjectSelf, start: startDate, end: endDate,
         busy: 'OOF', method: 'PUBLISH', requestResponses: false, body: oofBody
       });
-      downloadICS(ics, ((subjectSelf.replace(/[^a-z0-9]/gi, '_')) || 'pto') + '_OOF.ics');
+      downloadICS(ics, ((subjectSelf.replace(/[^a-z0-9]/gi, '_')) || (isHoli ? 'holiday' : 'pto')) + '_OOF.ics');
     });
 
     // Option 2 — notify the whole video team via its distribution list.
@@ -7082,7 +7274,7 @@ function renderPtoInvitesPanel(content, proj) {
     btn2.title = 'Opens as your own appointment — press Edit → Send. Goes to ' +
       teamEmails.map(r => r.email).join(', ');
     btn2.addEventListener('click', () => {
-      const teamSubject = ptoOnSubject(people);
+      const teamSubject = ptoOnSubject(people, isHoli ? subjectSelf : 'PTO');
       // METHOD:PUBLISH, mirroring the OOF file that imports and sticks.
       // A REQUEST is meant to ARRIVE as an emailed invitation; opening one from
       // disk creates a meeting the server has no sent item for, so Exchange
@@ -7140,7 +7332,7 @@ function renderInvitesWebPanel() {
 
     const badge = document.createElement('span');
     badge.className = 'invite-badge';
-    badge.textContent = t.reviewLabel || (t.isDueDate ? (t.milestoneType || 'Key Date') : 'Task');
+    badge.textContent = t.reviewLabel || (t.isDueDate ? milestoneLabel(t.milestoneType) : 'Task');
 
     const nameEl = document.createElement('span');
     nameEl.className = 'invite-name';
@@ -7199,7 +7391,7 @@ function renderInvitesPanel() {
 
     const badge = document.createElement('span');
     badge.className = 'invite-badge';
-    badge.textContent = t.reviewLabel || (t.isDueDate ? (t.milestoneType || 'Key Date') : 'Task');
+    badge.textContent = t.reviewLabel || (t.isDueDate ? milestoneLabel(t.milestoneType) : 'Task');
 
     const nameEl = document.createElement('span');
     nameEl.className = 'invite-name';
@@ -7628,7 +7820,7 @@ function renderExportPanel() {
     mkOpt('Include roles',    exportOptRoles,      v => { exportOptRoles      = v; });
     mkOpt('Align tasks',      exportOptAlign,      v => { exportOptAlign      = v; });
     mkOpt('Show due date',    exportOptDueDate,    v => { exportOptDueDate    = v; });
-    mkOpt('Show PTO',         exportOptPTO,        v => { exportOptPTO        = v; });
+    mkOpt('Show PTO & holidays', exportOptPTO,     v => { exportOptPTO        = v; });
     mkOpt('Show attendees',   exportOptAttendees,  v => { exportOptAttendees  = v; });
 
     const actions = document.createElement('div');
@@ -7663,7 +7855,7 @@ function renderExportPanel() {
     };
     mkPNGOpt('Include roles',    exportPNGRoles,     v => { exportPNGRoles     = v; });
     mkPNGOpt('Show attendees',   exportPNGAttendees, v => { exportPNGAttendees = v; });
-    mkPNGOpt('Show PTO',         exportPNGPTO,       v => { exportPNGPTO       = v; });
+    mkPNGOpt('Show PTO & holidays', exportPNGPTO,    v => { exportPNGPTO       = v; });
 
     const actions = document.createElement('div');
     actions.className = 'export-actions';
@@ -7729,9 +7921,7 @@ function renderExportPanel() {
       const el = t.endDate ? toDate(t.endDate) : sl;
       if (t.isDueDate) {
         const row = tbody.insertRow();
-        const tblE = t.milestoneType === 'milestone' ? '🎯' : t.milestoneType === 'delivery' ? '📦' : '🏁';
-        const tblD = t.milestoneType === 'milestone' ? 'Milestone' : t.milestoneType === 'delivery' ? 'Delivery' : 'Project Due Date';
-        [tblE + ' ' + (t.taskName || tblD), sl, sl, '', '', '', 'Due Date'].forEach((val, i) => {
+        [milestoneHeadText(t), sl, sl, '', '', '', 'Due Date'].forEach((val, i) => {
           const td = row.insertCell(); td.textContent = val;
           if (i === 0) td.style.fontWeight = '700';
         });
@@ -8036,14 +8226,14 @@ function exportPNG() {
       if (entry._spacerFor !== undefined) {
         const owner = proj.tasks.find(t => t.id === entry._spacerFor);
         if (!owner) return;
-        if (!exportPNGPTO && owner.isDueDate && owner.milestoneType === 'pto') return;
+        if (!exportPNGPTO && isTimeOffTask(owner)) return;
         const h = taskHeights.get(entry._spacerFor) || 14*SC;
         ty += h + 3*SC;
         return;
       }
 
       const task = entry;
-      if (!exportPNGPTO && task.isDueDate && task.milestoneType === 'pto') return;
+      if (!exportPNGPTO && isTimeOffTask(task)) return;
 
       const taskH = taskHeights.get(task.id) || 14*SC;
       if (ty + taskH > cy + CH - 4*SC) return; // no room
@@ -8072,18 +8262,13 @@ function exportPNG() {
           ctx.beginPath();
           ctx.rect(chipX + 3*SC, ty, chipW - 6*SC, taskH);
           ctx.clip();
-          const mIcon = task.milestoneType === 'milestone' ? '🎯'
-                      : task.milestoneType === 'delivery'  ? '📦'
-                      : task.milestoneType === 'pto'       ? '🏖'
-                      : '🏁';
-          const mDflt = task.milestoneType === 'milestone' ? 'Milestone'
-                      : task.milestoneType === 'delivery'  ? 'Delivery'
-                      : task.milestoneType === 'pto'       ? 'PTO'
-                      : 'Project Due Date';
+          const mIcon = milestoneEmoji(task.milestoneType);
+          const mDflt = milestoneLabel(task.milestoneType);
+          const mCodes = isHolidayTask(task) ? holidayFlagText(task) : '';
           ctx.fillStyle = '#fff';
           ctx.font = `${7*SC}px system-ui,sans-serif`;
           ctx.textAlign = 'left';
-          ctx.fillText(mIcon + ' ' + (task.taskName || mDflt), chipX + 3*SC, ty + 9*SC);
+          ctx.fillText(mIcon + ' ' + (mCodes ? mCodes + ' ' : '') + (task.taskName || mDflt), chipX + 3*SC, ty + 9*SC);
           if (exportPNGAttendees && task.attendees) {
             task.attendees.forEach((att, i) => {
               const ay = ty + 17*SC + i * 10*SC;
