@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260818h';
+window.PREPRO_BUILD = '20260819a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,7 +26,7 @@ window.PREPRO_BUILD = '20260818h';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260818h"></script>
+<script type="module" src="./auth.js?v=20260819a"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
