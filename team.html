@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260819d';
+window.PREPRO_BUILD = '20260819e';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,9 +29,12 @@ window.PREPRO_BUILD = '20260819d';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260819d"></script>
+<script type="module" src="./auth.js?v=20260819e"></script>
+<!-- Shared people module — classic script so its globals exist before the app
+     script below runs. Same file is loaded by ops.html and dash.html. -->
+<script src="./people.js?v=20260819e"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260819d"></script>
+<script src="./xlsx.full.min.js?v=20260819e"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1211,34 +1214,15 @@ const REVIEW_SUGGESTIONS = {
   'On-Location Shoot': ['On-Location Shoot', 'B-Roll', 'Interviews', 'Reshoot'],
   'Studio Work':       ['Studio Work', 'Set Build', 'Set Strike', 'Maintenance', 'Prep']
 };
-// ── TEAMS ──
-// A person belongs to exactly one team. This is the identity axis: it answers
-// "who is this?" and drives how the roster panel is grouped. Roles stay the
-// separate "what are they doing on this task?" axis, which is why the two
-// lists overlap without being redundant.
+// TEAMS, and everything else answering "who is this person?", now lives in
+// the shared people.js module loaded above — ops.html and dash.html read the
+// same definitions, which is what stops them drifting apart again.
 //
-// This replaces the old ROSTER_GROUPS, which grouped the panel by *role* and
+// TEAMS replaced the old ROSTER_GROUPS, which grouped the panel by *role* and
 // so listed anyone with roles in two groups twice, and whose `primary` field
 // silently filed every new addition under a role they might not hold.
 // ROLE_CATS survives alongside it on purpose: its category label is written
 // into `task.roleCategory`, which drives workload counting and every export.
-//
-// `roles` here is only used to *derive* a team during migration and to colour
-// the palette — it is not membership. Membership is the stored `team` key, so
-// a Producer who moves to Brand Creative stops being on the Video Team the
-// moment someone says so, rather than the moment they stop producing.
-const TEAMS = [
-  { key: 'video',  label: 'Video Team',     color: '#4a90d9', roles: ['Producer', 'Editor', 'Animator'] },
-  { key: 'brand',  label: 'Brand Creative', color: '#e07b39', roles: ['Copywriter', 'Designer'] },
-  { key: 'stake',  label: 'Stakeholders',   color: '#4aa9a0', roles: ['Stakeholder'] },
-  { key: 'vendor', label: 'Vendors',        color: '#7c5cbf', roles: ['External Vendor'] }
-];
-const TEAM_KEYS = TEAMS.map(t => t.key);
-function getTeam(key) { return TEAMS.find(t => t.key === key) || null; }
-function teamLabel(key) { const t = getTeam(key); return t ? t.label : ''; }
-function teamColor(key) { const t = getTeam(key); return t ? t.color : 'var(--dim)'; }
-// Team a role most likely implies, used only when deriving a record.
-function teamForRole(role) { const t = TEAMS.find(t => t.roles.includes(role)); return t ? t.key : ''; }
 
 // Roles that make someone part of the internal video team. Used to scope the
 // sidebar name-filter list (no stakeholders / external / vendor people there).
@@ -1263,13 +1247,11 @@ function isPtoProject(proj) { return !!(proj && /pto|time\s*off|holiday/i.test(p
 // (a single office, or the whole company when several are picked). Codes are
 // written out as letters rather than flag emoji: Chrome and Edge on Windows
 // ship no regional-indicator glyphs, so a flag emoji renders as a letterbox.
-const HOLIDAY_FLAGS = [
-  { code: 'US', label: 'United States' },
-  { code: 'IN', label: 'India' },
-  { code: 'PL', label: 'Poland' },
-  { code: 'UK', label: 'United Kingdom' },
-];
-const HOLIDAY_CODES = HOLIDAY_FLAGS.map(f => f.code);
+// The offices a holiday can be tagged with are the same offices a person can be
+// based in, so both read one list out of people.js rather than keeping two that
+// can drift.
+const HOLIDAY_FLAGS = PERSON_COUNTRIES;
+const HOLIDAY_CODES = PERSON_COUNTRY_CODES;
 function isHolidayTask(t) { return !!(t && t.isDueDate && t.milestoneType === 'holiday'); }
 // Both kinds of "nobody's working" key date. The export toggles treat them as
 // one thing — a reader either wants time off on the sheet or they don't.
@@ -1586,190 +1568,18 @@ function setPersonEmail(name, email) {
   if (clean) peopleEmails[name] = clean;
   else delete peopleEmails[name];
   savePeopleEmails();
-  // Mirror onto the record when one exists (see PEOPLE RECORDS below).
-  if (typeof getPerson === 'function' && getPerson(name)) upsertPerson(name, { email: clean });
+  // Mirror onto the record when one exists. peopleEmails is still written for
+  // one release so a tab on an older build stays consistent.
+  if (getPerson(name)) upsertPerson(name, { email: clean });
 }
 function getPersonEmail(name) {
-  const rec = typeof getPerson === 'function' ? getPerson(name) : null;
+  const rec = getPerson(name);
   return (rec && rec.email) || peopleEmails[name] || '';
 }
 
-// ── SUNSET PEOPLE (soft-removed: hidden from every selection list, but their
-// existing task/attendee assignments are kept intact). Synced via Firebase. ──
-let sunsetPeople = {}; // name -> true
-function saveSunsetPeople() {
-  if (!window._fb) return;
-  const { db, ref, set } = window._fb;
-  set(ref(db, 'prepro/sunsetPeople'), sunsetPeople).catch(err => console.error('saveSunsetPeople:', err));
-}
-
-// ── PEOPLE RECORDS (prepro/people) ──
-// The single source of truth about a person. Before this, "who is Kait?" was
-// re-derived on every render from which role-keyed lists her name happened to
-// appear in, which is why she could show up in two roster groups at once.
-//
-//   name -> { team, roles[], defaultRole, email, country, aliases[],
-//             active, departedOn }
-//
-// Keyed by NAME rather than a generated id on purpose: every task already
-// stores `t.person = "<name>"` and every roster is an array of names, so ids
-// would mean rewriting all existing state. `aliases` covers the format-variant
-// problem ids would otherwise solve ("Walsh, Ryan" vs "Ryan Walsh"), and
-// renames keep going through mergePersonInto().
-//
-// `active` + `departedOn` are deliberately both present. Migration knows who is
-// sunset but not *when* they left, so it can only set the boolean; a date can
-// be filled in later and is what the workload views should prefer when it
-// exists. Legacy `peopleEmails` / `sunsetPeople` are still written for one
-// release so a stale tab can't clobber data mid-rollout.
-let peopleRecords = {};
-
-// Firebase drops empty arrays, empty strings and nulls, so a record written as
-// {aliases: [], departedOn: null} comes back as {}. Normalising both sides
-// before comparing is what stops our own echo from being read as a teammate's
-// edit and re-rendering the world on every keystroke.
-function normalizePeopleRecords(src) {
-  const out = {};
-  Object.keys(src || {}).sort().forEach(name => {
-    const r = src[name] || {};
-    out[name] = {
-      team:        r.team || '',
-      roles:       Array.isArray(r.roles) ? r.roles.slice().sort() : [],
-      defaultRole: r.defaultRole || '',
-      email:       r.email || '',
-      country:     r.country || '',
-      aliases:     Array.isArray(r.aliases) ? r.aliases.slice().sort() : [],
-      active:      r.active !== false,
-      departedOn:  r.departedOn || null
-    };
-  });
-  return out;
-}
-
-function savePeopleRecords() {
-  if (!window._fb) return;
-  const { db, ref, set } = window._fb;
-  set(ref(db, 'prepro/people'), peopleRecords).catch(err => console.error('savePeopleRecords:', err));
-}
-function hasPeopleRecords() { return Object.keys(peopleRecords || {}).length > 0; }
-function getPerson(name) { return (peopleRecords && peopleRecords[name]) || null; }
-
-// Normalised form used for alias/name matching: case-insensitive, punctuation
-// and whitespace collapsed, and "Last, First" folded to "First Last" so the
-// Pega export's name format matches the roster's.
-function normalizePersonKey(raw) {
-  let s = String(raw == null ? '' : raw).trim();
-  if (!s) return '';
-  const comma = s.match(/^([^,]+),\s*(.+)$/);
-  if (comma) s = comma[2] + ' ' + comma[1];
-  return s.toLowerCase().replace(/[.'’"()]/g, '').replace(/\s+/g, ' ').trim();
-}
-// Canonical name for whatever form we were handed — exact hit, then alias hit,
-// then a normalised-name hit. Returns '' when nobody matches, so callers can
-// tell "no match" apart from "matched an empty name".
-function resolvePersonName(raw) {
-  const s = String(raw == null ? '' : raw).trim();
-  if (!s) return '';
-  if (peopleRecords[s]) return s;
-  const key = normalizePersonKey(s);
-  if (!key) return '';
-  let fallback = '';
-  for (const [name, rec] of Object.entries(peopleRecords)) {
-    if (normalizePersonKey(name) === key) return name;
-    if ((rec.aliases || []).some(a => normalizePersonKey(a) === key)) fallback = fallback || name;
-  }
-  return fallback;
-}
-
-function upsertPerson(name, patch) {
-  const nm = (name || '').trim();
-  if (!nm) return null;
-  const cur = peopleRecords[nm] || {
-    team: '', roles: [], defaultRole: '', email: '',
-    country: '', aliases: [], active: true, departedOn: null
-  };
-  peopleRecords[nm] = Object.assign({}, cur, patch || {});
-  savePeopleRecords();
-  return peopleRecords[nm];
-}
-function setPersonTeam(name, teamKey) {
-  const rec = upsertPerson(name, { team: TEAM_KEYS.includes(teamKey) ? teamKey : '' });
-  // Keep defaultRole honest: a role from the old team is worse than none.
-  if (rec && rec.defaultRole && teamForRole(rec.defaultRole) !== rec.team) {
-    const t = getTeam(rec.team);
-    upsertPerson(name, { defaultRole: t ? (rec.roles || []).find(r => t.roles.includes(r)) || t.roles[0] : '' });
-  }
-  return getPerson(name);
-}
-function setPersonCountry(name, code) {
-  return upsertPerson(name, { country: HOLIDAY_CODES.includes(code) ? code : '' });
-}
-// Last day they were with the team. Setting one makes the workload views treat
-// them as capacity up to that date and not after it; clearing it falls back to
-// the plain active/inactive flag.
-function setPersonDeparted(name, iso) {
-  const clean = /^\d{4}-\d{2}-\d{2}$/.test(iso || '') ? iso : null;
-  return upsertPerson(name, { departedOn: clean, active: clean ? false : (getPerson(name) || {}).active !== false });
-}
-function setPersonAliases(name, raw) {
-  const seen = new Set(), list = [];
-  String(raw || '').split(',').forEach(a => {
-    const v = a.trim();
-    const k = normalizePersonKey(v);
-    if (!v || !k || k === normalizePersonKey(name) || seen.has(k)) return;
-    seen.add(k); list.push(v);
-  });
-  return upsertPerson(name, { aliases: list });
-}
-// ── DEPARTURES ──
-// Sunset says "hide them from pickers". These two answer the different question
-// the workload views need: was this person still here on this date? Without it
-// someone who left in March reads as idle capacity for the rest of the year.
-//
-// A record with active:false and no date is someone we know has gone but whose
-// last day we never recorded — the migration could only set the boolean. They
-// get no row at all rather than a misleading one.
-function personGoneEntirely(name) {
-  const rec = getPerson(name);
-  return !!(rec && rec.active === false && !rec.departedOn);
-}
-function personActiveOn(name, dateStr) {
-  const rec = getPerson(name);
-  if (!rec) return true;                       // unmigrated — assume present
-  if (rec.departedOn) return dateStr <= rec.departedOn;
-  return rec.active !== false;
-}
-function personTeam(name) { const r = getPerson(name); return r ? r.team || '' : ''; }
-function personCountry(name) { const r = getPerson(name); return r ? r.country || '' : ''; }
-function personAliases(name) { const r = getPerson(name); return (r && r.aliases) || []; }
-// Role a dragged person lands on a chip as. Falls back to their first known
-// role, then to their team's primary — never to a hardcoded guess.
-function personDefaultRole(name) {
-  const r = getPerson(name);
-  if (!r) return '';
-  if (r.defaultRole) return r.defaultRole;
-  if ((r.roles || []).length) return r.roles[0];
-  const t = getTeam(r.team);
-  return t ? t.roles[0] : '';
-}
-
-// Sunset now lives on the record; the legacy map is still consulted (and still
-// written) so a tab running the previous build stays consistent.
-function isSunset(name) {
-  const rec = getPerson(name);
-  if (rec && rec.active === false) return true;
-  if (rec && rec.active === true) return false;
-  return !!sunsetPeople[name];
-}
-function sunsetPerson(name) {
-  if (!name) return;
-  sunsetPeople[name] = true; saveSunsetPeople();
-  if (getPerson(name)) upsertPerson(name, { active: false });
-}
-function restorePerson(name) {
-  if (sunsetPeople[name]) { delete sunsetPeople[name]; saveSunsetPeople(); }
-  if (getPerson(name)) upsertPerson(name, { active: true, departedOn: null });
-}
+// The person record (prepro/people), name/alias matching, every getter and
+// setter, and the sunset helpers all live in people.js now. Only the parts
+// that need this page's own state stay here.
 
 function collectAllPeople() {
   const people = {};
@@ -1956,8 +1766,7 @@ function deletePersonEverywhere(name) {
     if (p.leadProducer === name) p.leadProducer = null;
   });
   delete peopleEmails[name];
-  if (sunsetPeople[name]) { delete sunsetPeople[name]; saveSunsetPeople(); }
-  if (peopleRecords[name]) { delete peopleRecords[name]; savePeopleRecords(); }
+  deletePersonRecord(name); // record + legacy sunset entry, from people.js
   saveNameHistory();
   savePeopleEmails();
   saveState();
@@ -1997,43 +1806,11 @@ function mergePersonInto(from, into) {
   });
   if (!peopleEmails[into] && peopleEmails[from]) peopleEmails[into] = peopleEmails[from];
   delete peopleEmails[from];
-  if (sunsetPeople[from]) { delete sunsetPeople[from]; saveSunsetPeople(); }
 
-  // Fold the two records together. The merged-away name becomes an alias of the
-  // survivor, so whatever kept re-creating it (usually a differently-formatted
-  // name in the Pega export) matches the survivor next time instead of minting
-  // the duplicate all over again.
-  const recFrom = peopleRecords[from], recInto = peopleRecords[into];
-  if (recFrom || recInto) {
-    const merged = Object.assign({
-      team: '', roles: [], defaultRole: '', email: '',
-      country: '', aliases: [], active: true, departedOn: null
-    }, recFrom || {}, recInto || {});
-    const union = (a, b) => {
-      const seen = new Set(), out = [];
-      [...(a || []), ...(b || [])].forEach(v => {
-        const k = normalizePersonKey(v);
-        if (!v || !k || seen.has(k)) return;
-        seen.add(k); out.push(v);
-      });
-      return out;
-    };
-    merged.roles   = union(recInto && recInto.roles,   recFrom && recFrom.roles);
-    merged.aliases = union(recInto && recInto.aliases, recFrom && recFrom.aliases);
-    // Record the old name as an alias unless it's just a formatting variant of
-    // the survivor's own name, which resolvePersonName already handles.
-    if (normalizePersonKey(from) !== normalizePersonKey(into) &&
-        !merged.aliases.some(a => normalizePersonKey(a) === normalizePersonKey(from))) {
-      merged.aliases.push(from);
-    }
-    if (!merged.team && recFrom) merged.team = recFrom.team || '';
-    if (!merged.email) merged.email = (recFrom && recFrom.email) || peopleEmails[into] || '';
-    if (!merged.country && recFrom) merged.country = recFrom.country || '';
-    if (merged.defaultRole && !merged.roles.includes(merged.defaultRole)) merged.roles.push(merged.defaultRole);
-    peopleRecords[into] = merged;
-    delete peopleRecords[from];
-    savePeopleRecords();
-  }
+  // Fold the two records together. mergePersonRecords also records the
+  // merged-away name as an alias, so whatever kept re-creating the duplicate
+  // matches the survivor next time instead of minting it again.
+  mergePersonRecords(from, into);
 
   saveNameHistory();
   savePeopleEmails();
@@ -9432,21 +9209,13 @@ function applyRemoteState(snapshot) {
     changed = true;
   }
 
-  if (JSON.stringify(data.sunsetPeople || {}) !== JSON.stringify(sunsetPeople)) {
-    sunsetPeople = data.sunsetPeople || {};
-    changed = true;
-  }
-
-  // People records. Firebase strips empty arrays and nulls, so normalise every
-  // record back to the full shape before comparing — otherwise the echo of our
-  // own write never compares equal and every save triggers a re-render.
-  const incomingPeople = normalizePeopleRecords(data.people || {});
-  if (JSON.stringify(incomingPeople) !== JSON.stringify(normalizePeopleRecords(peopleRecords))) {
-    peopleRecords = incomingPeople;
-    changed = true;
-  }
+  if (applyRemoteSunset(data.sunsetPeople)) changed = true;
+  if (applyRemotePeople(data.people))       changed = true;
 
   return changed;
+}
+
+function initFirebase() {  return changed;
 }
 
 function initFirebase() {

@@ -154,6 +154,7 @@
   }
   .chip.blue   { background: #4a90d9; }
   .chip.orange { background: #e07b39; }
+  .chip.teal   { background: #4aa9a0; }
   .chip.purple { background: #7c5cbf; }
   .chip.green  { background: #4cba6a; }
   .chip.red    { background: #c0394f; }
@@ -467,7 +468,7 @@
         <div class="step-num">➕</div>
         <div class="step-body">
           <div class="step-title">Add a person</div>
-          <div class="step-desc">Type a name, optionally an email and role, then click <strong>+ Add</strong>. They're now available for every project.</div>
+          <div class="step-desc">Type a name, optionally an email, role and <strong>team</strong>, then click <strong>+ Add</strong>. Picking a role fills the team in for you. They're now available for every project.</div>
         </div>
       </div>
       <div class="step">
@@ -478,10 +479,38 @@
         </div>
       </div>
       <div class="step">
+        <div class="step-num">👥</div>
+        <div class="step-body">
+          <div class="step-title">Everyone has one team</div>
+          <div class="step-desc">Video Team, Brand Creative, Stakeholders or Vendors. The team is what groups them in the roster panel, so nobody ever appears in two places. Change it on their row at any time.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">🌍</div>
+        <div class="step-body">
+          <div class="step-title">Set a country for holidays</div>
+          <div class="step-desc">A person's country decides which Holidays apply to them. Set it and they're added to every matching Holiday automatically — including the ones already on the calendar.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">🏷</div>
+        <div class="step-body">
+          <div class="step-title">"Also known as"</div>
+          <div class="step-desc">Alternate spellings this person arrives as in an import — e.g. <strong>Walsh, Ryan</strong> for <strong>Ryan Walsh</strong>. An Excel import matches these, so it stops creating a second copy of someone you already have.</div>
+        </div>
+      </div>
+      <div class="step">
         <div class="step-num">🔀</div>
         <div class="step-body">
           <div class="step-title">Merge duplicates</div>
-          <div class="step-desc">Use the <strong>Merge Duplicates</strong> picker to fold one name into another. Every roster, task, and attendee entry is reassigned automatically.</div>
+          <div class="step-desc">Use the <strong>Merge Duplicates</strong> picker to fold one name into another. Every roster, task, and attendee entry is reassigned automatically, and the old name is kept as an alias so the next import matches the survivor.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">🌙</div>
+        <div class="step-body">
+          <div class="step-title">Sunset someone who has left</div>
+          <div class="step-desc">Sunset hides them from every picker while keeping their existing assignments. Give them a <strong>last day</strong> too and the workload views stop counting them as available after that date.</div>
         </div>
       </div>
       <div class="step">
@@ -498,13 +527,20 @@
   <div class="slide">
     <div class="slide-label">Step 3</div>
     <h2>Assign a Roster to the Project</h2>
-    <p>Open the <strong>Schedule Tools</strong> panel at the bottom, then click the <strong>Role Assignees</strong> tab. Each project picks its team from the global directory.</p>
+    <p>Open the <strong>Schedule Tools</strong> panel at the bottom, then click the <strong>Role Assignees</strong> tab. Each project picks its team from the global directory. People are grouped by their team, and everyone appears exactly once.</p>
     <div class="steps">
+      <div class="step">
+        <div class="step-num">🔍</div>
+        <div class="step-body">
+          <div class="step-title">One search box for everyone</div>
+          <div class="step-desc">Search filters all four team sections at once, and matches "also known as" spellings too. Type a name nobody has and it offers a button per team so you can add them straight from here.</div>
+        </div>
+      </div>
       <div class="step">
         <div class="step-num">➕</div>
         <div class="step-body">
           <div class="step-title">Click a suggestion to assign</div>
-          <div class="step-desc">Dashed "+ Name" chips list everyone available for each role. Click to add them to this project.</div>
+          <div class="step-desc">Dashed "+ Name" chips are people not yet on this project. Click to add them. The badge on each chip is the role they'll land as when dragged.</div>
         </div>
       </div>
       <div class="step">
@@ -535,7 +571,7 @@
       <div class="chip blue">Animator</div>
       <div class="chip orange">Copywriter</div>
       <div class="chip orange">Designer</div>
-      <div class="chip orange">Stakeholder</div>
+      <div class="chip teal">Stakeholder</div>
       <div class="chip purple">External Vendor</div>
       <div class="chip green">Other</div>
       <div class="chip red">Review</div>
@@ -545,7 +581,7 @@
       <div class="chip gray">🎯 Milestone</div>
       <div class="chip gray">📦 Delivery</div>
     </div>
-    <p style="margin-top:14px;">Blue = Internal · Orange = External · Purple = Vendor · Red = Events · Gray = Key Dates</p>
+    <p style="margin-top:14px;">Blue = Video Team · Orange = Brand Creative · Teal = Stakeholders · Purple = Vendors · Red = Events · Gray = Key Dates</p>
   </div>
 
   <!-- 6. PEOPLE CHIPS -->

@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260819a';
+window.PREPRO_BUILD = '20260819e';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,7 +26,10 @@ window.PREPRO_BUILD = '20260819a';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260819a"></script>
+<script type="module" src="./auth.js?v=20260819e"></script>
+<!-- Shared people module — classic script so its globals exist before the app
+     script below runs. Same file is loaded by team.html and ops.html. -->
+<script src="./people.js?v=20260819e"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -53,6 +56,18 @@ window._fbReady.then(({ db, ref, onValue }) => {
     const data = snapshot.val();
     if (data) { window._fbNameHistory = data; if (window._dashReloadNameHistory) window._dashReloadNameHistory(data); }
   }, err => console.error('dash nameHistory firebase error:', err));
+
+  // Dash never subscribed to sunsetPeople, so soft-removed people kept showing
+  // up in its pickers and panels. Both nodes are wired now.
+  onValue(ref(db, 'prepro/sunsetPeople'), snapshot => {
+    window._fbSunsetPeople = snapshot.val() || {};
+    if (window._dashReloadSunsetPeople) window._dashReloadSunsetPeople(window._fbSunsetPeople);
+  }, err => console.error('dash sunsetPeople firebase error:', err));
+
+  onValue(ref(db, 'prepro/people'), snapshot => {
+    window._fbPeople = snapshot.val() || {};
+    if (window._dashReloadPeople) window._dashReloadPeople(window._fbPeople);
+  }, err => console.error('dash people firebase error:', err));
 
   onValue(ref(db, 'prepro/peopleEmails'), snapshot => {
     const data = snapshot.val();
@@ -534,7 +549,10 @@ a.lb-proj-name:hover { color: var(--accent); }
 // ── CONSTANTS ──
 const ROLE_CATS = [
   { label: 'Internal Team', color: '#4a90d9', roles: ['Producer', 'Editor', 'Animator'] },
-  { label: 'External',      color: '#e07b39', roles: ['Copywriter', 'Designer', 'Stakeholder'] },
+  // Stakeholder has its own colour so a stakeholder reads the same here as in
+  // Team and Ops.
+  { label: 'External',      color: '#e07b39', roles: ['Copywriter', 'Designer'] },
+  { label: 'Stakeholders',  color: '#4aa9a0', roles: ['Stakeholder'] },
   { label: 'Vendors',       color: '#7c5cbf', roles: ['External Vendor'] },
   { label: 'Other',         color: '#4cba6a', roles: ['Other'] }
 ];
@@ -679,6 +697,13 @@ function collectAllPeople() {
     Object.entries(roster).forEach(([role, names]) => (names || []).forEach(n => touch(n, role)));
   });
   Object.keys(peopleEmails || {}).forEach(n => touch(n, null));
+  // Records are their own source of people: someone added in team.html but not
+  // yet placed on any project exists there and nowhere else.
+  Object.entries(peopleRecords || {}).forEach(([n, rec]) => {
+    touch(n, null);
+    (rec.roles || []).forEach(r => people[n].roles.add(r));
+    if (rec.email) people[n].email = rec.email;
+  });
   return Object.values(people).sort((a,b) => a.name.localeCompare(b.name));
 }
 
@@ -697,6 +722,9 @@ function deletePersonEverywhere(name) {
     });
   });
   delete peopleEmails[name];
+  // The record half lives in people.js. Dash used to skip it, which left an
+  // orphan in prepro/people that team.html read back and resurrected.
+  deletePersonRecord(name);
   saveNameHistory();
   savePeopleEmails();
   saveState();
@@ -735,6 +763,9 @@ function mergePersonInto(from, into) {
   });
   if (!peopleEmails[into] && peopleEmails[from]) peopleEmails[into] = peopleEmails[from];
   delete peopleEmails[from];
+  // Folds the records and records the merged-away name as an alias, so the next
+  // Pega import matches the survivor instead of re-creating the duplicate.
+  mergePersonRecords(from, into);
   saveNameHistory();
   savePeopleEmails();
   saveState();
@@ -1217,8 +1248,20 @@ loadState();
 loadDashData();
 if (window._fbState) window._dashReloadState(window._fbState);
 if (window._fbDashData) window._dashReloadDashData(window._fbDashData);
+// The readyState guard matters: these are also called synchronously just below,
+// while this script is still parsing and the DOM the renderers need does not
+// exist yet. The DOMContentLoaded boot renders anyway, so skipping here costs
+// nothing; later Firebase pushes arrive after load and do repaint.
+window._dashReloadSunsetPeople = function(data) {
+  if (applyRemoteSunset(data) && document.readyState !== 'loading') renderAll();
+};
+window._dashReloadPeople = function(data) {
+  if (applyRemotePeople(data) && document.readyState !== 'loading') renderAll();
+};
 if (window._fbNameHistory) window._dashReloadNameHistory(window._fbNameHistory);
 if (window._fbPeopleEmails) window._dashReloadPeopleEmails(window._fbPeopleEmails);
+if (window._fbSunsetPeople) window._dashReloadSunsetPeople(window._fbSunsetPeople);
+if (window._fbPeople) window._dashReloadPeople(window._fbPeople);
 wireSettingsModal();
 
 // ── DATE UTILITIES ──
@@ -1337,6 +1380,11 @@ function getAllPeople() {
       });
     });
   });
+
+  // Drop soft-removed and departed people. Dash never did this — it had no
+  // sunset wiring at all — so people who had left kept appearing in the sidebar
+  // and every panel that reads this map.
+  [...personMap.keys()].forEach(name => { if (isSunset(name)) personMap.delete(name); });
 
   return personMap;
 }
