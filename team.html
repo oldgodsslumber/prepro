@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260819b';
+window.PREPRO_BUILD = '20260819c';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,9 +29,9 @@ window.PREPRO_BUILD = '20260819b';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260819b"></script>
+<script type="module" src="./auth.js?v=20260819c"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260819b"></script>
+<script src="./xlsx.full.min.js?v=20260819c"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -786,6 +786,23 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 .roster-suggest-chip.roster-add-new { border-style: solid; border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .roster-suggest-chip.roster-add-new:hover { background: var(--accent); color: var(--bg); }
 .roster-empty-hint { font-size: 10px; color: var(--dim); font-style: italic; padding: 1px 2px; }
+/* One search box for the whole panel, replacing the per-group filter boxes. */
+.roster-search-wrap { flex: 0 0 100%; width: 100%; box-sizing: border-box; padding: 0 4px 6px; }
+.roster-search { width: 100%; box-sizing: border-box; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; color: var(--text); font-size: 12px; outline: none; transition: border-color .12s; }
+.roster-search:focus { border-color: var(--accent); }
+/* Shown only when the typed name matches nobody: adding a new person means
+   choosing their team, so the choice is made explicit rather than guessed. */
+.roster-addbar { display: none; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 7px; font-size: 11px; color: var(--dim); }
+.roster-addbar button { background: transparent; border: 1px solid var(--accent); color: var(--accent); border-radius: 20px; padding: 2px 10px; font-size: 11px; cursor: pointer; transition: background .12s, color .12s; }
+.roster-addbar button:hover { background: var(--accent); color: #fff; }
+.roster-role-count { font-size: 10px; color: var(--dim); font-weight: 600; }
+/* Role a person lands on a chip as — same three-letter treatment as ROLE_ABBR
+   elsewhere, so the chip says who they are AND what they'd be doing. */
+.roster-role-badge { font-size: 8px; font-weight: 700; letter-spacing: .04em; color: #fff; border-radius: 3px; padding: 1px 3px; line-height: 1.35; flex: none; }
+.roster-suggest-chip .roster-role-badge { opacity: .7; }
+.roster-sec-empty { font-size: 10px; color: var(--dim); font-style: italic; padding: 1px 2px; }
+/* People with no team and no role history — surfaced rather than hidden. */
+.roster-role.unplaced { border-style: dashed; border-color: var(--accent); }
 
 /* ── HELP / OPS BUTTONS — now inline in data-migration ── */
 
@@ -1194,20 +1211,17 @@ const REVIEW_SUGGESTIONS = {
   'On-Location Shoot': ['On-Location Shoot', 'B-Roll', 'Interviews', 'Reshoot'],
   'Studio Work':       ['Studio Work', 'Set Build', 'Set Strike', 'Maintenance', 'Prep']
 };
-// Display groups for the Role Assignees side panel. Underlying roles are
-// unchanged; these only control how the roster is grouped. `primary` is the
-// role a newly-assigned person is stored under; `color` styles their chip.
-const ROSTER_GROUPS = [
-  { label: 'Video Team',      primary: 'Producer',        roles: ['Producer', 'Editor', 'Animator'], color: '#4a90d9' },
-  { label: 'Creative',        primary: 'Copywriter',      roles: ['Copywriter', 'Designer'],         color: '#e07b39' },
-  { label: 'Stakeholder',     primary: 'Stakeholder',     roles: ['Stakeholder'],                    color: '#e07b39' },
-  { label: 'External Vendor', primary: 'External Vendor', roles: ['External Vendor'],                color: '#7c5cbf' }
-];
 // ── TEAMS ──
 // A person belongs to exactly one team. This is the identity axis: it answers
-// "who is this?" and (from phase 3 on) drives how the roster panel is grouped.
-// Roles stay the separate "what are they doing on this task?" axis, which is
-// why the two lists below overlap without being redundant.
+// "who is this?" and drives how the roster panel is grouped. Roles stay the
+// separate "what are they doing on this task?" axis, which is why the two
+// lists overlap without being redundant.
+//
+// This replaces the old ROSTER_GROUPS, which grouped the panel by *role* and
+// so listed anyone with roles in two groups twice, and whose `primary` field
+// silently filed every new addition under a role they might not hold.
+// ROLE_CATS survives alongside it on purpose: its category label is written
+// into `task.roleCategory`, which drives workload counting and every export.
 //
 // `roles` here is only used to *derive* a team during migration and to colour
 // the palette — it is not membership. Membership is the stored `team` key, so
@@ -1228,9 +1242,15 @@ function teamForRole(role) { const t = TEAMS.find(t => t.roles.includes(role)); 
 
 // Roles that make someone part of the internal video team. Used to scope the
 // sidebar name-filter list (no stakeholders / external / vendor people there).
-const VIDEO_TEAM_ROLES = (ROSTER_GROUPS.find(g => g.label === 'Video Team') || {}).roles || ['Producer', 'Editor', 'Animator'];
+const VIDEO_TEAM_ROLES = (TEAMS.find(t => t.key === 'video') || {}).roles || ['Producer', 'Editor', 'Animator'];
+// Membership is a stored fact once someone has a record. The role-based test is
+// only the fallback for people who haven't been migrated yet — it's the guess
+// this whole change exists to stop making.
 function isVideoTeamPerson(person) {
-  return !!(person && person.roles && [...person.roles].some(r => VIDEO_TEAM_ROLES.includes(r)));
+  if (!person) return false;
+  const rec = getPerson(person.name);
+  if (rec && rec.team) return rec.team === 'video';
+  return !!(person.roles && [...person.roles].some(r => VIDEO_TEAM_ROLES.includes(r)));
 }
 function catLabelForRole(role) { const c = ROLE_CATS.find(c => c.roles.includes(role)); return c ? c.label : ''; }
 // Matches "holiday" too, so the combined project works under any of the obvious
@@ -1306,18 +1326,77 @@ function isAdminRole(role) { return ADMIN_ROLES.includes((role || '').toLowerCas
 // Shared category colour for admin + team-event work (distinct from the blues,
 // green, purple, orange, red already in use). Mirror in ops.html CAT_COLORS.
 const ADMIN_COLOR = '#c14b9a';
-// Unique people in a roster group (union across its roles, deduped — no repeats).
-function getGroupNames(group) {
-  const seen = new Set(), out = [];
-  group.roles.forEach(r => getRosterNames(r).forEach(n => { if (!seen.has(n) && !isSunset(n)) { seen.add(n); out.push(n); } }));
-  return out;
+
+// ── TEAM PLACEMENT ──
+// A person's home team. Prefers the stored record; falls back to deriving one
+// from their role history so the panel still groups everybody sensibly before
+// the migration has been run. The fallback picks the single strongest team
+// rather than listing the person under each one they touch — which is the
+// duplication this whole change exists to remove.
+function personTeamOrDerived(name) {
+  const stored = personTeam(name);
+  if (stored) return stored;
+  const weights = personRoleWeights(name);
+  let best = '', bestN = 0;
+  TEAMS.forEach(t => {
+    const s = t.roles.reduce((a, r) => a + (weights[r] || 0), 0);
+    if (s > bestN) { bestN = s; best = t.key; }
+  });
+  return best;
 }
-function getGroupSuggestions(group) {
-  const assigned = new Set(getGroupNames(group)), seen = new Set(), out = [];
-  group.roles.forEach(r => (nameHistory[r] || []).forEach(n => { if (!assigned.has(n) && !seen.has(n) && !isSunset(n)) { seen.add(n); out.push(n); } }));
-  return out;
+// Colour a chip takes when this role is dropped on the timeline. Chips are
+// pieces of work, so they follow the role, not the person's team — a Producer
+// doing vendor coordination should read as vendor work.
+function colorForRole(role) {
+  const t = TEAMS.find(t => t.roles.includes(role));
+  if (t) return t.color;
+  const c = ROLE_CATS.find(c => c.roles.includes(role));
+  return c ? c.color : ADMIN_COLOR;
 }
-function removeFromGroup(group, name) { group.roles.forEach(r => removeFromRoster(r, name)); }
+// Role a person would land on a chip as, given the team section they're shown
+// in. Their stored default wins; otherwise the strongest role that actually
+// belongs to that team; otherwise the team's first role.
+function rosterRoleFor(name, teamKey) {
+  const stored = personDefaultRole(name);
+  if (stored) return stored;
+  const derived = bestRoleForTeam(personRoleWeights(name), teamKey);
+  if (derived) return derived;
+  const t = getTeam(teamKey);
+  return t ? t.roles[0] : 'Other';
+}
+// Drop someone from the active project regardless of which role key they were
+// filed under — with one person per team, "remove" is a single idea again.
+function removePersonFromProject(name) {
+  const proj = getProject(activeProjectId);
+  if (!proj || !proj.roster) return;
+  Object.keys(proj.roster).forEach(role => {
+    proj.roster[role] = (proj.roster[role] || []).filter(n => n !== name);
+  });
+  saveState();
+}
+function addPersonToProject(name, teamKey) {
+  const nm = (name || '').trim();
+  if (!nm) return;
+  addToRoster(rosterRoleFor(nm, teamKey || personTeamOrDerived(nm)), nm);
+}
+// Add a brand-new name straight from the panel. Creating the record here (when
+// records exist) is what keeps them out of the "needs a home" pile later.
+function addNewPersonToTeam(rawName, teamKey) {
+  const raw = (rawName || '').trim();
+  if (!raw) return '';
+  const name = resolvePersonName(raw) || raw;
+  if (hasPeopleRecords() && !getPerson(name)) {
+    const t = getTeam(teamKey);
+    upsertPerson(name, {
+      team:        teamKey || '',
+      roles:       t ? [t.roles[0]] : [],
+      defaultRole: t ? t.roles[0] : '',
+      active:      true
+    });
+  }
+  addPersonToProject(name, teamKey);
+  return name;
+}
 // People shown on a role task = optional legacy single person + the attendee list.
 function taskPeople(task) {
   const out = [];
@@ -7352,7 +7431,7 @@ function renderRosterInto(content) {
   topBar.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; padding:0 2px;';
   const topHint = document.createElement('span');
   topHint.style.cssText = 'font-size:11px; color:var(--dim);';
-  topHint.textContent = 'Type in a group’s box to filter its list or add a brand-new person. Click a suggestion to add them to this project. Drag an assigned name onto any chip in the timeline to assign them; click a name to unassign.';
+  topHint.textContent = 'Everyone appears once, under their own team. Search to filter every team at once — a new name offers you a team to put them on. Click a dashed name to add them to this project, click a solid one to remove them. Drag any name onto a chip in the timeline to assign them; the badge shows the role they’ll land as.';
   topBar.appendChild(topHint);
   const mgrBtn = document.createElement('button');
   mgrBtn.className = 'btn btn-ghost';
@@ -7442,148 +7521,206 @@ function renderRosterInto(content) {
     wrap.appendChild(lpSection);
   }
 
-  ROSTER_GROUPS.forEach(group => {
-    const names = getGroupNames(group);
-    const suggestions = getGroupSuggestions(group);
+  // ── People, grouped by team ──
+  // Each person appears exactly once, in their own team's section. Previously
+  // this re-derived membership per render from whichever role-keyed lists a
+  // name appeared in, so anyone with roles in two groups rendered twice.
+  const rosterProj = getProject(activeProjectId);
+  const onProject  = new Set();
+  Object.values((rosterProj && rosterProj.roster) || {})
+    .forEach(list => (list || []).forEach(n => { if (n && !isSunset(n)) onProject.add(n); }));
 
-    const section = document.createElement('div');
-    section.className = 'roster-role';
+  const buckets = {};
+  TEAMS.forEach(t => { buckets[t.key] = { assigned: [], available: [] }; });
+  const unplaced = { assigned: [], available: [] };
+  collectAllPeople().forEach(p => {
+    if (isSunset(p.name)) return;
+    const b = buckets[personTeamOrDerived(p.name)] || unplaced;
+    (onProject.has(p.name) ? b.assigned : b.available).push(p.name);
+  });
 
-    // Group label
-    const lbl = document.createElement('div');
-    lbl.className = 'roster-role-label';
-    lbl.textContent = group.label;
-    lbl.style.color = group.color;
-    section.appendChild(lbl);
+  // Every chip in every section, so one search box can filter the lot.
+  const allChips = [];
 
-    // Assigned people — draggable onto timeline chips; click to unassign
-    const nameList = document.createElement('div');
-    nameList.className = 'roster-names';
-    names.forEach(name => {
-      const chip = document.createElement('div');
-      chip.className = 'roster-name-chip';
-      chip.draggable = true;
-      chip.title = 'Drag onto a chip to assign · click to unassign';
-      chip.style.cursor = 'grab';
-      const nameSpan = document.createElement('span');
-      nameSpan.textContent = name;
-      chip.appendChild(nameSpan);
-      chip.addEventListener('dragstart', e => {
-        dragPayload = { type: 'person', person: name, role: group.primary, category: catLabelForRole(group.primary), color: group.color };
-        e.dataTransfer.setData('text', JSON.stringify(dragPayload));
-        e.dataTransfer.effectAllowed = 'copy';
-      });
-      chip.addEventListener('dragend', () => { dragPayload = null; });
-      chip.addEventListener('click', e => {
-        e.stopPropagation();
-        removeFromGroup(group, name);
-        renderExportPanel();
-        renderPalette();
-        renderCalendar();
-      });
-      nameList.appendChild(chip);
-    });
-    section.appendChild(nameList);
+  // ── Search: one box for the whole panel ──
+  const searchWrap = document.createElement('div');
+  searchWrap.className = 'roster-search-wrap';
+  const searchInput = document.createElement('input');
+  searchInput.type = 'text';
+  searchInput.className = 'roster-search';
+  searchInput.placeholder = 'Search people — or type a new name to add someone…';
+  searchInput.autocomplete = 'off';
+  searchWrap.appendChild(searchInput);
 
-    // Available people — drag straight onto a chip (no need to add to the
-    // project first), or click to add them to the project roster. A filter box
-    // keeps long lists (e.g. stakeholders at a big company) navigable, and lets
-    // you add a brand-new person on the fly without opening Manage People.
-    const addPerson = name => {
-      const nm = (name || '').trim();
-      if (!nm) return;
-      addToRoster(group.primary, nm);
+  const addBar = document.createElement('div');
+  addBar.className = 'roster-addbar';
+  const addBarLbl = document.createElement('span');
+  addBar.appendChild(addBarLbl);
+  TEAMS.forEach(t => {
+    const b = document.createElement('button');
+    b.textContent = t.label;
+    b.style.borderColor = t.color;
+    b.style.color = t.color;
+    b.addEventListener('mouseenter', () => { b.style.background = t.color; b.style.color = '#fff'; });
+    b.addEventListener('mouseleave', () => { b.style.background = 'transparent'; b.style.color = t.color; });
+    b.addEventListener('click', () => {
+      addNewPersonToTeam(searchInput.value, t.key);
       renderExportPanel();
       renderPalette();
-    };
+    });
+    addBar.appendChild(b);
+  });
+  searchWrap.appendChild(addBar);
+  wrap.appendChild(searchWrap);
 
-    const filterWrap = document.createElement('div');
-    filterWrap.className = 'roster-add';
-    const filterInput = document.createElement('input');
-    filterInput.type = 'text';
-    filterInput.className = 'roster-filter';
-    filterInput.placeholder = 'Filter or add ' + group.label.toLowerCase() + '…';
-    filterInput.autocomplete = 'off';
-    filterWrap.appendChild(filterInput);
-    section.appendChild(filterWrap);
+  // Build one person chip. `assigned` picks solid (on this project) vs dashed
+  // (known, not on this project) styling.
+  const mkPersonChip = (name, assigned, teamKey) => {
+    const role  = rosterRoleFor(name, teamKey);
+    const color = colorForRole(role);
+    const chip = document.createElement('div');
+    chip.className = assigned ? 'roster-name-chip' : 'roster-suggest-chip';
+    chip.draggable = true;
+    chip.style.cursor = 'grab';
+    chip.title = assigned
+      ? name + ' · drag onto a chip to assign as ' + role + ' · click to remove from this project'
+      : name + ' · drag onto a chip to assign as ' + role + ' · click to add to this project';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = (assigned ? '' : '+ ') + name;
+    chip.appendChild(nameSpan);
+
+    const badge = document.createElement('span');
+    badge.className = 'roster-role-badge';
+    badge.textContent = ROLE_ABBR[role] || typeAbbr(role);
+    badge.style.background = color;
+    badge.title = role;
+    chip.appendChild(badge);
+
+    chip.addEventListener('dragstart', e => {
+      // category still comes from ROLE_CATS: it drives workload counting and is
+      // written into every export, so it is not the panel's to redefine.
+      dragPayload = { type: 'person', person: name, role: role, category: catLabelForRole(role), color: color };
+      e.dataTransfer.setData('text', JSON.stringify(dragPayload));
+      e.dataTransfer.effectAllowed = 'copy';
+    });
+    chip.addEventListener('dragend', () => { dragPayload = null; });
+    chip.addEventListener('click', e => {
+      e.stopPropagation();
+      if (assigned) removePersonFromProject(name);
+      else addPersonToProject(name, teamKey);
+      renderExportPanel();
+      renderPalette();
+      renderCalendar();
+    });
+
+    allChips.push({
+      name: name,
+      lc: name.toLowerCase(),
+      aliases: personAliases(name).map(a => a.toLowerCase()),
+      el: chip
+    });
+    return chip;
+  };
+
+  // Sections: the four teams, plus an Unplaced section that only appears when
+  // somebody genuinely has no home — better surfaced than quietly dropped.
+  const sections = TEAMS.map(t => ({ key: t.key, label: t.label, color: t.color, bucket: buckets[t.key], unplaced: false }));
+  if (unplaced.assigned.length || unplaced.available.length) {
+    sections.push({ key: '', label: 'No team yet', color: 'var(--accent)', bucket: unplaced, unplaced: true });
+  }
+
+  sections.forEach(sec => {
+    const bucket = sec.bucket;
+    const section = document.createElement('div');
+    section.className = 'roster-role' + (sec.unplaced ? ' unplaced' : '');
+
+    const header = document.createElement('div');
+    header.className = 'roster-role-header';
+    const lbl = document.createElement('div');
+    lbl.className = 'roster-role-label';
+    lbl.textContent = sec.label;
+    lbl.style.color = sec.color;
+    header.appendChild(lbl);
+    const count = document.createElement('span');
+    count.className = 'roster-role-count';
+    count.textContent = bucket.assigned.length ? bucket.assigned.length + ' on project' : '';
+    header.appendChild(count);
+    section.appendChild(header);
+
+    if (sec.unplaced) {
+      const why = document.createElement('div');
+      why.className = 'roster-sec-empty';
+      why.textContent = 'Give them a team in Manage People.';
+      section.appendChild(why);
+    }
+
+    const nameList = document.createElement('div');
+    nameList.className = 'roster-names';
+    bucket.assigned.forEach(n => nameList.appendChild(mkPersonChip(n, true, sec.key)));
+    section.appendChild(nameList);
 
     const suggestRow = document.createElement('div');
     suggestRow.className = 'roster-suggestions';
+    bucket.available.forEach(n => suggestRow.appendChild(mkPersonChip(n, false, sec.key)));
 
-    const chipEls = [];
-    suggestions.forEach(name => {
-      const chip = document.createElement('div');
-      chip.className = 'roster-suggest-chip';
-      chip.title = 'Drag onto a chip to assign · click to add to this project';
-      chip.draggable = true;
-      chip.addEventListener('dragstart', e => {
-        dragPayload = { type: 'person', person: name, role: group.primary, category: catLabelForRole(group.primary), color: group.color };
-        e.dataTransfer.setData('text', JSON.stringify(dragPayload));
-        e.dataTransfer.effectAllowed = 'copy';
-      });
-      chip.addEventListener('dragend', () => { dragPayload = null; });
-      const addSpan = document.createElement('span');
-      addSpan.textContent = '+ ' + name;
-      addSpan.addEventListener('click', e => {
-        e.stopPropagation();
-        addPerson(name);
-      });
-      chip.appendChild(addSpan);
-      suggestRow.appendChild(chip);
-      chipEls.push({ name: name, lc: name.toLowerCase(), el: chip });
-    });
-
-    // "+ Add “name”" chip — shown only when the typed name matches no existing
-    // suggestion, so brand-new people can be added straight from the panel.
-    const addNewChip = document.createElement('div');
-    addNewChip.className = 'roster-suggest-chip roster-add-new';
-    addNewChip.title = 'Add a new person to this project';
-    addNewChip.style.display = 'none';
-    const addNewSpan = document.createElement('span');
-    addNewChip.appendChild(addNewSpan);
-    addNewChip.addEventListener('click', e => { e.stopPropagation(); addPerson(filterInput.value); });
-    suggestRow.appendChild(addNewChip);
-
-    // Empty-state hint when a group has no suggestions yet.
     const emptyHint = document.createElement('span');
     emptyHint.className = 'roster-empty-hint';
-    emptyHint.textContent = 'No saved names — type above to add one.';
-    emptyHint.style.display = suggestions.length ? 'none' : '';
+    emptyHint.textContent = bucket.assigned.length || bucket.available.length
+      ? 'No matches.'
+      : 'Nobody on this team yet.';
+    emptyHint.style.display = (bucket.assigned.length || bucket.available.length) ? 'none' : '';
     suggestRow.appendChild(emptyHint);
-
-    const applyFilter = () => {
-      const raw = filterInput.value.trim();
-      const q = raw.toLowerCase();
-      let anyExact = false;
-      chipEls.forEach(c => {
-        const match = !q || c.lc.includes(q);
-        c.el.style.display = match ? '' : 'none';
-        if (c.lc === q) anyExact = true;
-      });
-      if (q && !anyExact) {
-        addNewSpan.textContent = '+ Add “' + raw + '”';
-        addNewChip.style.display = '';
-      } else {
-        addNewChip.style.display = 'none';
-      }
-      emptyHint.style.display = (!q && !suggestions.length) ? '' : 'none';
-    };
-    filterInput.addEventListener('input', applyFilter);
-    filterInput.addEventListener('keydown', e => {
-      if (e.key !== 'Enter') return;
-      e.preventDefault();
-      const q = filterInput.value.trim().toLowerCase();
-      const exact = chipEls.find(c => c.lc === q);
-      const visible = chipEls.filter(c => !q || c.lc.includes(q));
-      if (exact) addPerson(exact.name);
-      else if (q && visible.length === 1) addPerson(visible[0].name);
-      else if (q) addPerson(filterInput.value);
-    });
-
     section.appendChild(suggestRow);
 
+    sec.emptyHint = emptyHint;
+    sec.section   = section;
     wrap.appendChild(section);
   });
+
+  // Filter every section at once. Matches on name or on any recorded alias, so
+  // searching the spelling an import uses still finds the person you have.
+  const applySearch = () => {
+    const raw = searchInput.value.trim();
+    const q = raw.toLowerCase();
+    let anyExact = false, anyMatch = false;
+    allChips.forEach(c => {
+      const match = !q || c.lc.includes(q) || c.aliases.some(a => a.includes(q));
+      c.el.style.display = match ? '' : 'none';
+      if (match) anyMatch = true;
+      if (c.lc === q || c.aliases.some(a => a === q)) anyExact = true;
+    });
+    sections.forEach(sec => {
+      const visible = allChips.some(c => c.el.style.display !== 'none' && sec.section.contains(c.el));
+      const populated = sec.bucket.assigned.length || sec.bucket.available.length;
+      sec.emptyHint.textContent = populated ? 'No matches.' : 'Nobody on this team yet.';
+      sec.emptyHint.style.display = visible ? 'none' : '';
+    });
+    if (q && !anyExact) {
+      addBarLbl.textContent = anyMatch ? 'Or add “' + raw + '” to:' : 'Add “' + raw + '” to:';
+      addBar.style.display = 'flex';
+    } else {
+      addBar.style.display = 'none';
+    }
+  };
+  searchInput.addEventListener('input', applySearch);
+  searchInput.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const q = searchInput.value.trim().toLowerCase();
+    if (!q) return;
+    const exact   = allChips.find(c => c.lc === q || c.aliases.some(a => a === q));
+    const visible = allChips.filter(c => c.el.style.display !== 'none');
+    // Enter only commits when there's no ambiguity — adding someone to a team
+    // is a real choice, so a vague query waits for a click rather than guessing.
+    const target = exact || (visible.length === 1 ? visible[0] : null);
+    if (!target) return;
+    addPersonToProject(target.name, personTeamOrDerived(target.name));
+    renderExportPanel();
+    renderPalette();
+    renderCalendar();
+  });
+  applySearch();
 }
 
 /* ── ICS / INVITE HELPERS ── */
