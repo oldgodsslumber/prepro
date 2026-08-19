@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260819c';
+window.PREPRO_BUILD = '20260819d';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,9 +29,9 @@ window.PREPRO_BUILD = '20260819c';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260819c"></script>
+<script type="module" src="./auth.js?v=20260819d"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260819c"></script>
+<script src="./xlsx.full.min.js?v=20260819d"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1313,7 +1313,12 @@ function newDueDateTask(dateStr, defaultLabel) {
   const mType = milestoneTypeFor(defaultLabel);
   const task = { id: genId(), date: dateStr, isDueDate: true, milestoneType: mType,
     color: '#3a3a52', role: '', roleCategory: '', attendees: [], taskName: defaultLabel || null };
-  if (mType === 'holiday') task.flags = [];
+  if (mType === 'holiday') {
+    task.flags = [];
+    // No codes picked reads as company-wide, so a brand-new Holiday starts out
+    // applying to everyone who has a country. Picking a code narrows it.
+    syncHolidayAttendees(task);
+  }
   return task;
 }
 // Administrative is a special project too: its palette carries only the admin /
@@ -1699,6 +1704,13 @@ function setPersonTeam(name, teamKey) {
 function setPersonCountry(name, code) {
   return upsertPerson(name, { country: HOLIDAY_CODES.includes(code) ? code : '' });
 }
+// Last day they were with the team. Setting one makes the workload views treat
+// them as capacity up to that date and not after it; clearing it falls back to
+// the plain active/inactive flag.
+function setPersonDeparted(name, iso) {
+  const clean = /^\d{4}-\d{2}-\d{2}$/.test(iso || '') ? iso : null;
+  return upsertPerson(name, { departedOn: clean, active: clean ? false : (getPerson(name) || {}).active !== false });
+}
 function setPersonAliases(name, raw) {
   const seen = new Set(), list = [];
   String(raw || '').split(',').forEach(a => {
@@ -1708,6 +1720,24 @@ function setPersonAliases(name, raw) {
     seen.add(k); list.push(v);
   });
   return upsertPerson(name, { aliases: list });
+}
+// ── DEPARTURES ──
+// Sunset says "hide them from pickers". These two answer the different question
+// the workload views need: was this person still here on this date? Without it
+// someone who left in March reads as idle capacity for the rest of the year.
+//
+// A record with active:false and no date is someone we know has gone but whose
+// last day we never recorded — the migration could only set the boolean. They
+// get no row at all rather than a misleading one.
+function personGoneEntirely(name) {
+  const rec = getPerson(name);
+  return !!(rec && rec.active === false && !rec.departedOn);
+}
+function personActiveOn(name, dateStr) {
+  const rec = getPerson(name);
+  if (!rec) return true;                       // unmigrated — assume present
+  if (rec.departedOn) return dateStr <= rec.departedOn;
+  return rec.active !== false;
 }
 function personTeam(name) { const r = getPerson(name); return r ? r.team || '' : ''; }
 function personCountry(name) { const r = getPerson(name); return r ? r.country || '' : ''; }
@@ -2797,7 +2827,7 @@ function renderPeopleSettings(c) {
 
   const hint = document.createElement('div');
   hint.className = 'settings-hint';
-  hint.textContent = 'Everyone belongs to exactly one team — that is what groups them in the roster panel, so nobody shows up twice. Country decides which holidays apply to them. “Also known as” catches the alternate spellings that imports arrive with, so a re-import matches the person you already have instead of creating a duplicate. Email auto-fills the To: line when exporting meetings to Outlook. Sunset hides someone from every selection list while keeping their existing assignments (reversible). Delete removes them from every roster and unassigns their tasks. Merging moves all roles, rosters, and assignments from one person to another, and records the old name as an alias.';
+  hint.textContent = 'Everyone belongs to exactly one team — that is what groups them in the roster panel, so nobody shows up twice. Setting a country puts that person on every Holiday matching it, automatically, and re-checks the holidays already on the calendar. “Also known as” catches the alternate spellings that imports arrive with, so a re-import matches the person you already have instead of creating a duplicate. Email auto-fills the To: line when exporting meetings to Outlook. Sunset hides someone from every selection list while keeping their existing assignments (reversible) — give them a last day too, and the workload views stop counting them as available after it. Delete removes them from every roster and unassigns their tasks. Merging moves all roles, rosters, and assignments from one person to another, and records the old name as an alias.';
   c.appendChild(hint);
 
   const refreshAll = () => {
@@ -2876,7 +2906,14 @@ function renderPeopleSettings(c) {
         cSel.appendChild(o);
       });
       cSel.value = rec.country || '';
-      cSel.addEventListener('change', () => { setPersonCountry(p.name, cSel.value); refreshAll(); });
+      cSel.addEventListener('change', () => {
+        setPersonCountry(p.name, cSel.value);
+        // Their country decides which existing holidays they're out for, so the
+        // holidays already on the calendar have to be re-evaluated too.
+        const n = resyncAllHolidays();
+        refreshAll();
+        if (n) renderCalendar();
+      });
       meta.appendChild(cSel);
 
       const alias = document.createElement('input');
@@ -2889,6 +2926,26 @@ function renderPeopleSettings(c) {
       alias.addEventListener('blur', () => { setPersonAliases(p.name, alias.value); });
       alias.addEventListener('keydown', e => { if (e.key === 'Enter') alias.blur(); });
       meta.appendChild(alias);
+
+      // Last day, offered only once they're sunset — that's the point at which
+      // the date exists and the workload views need it. Migration can't know it,
+      // so a sunset person starts with an empty box.
+      if (sunset) {
+        const leftLbl = document.createElement('span');
+        leftLbl.className = 'pmeta-lbl';
+        leftLbl.textContent = 'Last day';
+        meta.appendChild(leftLbl);
+
+        const left = document.createElement('input');
+        left.type = 'date';
+        left.title = 'Their last day. Set this so the workload views stop counting them as available after it.';
+        left.value = rec.departedOn || '';
+        left.addEventListener('change', () => {
+          setPersonDeparted(p.name, left.value);
+          refreshAll();
+        });
+        meta.appendChild(left);
+      }
     }
 
     const rolesEl = document.createElement('span');
@@ -3388,7 +3445,10 @@ function buildProjectFromRow(row) {
   });
 
   const roster = {};
-  const requester = (row.requester || '').trim();
+  // Resolve incoming names against the people we already have. The Pega export
+  // writes "Walsh, Ryan" where the roster says "Ryan Walsh"; without this, every
+  // import mints a second person and someone has to merge them back by hand.
+  const requester = resolvePersonName(row.requester) || (row.requester || '').trim();
   if (requester) roster.Stakeholder = [requester];
 
   const now = new Date();
@@ -3404,7 +3464,7 @@ function buildProjectFromRow(row) {
   return {
     id: genId(), name, parentId: null, tasks, roster, dueDate: null, notes,
     ticketId: ticketId || null, ticketLabel: label || null, ticketUrl: null,
-    leadProducer: (row.producer || '').trim() || null,
+    leadProducer: resolvePersonName(row.producer) || (row.producer || '').trim() || null,
     function: null, videoType: (row.videoType || '').trim() || null,
     targetAudience: (row.targetAudience || '').trim() || null, budget: null,
     synopsis: (row.synopsis || '').trim() || null,
@@ -3591,7 +3651,7 @@ function ticketLabelOf(proj) {
 function applyTicketUpdate(row) {
   const proj = getProject(row._existingId);
   if (!proj) return false;
-  const prod      = (row.producer || '').trim();
+  const prod      = resolvePersonName(row.producer) || (row.producer || '').trim();
   const newStatus = (row.caseStatus || '').trim();
   if (prod && !((proj.leadProducer || '').trim())) proj.leadProducer = prod;
   if (newStatus) proj.caseStatus = newStatus;
@@ -3823,7 +3883,16 @@ function confirmExcelImport() {
   const chosen = _xlReviewRows.filter(r => r._selected !== false);
   if (!chosen.length) { closeExcelReview(); return; }
   let added = 0, updated = 0, closed = 0;
+  const newPeople = [];
   chosen.forEach(row => {
+    // Give imported names a record up front, so a fresh requester arrives with a
+    // team instead of landing in the "needs a home" pile. Names that resolve to
+    // someone we already have (including via an alias) are left alone.
+    newPeople.push(...[
+      ensureImportedPerson(row.requester, 'stake'),
+      ensureImportedPerson(row.producer,  'video')
+    ].filter(Boolean));
+
     if (row._missing && row._existingId) {
       if (applyTicketClose(row)) closed++;
     } else if (row._update && row._existingId) {
@@ -3842,8 +3911,35 @@ function confirmExcelImport() {
   if (added)   parts.push(added   + ' new');
   if (updated) parts.push(updated + ' updated');
   if (closed)  parts.push(closed  + ' closed');
+  // Naming the new people matters: if the export spelled someone differently
+  // this is the moment to notice and merge them, rather than finding two of
+  // them in the panel a week later.
+  const uniqueNew = [...new Set(newPeople)];
   alert('Applied ' + chosen.length + ' change' + (chosen.length === 1 ? '' : 's') + ' from Excel' +
-        (parts.length ? ' (' + parts.join(', ') + ').' : '.'));
+        (parts.length ? ' (' + parts.join(', ') + ').' : '.') +
+        (uniqueNew.length
+          ? '\n\nNew people added: ' + uniqueNew.join(', ') +
+            '\n\nIf any of them are someone you already have under a different spelling, merge them in Manage People — that records the alias so the next import matches.'
+          : ''));
+}
+
+// Create a record for a name arriving from an import, unless it resolves to
+// somebody we already know. Returns the name only when a record was created, so
+// the caller can report it. No-ops until the migration has run, otherwise the
+// first import would create a lone record and make the migration banner claim
+// everyone else still needs one.
+function ensureImportedPerson(raw, teamKey) {
+  const name = (raw || '').trim();
+  if (!name || !hasPeopleRecords()) return '';
+  if (resolvePersonName(name)) return '';
+  const t = getTeam(teamKey);
+  upsertPerson(name, {
+    team:        teamKey || '',
+    roles:       t ? [t.roles[0]] : [],
+    defaultRole: t ? t.roles[0] : '',
+    active:      true
+  });
+  return name;
 }
 
 // Mark a project completed because its Case ID is no longer in the export. Only
@@ -4595,6 +4691,9 @@ function buildGhostInfo() {
       (t.attendees || []).forEach(a => { if (a.person && (a.category === 'Internal Team' || isAdminRole(a.role))) rosterPeople.add(a.person); });
     });
   });
+  // People who have left with no recorded last day get no row: a permanently
+  // empty row reads as spare capacity.
+  [...rosterPeople].forEach(n => { if (personGoneEntirely(n)) rosterPeople.delete(n); });
   if (!rosterPeople.size) return empty;
 
   const LOE_PTS = { low: 1, medium: 2, high: 3 };
@@ -4602,6 +4701,9 @@ function buildGhostInfo() {
   // `holiday` (when present) is { key, name }: key is the normalised country-code
   // string the day groups by, name is the holiday's own label for the tooltip.
   const addEntry = (dateStr, person, role, projectName, isPTO, loe, holiday) => {
+    // Someone who had left by this date isn't capacity, however their old tasks
+    // still read in the stored schedule.
+    if (!personActiveOn(person, dateStr)) return;
     if (!byDate.has(dateStr)) byDate.set(dateStr, new Map());
     const m = byDate.get(dateStr);
     if (!m.has(person)) m.set(person, { pts: 0, isPTO: false, projects: new Set(), roles: new Set(), holidays: new Map() });
@@ -5105,9 +5207,70 @@ function toggleHolidayFlag(taskId, code) {
   const picked = new Set(holidayFlags(task));
   if (picked.has(code)) picked.delete(code); else picked.add(code);
   task.flags = HOLIDAY_CODES.filter(c => picked.has(c));
+  syncHolidayAttendees(task);
   saveState();
   renderCalendar();
   if (exportOpen) renderExportPanel();
+}
+
+// ── HOLIDAY ACTIVATION ──
+// A holiday carries country codes; a person carries a country. Matching the two
+// is what turns "Diwali, IN" into "Bala is out that day" without anyone dropping
+// names onto the chip by hand.
+//
+// Only people with a country on their record are ever added — an empty country
+// means we don't know, and guessing is what this whole change exists to stop.
+// A holiday with no codes picked reads as company-wide, so it matches everyone
+// who has any country set.
+//
+// Auto-added attendees are tagged `auto: 'holiday'` so re-syncing can remove the
+// ones that no longer apply while leaving hand-added people completely alone.
+function holidayAppliesTo(name, codes) {
+  const c = personCountry(name);
+  if (!c) return false;
+  return !codes.length || codes.includes(c);
+}
+function syncHolidayAttendees(task) {
+  if (!isHolidayTask(task)) return { added: 0, removed: 0 };
+  const codes = holidayFlags(task);
+  const want = new Set();
+  collectAllPeople().forEach(p => {
+    if (isSunset(p.name)) return;
+    if (holidayAppliesTo(p.name, codes)) want.add(p.name);
+  });
+
+  const before = (task.attendees || []).length;
+  task.attendees = (task.attendees || []).filter(a => a.auto !== 'holiday' || want.has(a.person));
+  const removed = before - task.attendees.length;
+
+  const have = new Set(task.attendees.map(a => a.person));
+  let addedN = 0;
+  want.forEach(name => {
+    if (have.has(name)) return;
+    const role = personDefaultRole(name) || 'Other';
+    task.attendees.push({
+      id: genId(), person: name, role: 'Holiday',
+      // Category still comes from their real role: it's what decides whether
+      // this person shows up in the cross-project busyness row at all.
+      category: catLabelForRole(role),
+      color: task.color || '#3a3a52',
+      auto: 'holiday'
+    });
+    addedN++;
+  });
+  return { added: addedN, removed: removed };
+}
+// Re-run activation across every holiday in the file. Called after a country
+// changes, since that silently changes who each existing holiday applies to.
+function resyncAllHolidays() {
+  let touched = 0;
+  (state.projects || []).forEach(p => (p.tasks || []).forEach(t => {
+    if (!isHolidayTask(t)) return;
+    const r = syncHolidayAttendees(t);
+    if (r.added || r.removed) touched++;
+  }));
+  if (touched) saveState();
+  return touched;
 }
 function hexToRgba(hex, a) {
   const h = String(hex || '').replace('#', '');
