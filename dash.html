@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260819e';
+window.PREPRO_BUILD = '20260820a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,10 +26,10 @@ window.PREPRO_BUILD = '20260819e';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260819e"></script>
+<script type="module" src="./auth.js?v=20260820a"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and ops.html. -->
-<script src="./people.js?v=20260819e"></script>
+<script src="./people.js?v=20260820a"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -1332,6 +1332,27 @@ function getRoleColor(role) {
 // deliberate exception — it filters only on !ghost so it can include completed
 // projects.)
 function isActiveProject(p) { return !p.completed && !p.ghost; }
+
+// ── NON-WORK PROJECT PREDICATE ──
+// PTO / Time Off / Holidays / Administrative are real projects in the data —
+// they hold real tasks, real days and real effort, and they must keep feeding
+// workload, PTO awareness and the Look Back totals. What they are NOT is
+// something we ship, so they can never be "late", "at risk", or a row on a
+// project-review surface. Only the review-facing panels add this filter;
+// getAllPeople, getTasksForPerson, getDayWorkload and aggregateLookback
+// deliberately leave it off.
+//
+// The stored flag wins so a project named "Admin Portal Launch" can opt back
+// in; the name test is the fallback so this works on existing data with no
+// migration. (Toggled from the project context menu in team.html.)
+function isNonWorkProject(p) {
+  if (!p) return false;
+  if (typeof p.nonWork === 'boolean') return p.nonWork;
+  const n = p.name || '';
+  return /pto|time\s*off|holiday/i.test(n) || /administrative|\badmin\b/i.test(n);
+}
+// "A project we review" — active work, minus the non-work buckets.
+function isReviewableProject(p) { return isActiveProject(p) && !isNonWorkProject(p); }
 
 // ── PERSON EXTRACTION & DEDUP (internal team only) ──
 function getAllPeople() {
@@ -2809,7 +2830,21 @@ function renderMyProjectsPanel() {
   const info = peopleMap.get(selectedPerson);
   const today = todayStr();
 
-  if (!info || !info.projects.size) {
+  // Sort projects by soonest upcoming key date, then name. The PTO/admin
+  // buckets drop out here rather than in getAllPeople, so being "on" the PTO
+  // project still counts for rosters and workload — it just isn't a project
+  // card you review.
+  const rows = (info ? [...info.projects.values()] : []).map(pref => {
+    const proj = (state.projects || []).find(p => p.id === pref.id);
+    const tasks = (proj && proj.tasks) || [];
+    const openCount = tasks.filter(t => taskIsForSelected(t) && !t.isDueDate && !t.isReview && !isTaskDone(t.id)).length;
+    const next = tasks
+      .filter(t => taskIsForSelected(t) && (t.date || '') >= today)
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''))[0] || null;
+    return { proj, pref, openCount, next };
+  }).filter(r => r.proj && !isNonWorkProject(r.proj));
+
+  if (!rows.length) {
     const empty = document.createElement('div');
     empty.className = 'od-empty';
     empty.textContent = 'Not on any active projects.';
@@ -2819,17 +2854,6 @@ function renderMyProjectsPanel() {
 
   const list = document.createElement('div');
   list.className = 'mp-list';
-
-  // Sort projects by soonest upcoming key date, then name.
-  const rows = [...info.projects.values()].map(pref => {
-    const proj = (state.projects || []).find(p => p.id === pref.id);
-    const tasks = (proj && proj.tasks) || [];
-    const openCount = tasks.filter(t => taskIsForSelected(t) && !t.isDueDate && !t.isReview && !isTaskDone(t.id)).length;
-    const next = tasks
-      .filter(t => taskIsForSelected(t) && (t.date || '') >= today)
-      .sort((a, b) => (a.date || '').localeCompare(b.date || ''))[0] || null;
-    return { proj, pref, openCount, next };
-  }).filter(r => r.proj);
 
   rows.sort((a, b) => {
     const ad = a.next ? a.next.date : '9999';
@@ -2892,7 +2916,7 @@ function renderOverduePanel() {
   const today = todayStr();
 
   const overdue = [];
-  (state.projects || []).filter(isActiveProject).forEach(proj => {
+  (state.projects || []).filter(isReviewableProject).forEach(proj => {
     (proj.tasks || []).forEach(t => {
       if (t.isDueDate || t.isReview) return;
       if (!taskIsForSelected(t) || isTaskDone(t.id)) return;
@@ -3090,7 +3114,7 @@ function renderActivityPanel() {
   const myProjectIds = new Set(info ? info.projects.keys() : []);
 
   const notes = [];
-  (state.projects || []).filter(p => isActiveProject(p) && myProjectIds.has(p.id)).forEach(proj => {
+  (state.projects || []).filter(p => isReviewableProject(p) && myProjectIds.has(p.id)).forEach(proj => {
     (proj.notes || []).forEach(n => {
       if (!n || !n.date) return;
       notes.push({ note: n, projectName: proj.name });

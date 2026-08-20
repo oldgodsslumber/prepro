@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260819e';
+window.PREPRO_BUILD = '20260820a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,12 +29,12 @@ window.PREPRO_BUILD = '20260819e';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260819e"></script>
+<script type="module" src="./auth.js?v=20260820a"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20260819e"></script>
+<script src="./people.js?v=20260820a"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260819e"></script>
+<script src="./xlsx.full.min.js?v=20260820a"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1240,6 +1240,26 @@ function catLabelForRole(role) { const c = ROLE_CATS.find(c => c.roles.includes(
 // Matches "holiday" too, so the combined project works under any of the obvious
 // names — "PTO", "Time Off", "Holidays", "Holidays & PTO".
 function isPtoProject(proj) { return !!(proj && /pto|time\s*off|holiday/i.test(proj.name || '')); }
+
+// ── NON-WORK PROJECT PREDICATE ──
+// The wider cousin of isPtoProject: PTO / Time Off / Holidays AND the
+// Administrative buckets. These are real projects here in team.html — fully
+// editable, fully scheduled, and their tasks keep counting toward workload,
+// effort and PTO awareness everywhere. What they are NOT is something we ship,
+// so dash.html and ops.html leave them out of the project-review surfaces
+// (Project Health, Project Timeline, Needs Attention, Coverage Gaps, the
+// Snapshot counts). Nothing in team.html filters on this — it exists here so
+// the flag has one place to be set.
+//
+// The stored flag wins so a project genuinely named "Admin Portal Launch" can
+// opt back in; the name test is the fallback so this works on existing data
+// with no migration.
+function isNonWorkProject(p) {
+  if (!p) return false;
+  if (typeof p.nonWork === 'boolean') return p.nonWork;
+  const n = p.name || '';
+  return /pto|time\s*off|holiday/i.test(n) || /administrative|\badmin\b/i.test(n);
+}
 
 // ── HOLIDAYS ──
 // A Holiday is a key date that behaves like PTO — same project, same attendee
@@ -6980,6 +7000,7 @@ function openContextMenu(e, projectId) {
       { label: 'Add Subproject', action: 'addSub' },
       { label: 'Add Subfolder',  action: 'addSubFolder' },
       { label: proj.ghost ? '👁 Show in Ops' : '👻 Ghost (hide from Ops)', action: 'ghost' },
+      { label: isNonWorkProject(proj) ? '📁 Count as a project' : '🗂 Not a project (exclude from reviews)', action: 'nonWork' },
       { label: STATUS_META.draft.mark     + ' Draft',    action: 'status:draft' },
       { label: STATUS_META.completed.mark + ' Complete', action: 'status:completed' },
       { label: STATUS_META.onhold.mark    + ' On Hold',  action: 'status:onhold' },
@@ -7130,6 +7151,13 @@ function handleContextAction(action, projectId) {
   } else if (action === 'ghost') {
     const p = getProject(projectId);
     if (p) { p.ghost = !p.ghost; saveState(); renderSidebar(); }
+  } else if (action === 'nonWork') {
+    // Always writes an explicit boolean — never undefined, which Firebase's
+    // set() rejects and which would wedge every later save. Toggling off a
+    // name-matched project (PTO, Admin) stores false, which is what pins it
+    // back into the review surfaces.
+    const p = getProject(projectId);
+    if (p) { p.nonWork = !isNonWorkProject(p); saveState(); renderSidebar(); }
   } else if (action === 'addSub') {
     const name = prompt('Subproject name:');
     if (name && name.trim()) {

@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260819e';
+window.PREPRO_BUILD = '20260820a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,10 +26,10 @@ window.PREPRO_BUILD = '20260819e';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260819e"></script>
+<script type="module" src="./auth.js?v=20260820a"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20260819e"></script>
+<script src="./people.js?v=20260820a"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -838,6 +838,32 @@ window._opsReloadPeopleEmails = function(data) {
 // from people.js — the same definitions team.html and dash.html use.
 // A project is inactive if it's completed, on hold, cancelled, or draft (mirrors team.html).
 function isInactive(proj) { return !!(proj && (proj.completed || proj.onHold || proj.cancelled || proj.draft)); }
+
+// ── NON-WORK PROJECT PREDICATE ──
+// PTO / Time Off / Holidays / Administrative are real projects in the data —
+// they hold real tasks, real days and real effort, and they must keep feeding
+// workload, the Team PTO panel, the calendar overlays and the effort charts.
+// What they are NOT is something we ship, so they can never be "late", "at
+// risk", or a row on a project-review surface. Only the review-facing panels
+// add this filter; the workload/PTO/effort queries deliberately leave it off.
+// (Contrast p.ghost, which hides a project from ops entirely — including its
+// PTO — which is why that flag can't do this job.)
+//
+// The stored flag wins so a project named "Admin Portal Launch" can opt back
+// in; the name test is the fallback so this works on existing data with no
+// migration. (Toggled from the project context menu in team.html.)
+function isNonWorkProject(p) {
+  if (!p) return false;
+  if (typeof p.nonWork === 'boolean') return p.nonWork;
+  const n = p.name || '';
+  return /pto|time\s*off|holiday/i.test(n) || /administrative|\badmin\b/i.test(n);
+}
+// "A project we review" — active, real (non-ghost) work, minus the non-work
+// buckets. Every project-review panel routes through this so they can't drift.
+function reviewableProjects() {
+  return (state.projects || []).filter(p => !isInactive(p) && !p.ghost && !isNonWorkProject(p));
+}
+
 window._opsReloadSunsetPeople = function(data) {
   if (applyRemoteSunset(data) && typeof reloadState === 'function' && state) reloadState();
 };
@@ -2288,18 +2314,13 @@ function genId() {
   catch (e) { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 }
 
-// Non-work buckets (PTO / Time Off / Holidays / Administrative) — real projects
-// in the data, but they carry no work notes worth a standup, so the standup
-// panel skips them.
-function isStandupHiddenProject(proj) {
-  const name = (proj && proj.name) || '';
-  return /pto|time\s*off|holiday/i.test(name) || /administrative/i.test(name) || /\badmin\b/i.test(name);
-}
-
 // Projects the standup cares about: active, real (non-ghost) work, minus the
-// PTO/holiday/admin buckets.
+// PTO/holiday/admin buckets. (This panel had its own copy of the non-work test
+// before isNonWorkProject existed — it now shares the one every review surface
+// uses, so the standup and Project Health can't disagree about what a project
+// is.)
 function standupActiveProjects() {
-  return (state.projects || []).filter(p => !isInactive(p) && !p.ghost && !isStandupHiddenProject(p));
+  return reviewableProjects();
 }
 
 // Standup is a producer conversation: a person only shows the projects they
@@ -3129,8 +3150,7 @@ function renderHuGroup(type, label) {
 // ── PROJECT HEALTH PANEL · TOP 5 MOST LATE ──
 function renderHealthPanel() {
   const today = todayStr();
-  const healthRows = (state.projects || [])
-    .filter(p => !isInactive(p) && !p.ghost)
+  const healthRows = reviewableProjects()
     .map(proj => {
       const workTasks = (proj.tasks || []).filter(t => !t.isReview && !t.isDueDate && t.date);
       const lastEnd = workTasks.reduce((m, t) => {
@@ -3384,7 +3404,7 @@ function renderUnassignedPanel() {
   const windowEnd = horizon[horizon.length - 1];
 
   const byProject = new Map();
-  (state.projects || []).filter(p => !isInactive(p) && !p.ghost).forEach(proj => {
+  reviewableProjects().forEach(proj => {
     (proj.tasks || []).forEach(t => {
       if (t.isDueDate || t.isReview) return;
       const start = t.date, end = t.endDate || t.date;
@@ -3431,7 +3451,7 @@ function renderTeamActivityPanel() {
   const section = mkOpsSection('Team Activity');
   const today = todayStr();
   const notes = [];
-  (state.projects || []).filter(p => !isInactive(p) && !p.ghost).forEach(proj => {
+  reviewableProjects().forEach(proj => {
     (proj.notes || []).forEach(n => { if (n && n.date) notes.push({ n, projectName: proj.name }); });
   });
   notes.sort((a, b) => (b.n.date + (b.n.time || '')).localeCompare(a.n.date + (a.n.time || '')));
@@ -3472,7 +3492,7 @@ function renderCoverageGapsPanel() {
   const section = mkOpsSection('Coverage Gaps');
   const today = todayStr();
   const gaps = [];
-  (state.projects || []).filter(p => !isInactive(p) && !p.ghost).forEach(proj => {
+  reviewableProjects().forEach(proj => {
     const producer = getPrimaryProducer(proj);
     const workTasks = (proj.tasks || []).filter(t => !t.isDueDate && !t.isReview && t.date);
     const hasUpcoming = workTasks.some(t => (t.endDate || t.date) >= today);
@@ -3512,7 +3532,7 @@ function renderDeliveriesPanel() {
   const today = todayStr();
   const horizonEnd = addDays(today, 21);
   const items = [];
-  (state.projects || []).filter(p => !isInactive(p) && !p.ghost).forEach(proj => {
+  reviewableProjects().forEach(proj => {
     (proj.tasks || []).forEach(t => {
       if (!t.isDueDate || isTimeOffTask(t)) return;
       if (!t.date || t.date < today || t.date > horizonEnd) return;
@@ -3552,7 +3572,7 @@ function renderDeliveriesPanel() {
 
 function computeOpsMetrics() {
   const today = todayStr();
-  const projects = (state.projects || []).filter(p => !isInactive(p) && !p.ghost);
+  const projects = reviewableProjects();
   const activeProjects = projects.length;
 
   let activeWithTasks = 0;
@@ -4384,8 +4404,7 @@ function renderProjectGantt() {
   section.appendChild(mkSectionTitle('Project Timeline · Active Projects'));
 
   const today = todayStr();
-  const data = (state.projects || [])
-    .filter(p => !isInactive(p) && !p.ghost)
+  const data = reviewableProjects()
     .map(proj => {
       const tasks = (proj.tasks || []).filter(t => t.date);
       if (!tasks.length) return null;
@@ -4484,7 +4503,7 @@ function renderProjectHealth() {
   section.appendChild(mkSectionTitle('Project Health'));
 
   const today = todayStr();
-  const projects = (state.projects || []).filter(p => !isInactive(p) && !p.ghost);
+  const projects = reviewableProjects();
   if (!projects.length) {
     section.appendChild(mkEmpty('No active projects.'));
     return section;
