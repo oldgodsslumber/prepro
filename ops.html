@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260820e';
+window.PREPRO_BUILD = '20260820f';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,10 +26,10 @@ window.PREPRO_BUILD = '20260820e';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260820e"></script>
+<script type="module" src="./auth.js?v=20260820f"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20260820e"></script>
+<script src="./people.js?v=20260820f"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -793,16 +793,32 @@ let tlResizeState = null; // { entry, bar, side, startX }
 window._opsReloadState = reloadState;
 if (window._fbState) reloadState(window._fbState);
 
-// ── ROLE_CATS (mirrors index.html — used only by Settings → People tab) ──
+/* ── ROLE_CATS ────────────────────────────────────────────────────────────────
+ * Identical to team.html's copy, deliberately. Its `label` is not display text:
+ * team.html writes it into task.roleCategory and attendee.category, and five
+ * places across the three pages test it against 'Internal Team'. It is a stored
+ * enum, so the values are frozen. Ops only ever reads them.
+ *
+ * TEAMS (people.js) is the other axis — who somebody IS. Colour comes from there
+ * first, via colorForRole below, which is why this table no longer needs a
+ * Stakeholders bucket of its own to keep chips the right colour.
+ * ─────────────────────────────────────────────────────────────────────────── */
 const ROLE_CATS = [
   { label: 'Internal Team', color: '#4a90d9', roles: ['Producer', 'Editor', 'Animator'] },
-  // Stakeholder keeps its own colour here so a stakeholder chip reads the same
-  // in Ops as it does in Team; colourForRole in people.js is the source.
-  { label: 'External',      color: '#e07b39', roles: ['Copywriter', 'Designer'] },
-  { label: 'Stakeholders',  color: '#4aa9a0', roles: ['Stakeholder'] },
+  { label: 'External',      color: '#e07b39', roles: ['Copywriter', 'Designer', 'Stakeholder'] },
   { label: 'Vendors',       color: '#7c5cbf', roles: ['External Vendor'] },
   { label: 'Other',         color: '#4cba6a', roles: ['Other'] }
 ];
+
+// Colour for a role. Mirrors team.html's colorForRole: the team a role belongs
+// to wins, so a Stakeholder reads teal here exactly as it does in Team, and the
+// category table is only the fallback.
+function colorForRole(role) {
+  const t = TEAMS.find(t => t.roles.includes(role));
+  if (t) return t.color;
+  const c = ROLE_CATS.find(c => c.roles.includes(role));
+  return c ? c.color : '#8080a0';
+}
 
 // ── NAME HISTORY & PEOPLE EMAILS (synced via Firebase) ──
 let nameHistory = {};
@@ -4083,7 +4099,7 @@ const PM_NOTE_LABEL = { update: 'Update', delay: 'Delay', direction: 'Change in 
 const PM_MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function pmPad(n) { return (n < 10 ? '0' : '') + n; }
 function pmIsWeekend(dateStr) { const d = new Date(dateStr + 'T00:00:00').getDay(); return d === 0 || d === 6; }
-function pmRoleColor(role) { for (const c of ROLE_CATS) { if (c.roles.includes(role)) return c.color; } return '#8080a0'; }
+function pmRoleColor(role) { return colorForRole(role); }
 
 function pmCompletedProjects() {
   return (state.projects || [])
@@ -4664,7 +4680,10 @@ function renderCategoryMix() {
   const today = todayStr();
   const start = addDays(today, -30);
   const buckets = {};
-  getOpsEntries().forEach(e => {
+  // Completed projects included, like the effort charts above and the Recap
+  // below. This was the last panel here still reading active projects only, so
+  // finishing something erased the work that produced it from the mix.
+  getEffortEntries().forEach(e => {
     if (e.endDate < start || e.date > today) return;
     if (!e.cat) return;
     let cur = e.date < start ? start : e.date;
