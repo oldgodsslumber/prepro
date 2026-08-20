@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260820a';
+window.PREPRO_BUILD = '20260820b';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,10 +26,10 @@ window.PREPRO_BUILD = '20260820a';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260820a"></script>
+<script type="module" src="./auth.js?v=20260820b"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20260820a"></script>
+<script src="./people.js?v=20260820b"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -1343,10 +1343,17 @@ function opsTaskTitle(task) {
 }
 
 // ── COLLECT ALL OPS TASKS ──
-// Returns flat list of { date, endDate, person, cat, taskName, loe, color, projectName }
-function getOpsEntries() {
+// Returns flat list of { date, endDate, person, role, cat, taskName, loe, color, projectName }
+//
+// opts.includeInactive keeps completed / on-hold / cancelled / draft projects in
+// the list. The scheduling surfaces want them gone — you can't act on a finished
+// project — but the effort charts are a record of work that actually happened,
+// and dropping a project the day it ships rewrites their history. Only the
+// effort path passes this; see getEffortEntries.
+function getOpsEntries(opts) {
+  const includeInactive = !!(opts && opts.includeInactive);
   const entries = [];
-  (state.projects || []).filter(p => !isInactive(p) && !p.ghost).forEach(proj => {
+  (state.projects || []).filter(p => (includeInactive || !isInactive(p)) && !p.ghost).forEach(proj => {
     (proj.tasks || []).forEach(task => {
       if (task.isDueDate) return;
       const loe = task.loe || 'medium';
@@ -1359,7 +1366,7 @@ function getOpsEntries() {
         // attendee precedes an internal one.
         (task.attendees || []).forEach((att, attIdx) => {
           if (att.category !== 'Internal Team') return;
-          entries.push({ date: task.date, endDate: task.endDate || task.date, person: att.person || att.role, cat, taskName: task.taskName || task.reviewLabel || 'Review', loe, color, projectName: proj.name, projectId: proj.id, taskId: task.id, isReview: true, attIdx });
+          entries.push({ date: task.date, endDate: task.endDate || task.date, person: att.person || att.role, role: att.role, unassigned: !att.person, cat, taskName: task.taskName || task.reviewLabel || 'Review', loe, color, projectName: proj.name, projectId: proj.id, taskId: task.id, isReview: true, attIdx });
         });
         return;
       }
@@ -1375,7 +1382,7 @@ function getOpsEntries() {
         const cat = getRoleCat(p.role, task.taskName);
         if (!cat) return;
         const color = CAT_COLORS[cat] || '#6c63ff';
-        entries.push({ date: task.date, endDate: task.endDate || task.date, person: p.person || p.role, cat, taskName: task.taskName || roleVerb(p.role), loe, color, projectName: proj.name, projectId: proj.id, taskId: task.id, isPrimary: p.isPrimary || false, attIdx: p.attIdx });
+        entries.push({ date: task.date, endDate: task.endDate || task.date, person: p.person || p.role, role: p.role, unassigned: !p.person, cat, taskName: task.taskName || roleVerb(p.role), loe, color, projectName: proj.name, projectId: proj.id, taskId: task.id, isPrimary: p.isPrimary || false, attIdx: p.attIdx });
       });
     });
   });
@@ -1455,7 +1462,9 @@ function getDayWorkload(person, dateStr) {
   return total;
 }
 
-// Check if a person has PTO on a given date (scans all non-completed projects)
+// Check if a person has PTO or a holiday on a given date. Deliberately scans
+// EVERY project, completed included: time off is a fact about the person, and a
+// project closing doesn't put them back at their desk.
 function isPersonPTO(person, dateStr) {
   const lowerPerson = person.toLowerCase();
   for (const proj of (state.projects || [])) {
@@ -3654,37 +3663,43 @@ function renderMetricsTiles() {
   return section;
 }
 
-// Map each internal-team person → their primary role (Producer/Editor/Animator)
-function getPeopleRoles() {
-  const counts = new Map();
-  (state.projects || []).filter(p => !p.ghost).forEach(proj => {
-    Object.entries(proj.roster || {}).forEach(([role, names]) => {
-      if (!['Producer', 'Editor', 'Animator'].includes(role)) return;
-      (names || []).forEach(name => {
-        if (!counts.has(name)) counts.set(name, {});
-        counts.get(name)[role] = (counts.get(name)[role] || 0) + 5;
-      });
-    });
-    (proj.tasks || []).forEach(t => {
-      if (!t.person || !['Producer', 'Editor', 'Animator'].includes(t.role)) return;
-      if (!counts.has(t.person)) counts.set(t.person, {});
-      counts.get(t.person)[t.role] = (counts.get(t.person)[t.role] || 0) + 1;
-    });
-  });
-  const result = new Map();
-  counts.forEach((roles, person) => {
-    if (isSunset(person)) return;
-    const top = Object.entries(roles).sort((a, b) => b[1] - a[1])[0];
-    if (top) result.set(person, top[0]);
-  });
-  return result;
-}
+/* ── EFFORT BY ROLE ──────────────────────────────────────────────────────────
+ * A role here is what somebody is DOING, not who they are. The Producer line
+ * answers "who is working on Producer tasks?", so one person counts on the
+ * Editor line for their edit days and on the Producer line for the days they
+ * run a shoot — instead of being pinned to one inferred primary role and having
+ * all of their work, whatever it was, charged to it.
+ *
+ * This replaced getPeopleRoles(), which tallied roster appearances to guess a
+ * single role per person. That guess predates both the attendee-based task
+ * model and the person record, and it silently dropped anyone whose work
+ * crossed roles.
+ * ─────────────────────────────────────────────────────────────────────────── */
+const EFFORT_ROLES = ['Producer', 'Editor', 'Animator', 'Administrative'];
 
 const ROLE_COLOR = {
-  Producer: '#6c63ff',
-  Editor:   '#4cba6a',
-  Animator: '#7c5cbf'
+  Producer:       '#6c63ff',
+  Editor:         '#4cba6a',
+  Animator:       '#7c5cbf',
+  Administrative: '#8a8aa8'
 };
+
+// Which effort line an entry belongs on, or null for none. Administrative gets
+// its own line rather than being folded into whoever happened to do it — it is
+// real time, and leaving it out made the other three lines read artificially low.
+function effortRoleOf(entry) {
+  const r = (entry.role || '').toLowerCase();
+  if (r === 'producer') return 'Producer';
+  if (r === 'editor')   return 'Editor';
+  if (r === 'animator') return 'Animator';
+  if (isAdminRole(r))   return 'Administrative';
+  return null;
+}
+
+// The entry list the effort charts run on. Completed / on-hold / cancelled
+// projects are included: these charts are a record of work that happened, and
+// dropping a project the day it ships rewrote the last 30 days every time.
+function getEffortEntries() { return getOpsEntries({ includeInactive: true }); }
 
 function renderEffortChart(direction, daySpan) {
   const section = document.createElement('div');
@@ -3712,27 +3727,67 @@ function renderEffortChart(direction, daySpan) {
     }
   }
 
-  const peopleRoles = getPeopleRoles();
-  const roles = ['Producer', 'Editor', 'Animator'];
-  const peopleByRole = {};
+  const roles = EFFORT_ROLES;
+
+  // isPersonPTO walks every project, and we ask it once per person per day per
+  // role — memoise or the chart re-scans the whole file thousands of times.
+  const ptoMemo = new Map();
+  const offOn = (person, d) => {
+    const k = person + '|' + d;
+    if (!ptoMemo.has(k)) ptoMemo.set(k, isPersonPTO(person, d));
+    return ptoMemo.get(k);
+  };
+
+  // Pass 1 — bucket the window's effort by day and role.
+  const dayIdx = new Map(days.map((d, i) => [d, i]));
+  const first = days[0], last = days[days.length - 1];
+  const ptsByDay = days.map(() => ({}));   // [i][role] → total pts that day
+  const peopleByRole = {};                 // role → everyone who did it in the window
   roles.forEach(r => {
-    peopleByRole[r] = [...peopleRoles.entries()].filter(([_, role]) => role === r).map(([p]) => p);
+    peopleByRole[r] = new Set();
+    ptsByDay.forEach(o => { o[r] = 0; });
   });
 
-  // For each day, average pts per role across non-PTO people in that role
-  const perDay = days.map(d => {
-    const byRole = {};
+  getEffortEntries().forEach(e => {
+    const role = effortRoleOf(e);
+    if (!role) return;
+    if (e.unassigned || !e.person) return;      // an unfilled role slot is not a person
+    // Gone with no recorded last day: no way to know which of these days they
+    // were here for, and a permanently empty slot reads as spare capacity.
+    if (personGoneEntirely(e.person)) return;
+    const from = e.date > first ? e.date : first;
+    const to   = e.endDate < last ? e.endDate : last;
+    if (!from || !to || from > to) return;
+    const pts = loePts(e.loe);
+    for (let d = from; d <= to; d = addDays(d, 1)) {
+      const i = dayIdx.get(d);
+      if (i === undefined) continue;            // weekend, or outside the window
+      // personActiveOn is date-aware, unlike isSunset — someone with a last day
+      // still in the future is capacity today, and someone who left last week
+      // still did the work that shows earlier in this window.
+      if (!personActiveOn(e.person, d)) continue;
+      if (offOn(e.person, d)) continue;
+      ptsByDay[i][role] += pts;
+      peopleByRole[role].add(e.person);
+    }
+  });
+
+  // Pass 2 — average against a stable head count: everyone who worked that role
+  // anywhere in the window, minus whoever is out or gone on the day itself. A
+  // per-day denominator would spike to "Overloaded" the moment a role was down
+  // to its one busy person.
+  const perDay = days.map((d, i) => {
+    const byRole = {}, headByRole = {};
     roles.forEach(r => {
-      const ppl = peopleByRole[r];
-      let sum = 0, n = 0;
-      ppl.forEach(p => {
-        if (isPersonPTO(p, d)) return;
-        sum += getDayWorkload(p, d);
-        n++;
+      let head = 0;
+      peopleByRole[r].forEach(p => {
+        if (!personActiveOn(p, d) || offOn(p, d)) return;
+        head++;
       });
-      byRole[r] = n ? sum / n : 0;
+      headByRole[r] = head;
+      byRole[r] = head ? ptsByDay[i][r] / head : 0;
     });
-    return { date: d, byRole };
+    return { date: d, byRole, headByRole };
   });
 
   if (!perDay.some(d => roles.some(r => d.byRole[r] > 0))) {
@@ -3838,8 +3893,10 @@ function renderEffortChart(direction, daySpan) {
     const title = document.createElementNS(SVGNS, 'title');
     title.textContent = `${fmtDateShort(p.date)}\n` +
       roles.map(r => {
+        const head = p.headByRole[r];
+        if (!head) return `${r}: —`;
         const info = workloadInfo(p.byRole[r]);
-        return `${r}: ${p.byRole[r].toFixed(1)} (${info.label})`;
+        return `${r}: ${p.byRole[r].toFixed(1)} (${info.label}) · ${head} ${head === 1 ? 'person' : 'people'}`;
       }).join('\n');
     rect.appendChild(title);
     svg.appendChild(rect);
@@ -3882,8 +3939,10 @@ function renderEffortChart(direction, daySpan) {
     sw.style.background = ROLE_COLOR[role];
     item.appendChild(sw);
     const lab = document.createElement('span');
-    const ppl = peopleByRole[role];
+    const ppl = [...peopleByRole[role]].sort();
     lab.textContent = `${role} (${ppl.length})`;
+    // The whole point of the chart is "who", so name them on hover.
+    item.title = ppl.length ? `${role}: ${ppl.join(', ')}` : `Nobody worked ${role} tasks in this window.`;
     item.appendChild(lab);
     legend.appendChild(item);
   });
