@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260820d';
+window.PREPRO_BUILD = '20260820e';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,10 +26,10 @@ window.PREPRO_BUILD = '20260820d';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260820d"></script>
+<script type="module" src="./auth.js?v=20260820e"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and ops.html. -->
-<script src="./people.js?v=20260820d"></script>
+<script src="./people.js?v=20260820e"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -1376,50 +1376,94 @@ function isNonWorkProject(p) {
 // "A project we review" — active work, minus the non-work buckets.
 function isReviewableProject(p) { return isActiveProject(p) && !isNonWorkProject(p); }
 
-// ── PERSON EXTRACTION & DEDUP (internal team only) ──
+/* ── PERSON EXTRACTION & DEDUP ────────────────────────────────────────────────
+ * Who has a dashboard, and what does it say they do.
+ *
+ * The person record is the source of who exists: everyone on the Video Team has
+ * a dashboard whether or not they are assigned to anything this week. Projects
+ * then supply membership on top of that.
+ *
+ * This used to work the other way round — you existed only if you were assigned,
+ * and only if the assignment's `role` string was one of Producer/Editor/Animator.
+ * Two things made that lose people:
+ *
+ *   - `attendee.role` is frequently not a job role at all. Dropping someone onto
+ *     a red block writes the CHIP LABEL there ('Studio Work', 'Meeting',
+ *     'Review'), and holiday auto-activation writes 'Holiday'. None of those
+ *     matched, so meeting-and-shoot attendees were dropped: the project never
+ *     joined their membership, so its milestones never reached Heads Up and it
+ *     never appeared in My Projects. Ops and Team both key on `category`, which
+ *     is what actually says "this is one of ours" — so we do too now.
+ *   - Administrative and Team/Other Event are in no ROLE_CATS bucket, so admin
+ *     work put nobody on a project, while getDayWorkload counted it the whole
+ *     time. isAdminRole is the same test Ops uses.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+// Roles that mean "internal team work" beyond the three craft roles. Mirrors
+// ops.html — these appear on real tasks but sit in no ROLE_CATS bucket.
+const ADMIN_ROLES = ['administrative', 'team/other event'];
+function isAdminRole(role) { return ADMIN_ROLES.includes((role || '').toLowerCase()); }
+
+// Does this assignment count as internal-team work?
+function isInternalRole(role) { return INTERNAL_ROLES.has(role) || isAdminRole(role); }
+function isInternalAttendee(a) { return a.category === 'Internal Team' || isAdminRole(a.role); }
+
+// The role to credit someone with for an assignment. Falls back to what their
+// record says they do, so an attendee stored as 'Studio Work' still reads as
+// 'Producer' in the sidebar instead of showing a chip label as a job title.
+function creditRole(name, role) {
+  if (isInternalRole(role)) return role;
+  return personDefaultRole(name) || '';
+}
+
+// Video Team only. Someone with no record at all is allowed through on the
+// strength of their assignment; someone whose record puts them on another team
+// is not, so Brand Creative and vendors stay off the dashboard.
+function hasDashboard(name) {
+  const team = personTeam(name);
+  return !team || team === 'video';
+}
+
 function getAllPeople() {
   const personMap = new Map(); // name -> { roles: Set, projects: Map<id, {name, roles}> }
+  const today = todayStr();
 
+  const ensure = name => {
+    if (!personMap.has(name)) personMap.set(name, { roles: new Set(), projects: new Map() });
+    return personMap.get(name);
+  };
+  const credit = (name, proj, role) => {
+    if (!name || !hasDashboard(name)) return;
+    const entry = ensure(name);
+    const r = creditRole(name, role);
+    if (r) entry.roles.add(r);
+    if (!proj) return;
+    if (!entry.projects.has(proj.id)) entry.projects.set(proj.id, { name: proj.name, roles: new Set(), id: proj.id });
+    if (r) entry.projects.get(proj.id).roles.add(r);
+  };
+
+  // The roster of people, independent of what they happen to be booked on.
+  Object.keys(peopleRecords || {}).forEach(name => {
+    if (personTeam(name) !== 'video') return;
+    const entry = ensure(name);
+    const rec = getPerson(name) || {};
+    (rec.roles || []).forEach(r => entry.roles.add(r));
+    const dflt = personDefaultRole(name);
+    if (dflt) entry.roles.add(dflt);
+  });
+
+  // Project membership.
   (state.projects || []).filter(isActiveProject).forEach(proj => {
-    const roster = proj.roster || {};
-
-    // From roster — only internal team roles
-    for (const [role, names] of Object.entries(roster)) {
-      if (!INTERNAL_ROLES.has(role)) continue;
-      (names || []).forEach(name => {
-        if (!name) return;
-        if (!personMap.has(name)) personMap.set(name, { roles: new Set(), projects: new Map() });
-        const entry = personMap.get(name);
-        entry.roles.add(role);
-        if (!entry.projects.has(proj.id)) entry.projects.set(proj.id, { name: proj.name, roles: new Set(), id: proj.id });
-        entry.projects.get(proj.id).roles.add(role);
-      });
+    for (const [role, names] of Object.entries(proj.roster || {})) {
+      if (!isInternalRole(role)) continue;
+      (names || []).forEach(name => credit(name, proj, role));
     }
 
-    // From task assignments — only internal team roles
     (proj.tasks || []).forEach(t => {
-      if (!t.person || t.isDueDate) return;
-      if (!INTERNAL_ROLES.has(t.role)) return;
-      const name = t.person;
-      if (!personMap.has(name)) personMap.set(name, { roles: new Set(), projects: new Map() });
-      const entry = personMap.get(name);
-      if (t.role) entry.roles.add(t.role);
-      if (!entry.projects.has(proj.id)) entry.projects.set(proj.id, { name: proj.name, roles: new Set(), id: proj.id });
-      if (t.role) entry.projects.get(proj.id).roles.add(t.role);
-    });
-
-    // From review/event attendees — only internal team roles
-    (proj.tasks || []).forEach(t => {
-      if (!t.attendees) return;
+      if (t.person && !t.isDueDate && isInternalRole(t.role)) credit(t.person, proj, t.role);
       (t.attendees || []).forEach(a => {
-        if (!a.person) return;
-        if (!INTERNAL_ROLES.has(a.role)) return;
-        const name = a.person;
-        if (!personMap.has(name)) personMap.set(name, { roles: new Set(), projects: new Map() });
-        const entry = personMap.get(name);
-        if (a.role) entry.roles.add(a.role);
-        if (!entry.projects.has(proj.id)) entry.projects.set(proj.id, { name: proj.name, roles: new Set(), id: proj.id });
-        if (a.role) entry.projects.get(proj.id).roles.add(a.role);
+        if (!a.person || !isInternalAttendee(a)) return;
+        credit(a.person, proj, a.role);
       });
     });
   });
@@ -1430,8 +1474,7 @@ function getAllPeople() {
   //
   // Date-aware on purpose: isSunset flips as soon as a last day is recorded, so
   // filtering on it deleted people who are still here for another three weeks.
-  const _today = todayStr();
-  [...personMap.keys()].forEach(name => { if (!personCapacityOn(name, _today)) personMap.delete(name); });
+  [...personMap.keys()].forEach(name => { if (!personCapacityOn(name, today)) personMap.delete(name); });
 
   return personMap;
 }
