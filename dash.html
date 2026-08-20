@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260820b';
+window.PREPRO_BUILD = '20260820c';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,10 +26,10 @@ window.PREPRO_BUILD = '20260820b';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260820b"></script>
+<script type="module" src="./auth.js?v=20260820c"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and ops.html. -->
-<script src="./people.js?v=20260820b"></script>
+<script src="./people.js?v=20260820c"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -180,6 +180,8 @@ body { display: flex; flex-direction: column; }
 .effort-bar { display: flex; gap: 4px; margin-bottom: 20px; }
 .effort-day { flex: 1; background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 6px 4px; text-align: center; min-width: 0; }
 .effort-day.today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+/* Out on PTO or a holiday — dimmed so an empty day and a day off don't look alike. */
+.effort-day.off { opacity: .55; border-style: dashed; }
 .effort-day-label { font-size: 9px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 3px; }
 .effort-day-score { font-size: 14px; font-weight: 700; }
 
@@ -344,6 +346,7 @@ a.mp-name:hover { color: var(--accent); }
 .ol-bar-wrap { width: 100%; flex: 1; display: flex; align-items: flex-end; justify-content: center; }
 .ol-bar { width: 70%; min-height: 2px; border-radius: 2px 2px 0 0; transition: opacity .15s; }
 .ol-bar.weekend { opacity: .3; }
+.ol-day.off .ol-bar { opacity: .4; }
 .ol-day-label { font-size: 8px; color: var(--dim); white-space: nowrap; }
 .ol-day.today .ol-day-label { color: var(--accent); font-weight: 700; }
 .ol-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; font-size: 9px; color: var(--dim); }
@@ -571,6 +574,15 @@ function milestoneLabel(type) { return MILESTONE_LABEL[type] || MILESTONE_LABEL[
 // this, or a holiday would be counted as a project deliverable instead.
 function isHolidayTask(t) { return !!(t && t.isDueDate && t.milestoneType === 'holiday'); }
 function isTimeOffTask(t) { return !!(t && t.isDueDate && (t.milestoneType === 'pto' || t.milestoneType === 'holiday')); }
+// Is this specific person off on this PTO/Holiday task? Explicit attendees only.
+// The old test also matched the task NAME against the person's name, which threw
+// false positives on short names ("Al" is a substring of "Alex PTO"), so someone
+// else's time off showed up as yours. Mirrors ops.html's isPersonPTO.
+function personOnTimeOff(task, personName) {
+  if (!personName) return false;
+  const lp = personName.toLowerCase();
+  return (task.attendees || []).some(a => a.person && a.person.toLowerCase() === lp);
+}
 // Three-letter badge labels, matching team.html.
 const TYPE_ABBR = {
   'Review':            'REV',
@@ -1331,7 +1343,14 @@ function getRoleColor(role) {
 // Every panel routes through this so they can't drift apart. (Look Back is the
 // deliberate exception — it filters only on !ghost so it can include completed
 // projects.)
-function isActiveProject(p) { return !p.completed && !p.ghost; }
+//
+// onHold / cancelled / draft are checked because Team writes all three and Ops
+// has always honoured them via isInactive. Dash only knew about `completed`, so
+// a cancelled shoot or an unapproved draft still turned up in somebody's Today
+// and Coming Up as though it were live work.
+function isActiveProject(p) {
+  return !p.completed && !p.onHold && !p.cancelled && !p.draft && !p.ghost;
+}
 
 // ── NON-WORK PROJECT PREDICATE ──
 // PTO / Time Off / Holidays / Administrative are real projects in the data —
@@ -1405,7 +1424,11 @@ function getAllPeople() {
   // Drop soft-removed and departed people. Dash never did this — it had no
   // sunset wiring at all — so people who had left kept appearing in the sidebar
   // and every panel that reads this map.
-  [...personMap.keys()].forEach(name => { if (isSunset(name)) personMap.delete(name); });
+  //
+  // Date-aware on purpose: isSunset flips as soon as a last day is recorded, so
+  // filtering on it deleted people who are still here for another three weeks.
+  const _today = todayStr();
+  [...personMap.keys()].forEach(name => { if (!personCapacityOn(name, _today)) personMap.delete(name); });
 
   return personMap;
 }
@@ -1438,12 +1461,11 @@ function getTasksForPerson(personName, dateStr) {
         });
       }
 
-      // PTO: check attendees + taskName
-      if (isTimeOffTask(task)) {
-        const lp = personName.toLowerCase();
-        if ((task.attendees || []).some(a => a.person && a.person.toLowerCase() === lp)) isMatch = true;
-        if (task.taskName && task.taskName.toLowerCase().includes(lp)) isMatch = true;
-      }
+      // PTO / Holiday: match only explicit attendees. A taskName substring check
+      // ("John PTO") produced false positives for short names — "Al" matched
+      // "Alex PTO" and put Alex's time off on Al's dashboard. Ops fixed this in
+      // isPersonPTO; Dash kept the old test until now.
+      if (isTimeOffTask(task) && personOnTimeOff(task, personName)) isMatch = true;
 
       if (isMatch) {
         results.push({
@@ -1477,6 +1499,25 @@ function getDayWorkload(personName, dateStr) {
     });
   });
   return total;
+}
+
+// ── TIME OFF FOR A PERSON ──
+// Scans every project, completed included: time off is a fact about the person,
+// and a project closing doesn't put them back at their desk. Mirrors ops.html's
+// isPersonPTO, which the workload views there have used for a while — Dash's
+// two effort charts had no PTO awareness at all, so a multi-day task spanning
+// somebody's holiday still drew them as Busy while they were on a beach.
+function isPersonOff(person, dateStr) {
+  if (!person) return false;
+  for (const proj of (state.projects || [])) {
+    for (const t of (proj.tasks || [])) {
+      if (!isTimeOffTask(t)) continue;
+      const end = t.endDate || t.date;
+      if (!t.date || dateStr < t.date || dateStr > end) continue;
+      if (personOnTimeOff(t, person)) return true;
+    }
+  }
+  return false;
 }
 
 // ── MULTI-DAY INFO ──
@@ -1804,13 +1845,17 @@ function renderEffortBar() {
 
   for (let i = 0; i < 5; i++) {
     const dayStr = addDays(weekStart, i);
-    const pts = getDayWorkload(selectedPerson, dayStr);
-    const info = workloadInfo(pts);
+    const off = isPersonOff(selectedPerson, dayStr);
+    const pts = off ? 0 : getDayWorkload(selectedPerson, dayStr);
+    const info = off ? { label: 'Out', color: '#4a4a60' } : workloadInfo(pts);
     const isToday = dayStr === today;
     const dayEl = document.createElement('div');
-    dayEl.className = 'effort-day' + (isToday ? ' today' : '');
-    dayEl.innerHTML = `<div class="effort-day-label">${DOW_SHORT[new Date(dayStr + 'T00:00:00').getDay()]}</div><div class="effort-day-score" style="color:${info.color}">${pts === 0 ? '\u2014' : pts}</div>`;
-    dayEl.title = `${fmtDateShort(dayStr)}: ${info.label} (${pts} pts)`;
+    dayEl.className = 'effort-day' + (isToday ? ' today' : '') + (off ? ' off' : '');
+    const score = off ? '\u{1F3D6}' : (pts === 0 ? '\u2014' : pts);
+    dayEl.innerHTML = `<div class="effort-day-label">${DOW_SHORT[new Date(dayStr + 'T00:00:00').getDay()]}</div><div class="effort-day-score" style="color:${info.color}">${score}</div>`;
+    dayEl.title = off
+      ? `${fmtDateShort(dayStr)}: out (PTO / holiday)`
+      : `${fmtDateShort(dayStr)}: ${info.label} (${pts} pts)`;
     container.appendChild(dayEl);
   }
   return container;
@@ -1839,13 +1884,9 @@ function fmtDayShort(dateStr, today) {
 
 function buildTaskContext(task, personName, dateStr, proj) {
   const today = dateStr;
-  const lp = (personName || '').toLowerCase();
   const isForPerson = t => t.person === personName
     || (t.attendees || []).some(a => a.person === personName);
-  const isPTOForPerson = t => isTimeOffTask(t) && (
-    (t.attendees || []).some(a => a.person && a.person.toLowerCase() === lp)
-    || (t.taskName && t.taskName.toLowerCase().includes(lp))
-  );
+  const isPTOForPerson = t => isTimeOffTask(t) && personOnTimeOff(t, personName);
 
   const allTasks = (proj.tasks || []).filter(t => t.id !== task.id);
   const past = allTasks.filter(t => t.date && t.date < today).sort((a,b) => b.date.localeCompare(a.date));
@@ -2653,7 +2694,6 @@ function renderComingUpSection() {
   const windowStart = days[0];
   const windowEnd = days[days.length - 1];
   const today = todayStr();
-  const lp = (selectedPerson || '').toLowerCase();
 
   // Collect tasks for this person that overlap the visible window
   const items = [];
@@ -2678,10 +2718,7 @@ function renderComingUpSection() {
           }
         });
       }
-      if (isTimeOffTask(task)) {
-        if ((task.attendees || []).some(a => a.person && a.person.toLowerCase() === lp)) isMatch = true;
-        if (task.taskName && task.taskName.toLowerCase().includes(lp)) isMatch = true;
-      }
+      if (isTimeOffTask(task) && personOnTimeOff(task, selectedPerson)) isMatch = true;
       if (!isMatch) return;
 
       // Find first/last visible day index the task overlaps
@@ -2813,13 +2850,9 @@ function mkPanelSection(titleText) {
 
 // Shared helper: is task t assigned to / attended by the selected person?
 function taskIsForSelected(t) {
-  const lp = (selectedPerson || '').toLowerCase();
   if (t.person === selectedPerson) return true;
   if ((t.attendees || []).some(a => a.person === selectedPerson)) return true;
-  if (isTimeOffTask(t)) {
-    if ((t.attendees || []).some(a => a.person && a.person.toLowerCase() === lp)) return true;
-    if (t.taskName && t.taskName.toLowerCase().includes(lp)) return true;
-  }
+  if (isTimeOffTask(t) && personOnTimeOff(t, selectedPerson)) return true;
   return false;
 }
 
@@ -3057,12 +3090,13 @@ function renderOutlookPanel() {
   chart.className = 'ol-chart';
 
   days.forEach(d => {
-    const pts = getDayWorkload(selectedPerson, d);
-    const info = workloadInfo(pts);
+    const off = isPersonOff(selectedPerson, d);
+    const pts = off ? 0 : getDayWorkload(selectedPerson, d);
+    const info = off ? { label: 'Out', color: '#4a4a60' } : workloadInfo(pts);
     const dObj = new Date(d + 'T00:00:00');
 
     const day = document.createElement('div');
-    day.className = 'ol-day' + (d === today ? ' today' : '');
+    day.className = 'ol-day' + (d === today ? ' today' : '') + (off ? ' off' : '');
 
     const barWrap = document.createElement('div');
     barWrap.className = 'ol-bar-wrap';
@@ -3070,7 +3104,9 @@ function renderOutlookPanel() {
     bar.className = 'ol-bar';
     bar.style.height = Math.max(2, Math.min(pts, yMax) / yMax * 100) + '%';
     bar.style.background = info.color;
-    bar.title = fmtDateShort(d) + ': ' + info.label + ' (' + pts + ' pts)';
+    bar.title = off
+      ? fmtDateShort(d) + ': out (PTO / holiday)'
+      : fmtDateShort(d) + ': ' + info.label + ' (' + pts + ' pts)';
     barWrap.appendChild(bar);
     day.appendChild(barWrap);
 

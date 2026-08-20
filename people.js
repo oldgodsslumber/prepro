@@ -252,6 +252,18 @@ function personActiveOn(name, dateStr) {
   if (rec.departedOn) return dateStr <= rec.departedOn;
   return rec.active !== false;
 }
+// "Should this person show up as capacity on this date?" — the date-aware
+// counterpart to isSunset, which can only answer "hide them from pickers".
+//
+// Use this, not isSunset, anywhere a person is being listed as somebody who
+// works here. isSunset flips the moment a last day is *recorded*, so filtering
+// on it erased people who are still here for another three weeks — they
+// vanished from the sidebar and could not open their own dashboard.
+function personCapacityOn(name, dateStr) {
+  if (personGoneEntirely(name)) return false;          // gone, last day unknown
+  if (!getPerson(name)) return !sunsetPeople[name];    // no record — legacy map only
+  return personActiveOn(name, dateStr);
+}
 
 /* ── DELETE / MERGE (record half) ────────────────────────────────────────────
  * Each page still owns the part that walks its own state (rosters, tasks,

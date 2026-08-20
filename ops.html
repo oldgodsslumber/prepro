@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260820b';
+window.PREPRO_BUILD = '20260820c';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,10 +26,10 @@ window.PREPRO_BUILD = '20260820b';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260820b"></script>
+<script type="module" src="./auth.js?v=20260820c"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20260820b"></script>
+<script src="./people.js?v=20260820c"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -1398,7 +1398,7 @@ function getPtoEntries() {
       if (!isTimeOffTask(t)) return;
       const end = t.endDate || t.date;
       (t.attendees || []).forEach(a => {
-        if (!a.person || isSunset(a.person)) return;
+        if (!a.person || !personCapacityOn(a.person, todayStr())) return;
         out.push({ person: a.person, date: t.date, endDate: end, projectName: proj.name, isPTO: true });
       });
     });
@@ -1409,7 +1409,8 @@ function getPtoEntries() {
 // ── PEOPLE LIST ──
 function getAllPeople() {
   const people = new Set();
-  getOpsEntries().forEach(e => { if (e.person && !isSunset(e.person)) people.add(e.person); });
+  const today = todayStr();
+  getOpsEntries().forEach(e => { if (e.person && personCapacityOn(e.person, today)) people.add(e.person); });
   const alpha = [...people].sort();
   if (!personOrder.length) return alpha;
   // Saved order first (only those still present), then any new people alphabetically
@@ -1422,8 +1423,9 @@ function getAllPeople() {
 // are reorderable too.
 function getTimelinePeople() {
   const people = new Set();
-  getOpsEntries().forEach(e => { if (e.person && !isSunset(e.person)) people.add(e.person); });
-  getPtoEntries().forEach(e => { if (e.person && !isSunset(e.person)) people.add(e.person); });
+  const today = todayStr();
+  getOpsEntries().forEach(e => { if (e.person && personCapacityOn(e.person, today)) people.add(e.person); });
+  getPtoEntries().forEach(e => { if (e.person && personCapacityOn(e.person, today)) people.add(e.person); });
   const alpha = [...people].sort();
   if (!personOrder.length) return alpha;
   const ordered = personOrder.filter(p => people.has(p));
