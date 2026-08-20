@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260820c';
+window.PREPRO_BUILD = '20260820d';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,10 +26,10 @@ window.PREPRO_BUILD = '20260820c';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260820c"></script>
+<script type="module" src="./auth.js?v=20260820d"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20260820c"></script>
+<script src="./people.js?v=20260820d"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -1356,7 +1356,7 @@ function getOpsEntries(opts) {
   (state.projects || []).filter(p => (includeInactive || !isInactive(p)) && !p.ghost).forEach(proj => {
     (proj.tasks || []).forEach(task => {
       if (task.isDueDate) return;
-      const loe = task.loe || 'medium';
+      const loe = task.loe || 'low';
       if (task.isReview) {
         const cat = getTaskCat(task);
         const color = CAT_COLORS[cat] || '#6c63ff';
@@ -1449,7 +1449,10 @@ function movePerson(person, dir) {
 }
 
 // ── WORKLOAD ──
-function loePts(loe) { return LOE_PTS[loe] || 2; }
+// An unset LOE scores as Low, matching what the panel shows for a task that
+// has never had one set. It used to score Medium, so a task the UI called
+// Low was quietly counted as 2 points.
+function loePts(loe) { return LOE_PTS[loe] || LOE_PTS.low; }
 
 // Returns the total effort score for a single day
 function getDayWorkload(person, dateStr) {

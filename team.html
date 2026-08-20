@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260820c';
+window.PREPRO_BUILD = '20260820d';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,12 +29,12 @@ window.PREPRO_BUILD = '20260820c';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260820c"></script>
+<script type="module" src="./auth.js?v=20260820d"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20260820c"></script>
+<script src="./people.js?v=20260820d"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260820c"></script>
+<script src="./xlsx.full.min.js?v=20260820d"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -595,6 +595,7 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 .review-block.drag-accepting { background: rgba(192,57,79,.32); border-color: #c0394f; outline: 2px solid rgba(192,57,79,.5); outline-offset: -1px; }
 .review-hd { display: flex; align-items: center; gap: 5px; }
 .review-badge { background: #c0394f; color: #fff; font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 3px; letter-spacing: .06em; text-transform: uppercase; flex-shrink: 0; }
+.review-loe { font-size: 9px; line-height: 1; flex-shrink: 0; }
 .review-title { font-size: 11px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 /* Ghosted default name (verb / type label shown when no name has been typed) */
 .review-title.title-default { color: var(--dim); font-style: italic; font-weight: 500; opacity: .8; }
@@ -1063,7 +1064,7 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
         <div class="panel-divider"></div>
         <div class="panel-fields">
           <div class="panel-field panel-field-loe" id="panelFieldLOE">
-            <label>Effort <span class="htip">?<span class="htip-popup">Level of effort — click a dot: 🟢 Low, 🟡 Medium, 🔴 High. Defaults to Low. Shows as a dot on the task chip and feeds the workload views &amp; exports.</span></span></label>
+            <label>Effort <span class="htip">?<span class="htip-popup">Level of effort — click a dot: 🟢 Low, 🟡 Medium, 🔴 High. Defaults to Low. Set it on meetings, shoots and studio work too: a six-hour concepting session should not score the same as a ten-minute check-in. Shows as a dot on the task chip and feeds the workload views &amp; exports.</span></span></label>
             <div class="loe-dots" id="panelLOE" data-value="low" role="radiogroup" aria-label="Effort">
               <button type="button" class="loe-dot loe-low"    data-loe="low"    title="Low"    aria-label="Low effort"></button>
               <button type="button" class="loe-dot loe-medium" data-loe="medium" title="Medium" aria-label="Medium effort"></button>
@@ -4511,7 +4512,7 @@ function buildGhostInfo() {
       e.holidays.get(holiday.key).add(holiday.name);
     }
     else if (isPTO) e.isPTO = true;
-    else e.pts += LOE_PTS[loe] || 2;
+    else e.pts += LOE_PTS[loe] || LOE_PTS.low;
     e.projects.add(projectName);
     e.roles.add(role);
   };
@@ -4548,7 +4549,7 @@ function buildGhostInfo() {
         const end = new Date(endDate + 'T00:00:00');
         while (d <= end) {
           const ds = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
-          addEntry(ds, t.person, t.role, p.name, false, t.loe || 'medium');
+          addEntry(ds, t.person, t.role, p.name, false, t.loe || 'low');
           d.setDate(d.getDate() + 1);
         }
       }
@@ -4560,7 +4561,7 @@ function buildGhostInfo() {
         const end = new Date(endDate + 'T00:00:00');
         while (d <= end) {
           const ds = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
-          addEntry(ds, a.person, a.role || t.reviewLabel || 'Review', p.name, false, t.loe || 'medium');
+          addEntry(ds, a.person, a.role || t.reviewLabel || 'Review', p.name, false, t.loe || 'low');
           d.setDate(d.getDate() + 1);
         }
       });
@@ -5689,7 +5690,7 @@ function wireTrackDrop(track, projectId, person) {
       proj.tasks.push(newDueDateTask(dateStr, pl.defaultLabel));
     } else if (pl.type === 'review') {
       proj.tasks.push({ id: genId(), date: dateStr, isReview: true, reviewLabel: pl.label || 'Review',
-        taskName: null, color: REVIEW_COLOR, attendees: person ? [{ id: genId(), person, role: pl.label || 'Review', category: 'Internal Team', color: REVIEW_COLOR }] : [] });
+        taskName: null, loe: 'low', color: REVIEW_COLOR, attendees: person ? [{ id: genId(), person, role: pl.label || 'Review', category: 'Internal Team', color: REVIEW_COLOR }] : [] });
     } else {
       // Role chip → a role block on this row's person (the row IS the assignee)
       const autoPerson = person || ((pl.role || '').toLowerCase() === 'producer' ? (proj.leadProducer || null) : null);
@@ -6235,6 +6236,16 @@ function buildReviewBlock(task, dateStr) {
 
   const hd = document.createElement('div');
   hd.className = 'review-hd';
+  // Effort dot, same as a role block reads. Kept as its own span rather than
+  // prefixed onto the badge text, because the badge is the click target for the
+  // type switcher.
+  if (task.loe) {
+    const loeSp = document.createElement('span');
+    loeSp.className = 'review-loe';
+    loeSp.textContent = LOE_EMOJI[task.loe] || '';
+    loeSp.title = 'Effort: ' + task.loe;
+    hd.appendChild(loeSp);
+  }
   const badge = document.createElement('span');
   badge.className = 'review-badge';
   badge.textContent = typeAbbr(task.reviewLabel || 'Review');
@@ -6749,7 +6760,11 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     document.getElementById('panelRoleBadge').style.background = REVIEW_COLOR;
     document.getElementById('panelDateLabel').textContent      = fmtDateLabel(dateStr);
     fieldPerson.style.display = 'none';
-    fieldLOE.style.display    = 'none';
+    // Effort applies here too. A Review, Meeting, Studio Work or Shoot books real
+    // hours from everyone who attends, and until now none of them could say how
+    // many — so every one of them scored the same default. A six-hour concepting
+    // meeting and a ten-minute check-in are not the same load; the producer sets
+    // which is which, per task.
     taskLabel.textContent     = lbl + ' Name';
     taskInput.placeholder     = 'e.g. ' + lbl + ' — Apr 1';
     taskInput.value = '';
@@ -6772,10 +6787,10 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     setPanelDateRange(task);
     setSelectedTask(taskId);
     fieldPerson.style.display = 'none';
-    fieldLOE.style.display    = 'none';
     taskLabel.textContent     = lbl + ' Name';
     taskInput.placeholder     = lbl; // ghosted default — type to override
     taskInput.value           = task.taskName || '';
+    setPanelLOE(task.loe || 'low');
     document.getElementById('panelDelete').classList.remove('hidden');
 
   } else if (mode === 'add-attendee') {
@@ -6934,13 +6949,14 @@ function savePanel() {
       isReview: true,
       reviewLabel: lbl,
       taskName: taskName || null, // blank → ghosted label default
+      loe,
       color: REVIEW_COLOR,
       attendees: []
     });
 
   } else if (panelContext.mode === 'edit-review') {
     const task = proj.tasks.find(t => t.id === panelContext.taskId);
-    if (task) { task.taskName = taskName || null; }
+    if (task) { task.taskName = taskName || null; task.loe = loe; }
 
   } else if (panelContext.mode === 'add-attendee') {
     const task = proj.tasks.find(t => t.id === panelContext.taskId);
