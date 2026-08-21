@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260821a';
+window.PREPRO_BUILD = '20260821b';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,10 +26,10 @@ window.PREPRO_BUILD = '20260821a';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260821a"></script>
+<script type="module" src="./auth.js?v=20260821b"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and ops.html. -->
-<script src="./people.js?v=20260821a"></script>
+<script src="./people.js?v=20260821b"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -882,17 +882,21 @@ function renderDataSettings(c) {
 
   const hint = document.createElement('div');
   hint.className = 'settings-hint';
-  hint.textContent = 'Export downloads a JSON backup of every project, name history, and saved emails. Import merges projects by ID (overwrites duplicates) and adds new names/emails.';
+  hint.textContent = 'Export downloads a JSON backup of every project, name history, saved emails, and your dashboard data \u2014 ticked tasks, subtasks, statuses and next steps. Import merges projects by ID (overwrites duplicates) and adds new names, emails and dashboard entries without overwriting what is already here.';
   c.appendChild(hint);
 }
 
 function doExportData() {
   const payload = {
-    version: 2,
+    version: 3,
     exported: new Date().toISOString(),
     prepro_data: JSON.stringify(state),
     prepro_name_history: JSON.stringify(nameHistory),
-    prepro_people_emails: JSON.stringify(peopleEmails)
+    prepro_people_emails: JSON.stringify(peopleEmails),
+    // The dashboard overlay: completions, subtasks, statuses and next steps.
+    // It lives outside `state` and so was absent from backups entirely — the
+    // one copy was whatever Firebase and this browser happened to be holding.
+    dash_data: JSON.stringify(dashData)
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url  = URL.createObjectURL(blob);
@@ -903,6 +907,51 @@ function doExportData() {
   URL.revokeObjectURL(url);
 }
 
+/* Fold a backup's dashboard overlay into the live one. Deliberately additive
+ * rather than a wholesale replace: this data is shared and per-person, so an
+ * import must not silently drop what a colleague wrote since the backup.
+ *
+ * Completions and subtasks union. Status has no timestamp to arbitrate with, so
+ * whatever is already here wins. Next steps do carry `updated`, so the newer
+ * text wins whichever side it came from. */
+function mergeDashData(incoming) {
+  if (!incoming || typeof incoming !== 'object') return;
+
+  Object.entries(incoming.completions || {}).forEach(([taskId, done]) => {
+    if (done && !dashData.completions[taskId]) dashData.completions[taskId] = done;
+  });
+
+  Object.entries(incoming.subtasks || {}).forEach(([taskId, subs]) => {
+    if (!Array.isArray(subs)) return;
+    const mine = dashData.subtasks[taskId] || (dashData.subtasks[taskId] = []);
+    const seen = new Set(mine.map(s => s && s.id));
+    subs.forEach(s => { if (s && !seen.has(s.id)) { mine.push(s); seen.add(s.id); } });
+  });
+
+  Object.entries(incoming.status || {}).forEach(([person, byProject]) => {
+    if (!byProject) return;
+    if (!dashData.status[person]) dashData.status[person] = {};
+    Object.entries(byProject).forEach(([projectId, val]) => {
+      if (!dashData.status[person][projectId]) dashData.status[person][projectId] = val;
+    });
+  });
+
+  if (!dashData.nextSteps) dashData.nextSteps = {};
+  Object.entries(incoming.nextSteps || {}).forEach(([person, byProject]) => {
+    if (!byProject) return;
+    if (!dashData.nextSteps[person]) dashData.nextSteps[person] = {};
+    Object.entries(byProject).forEach(([projectId, step]) => {
+      if (!step || !step.text) return;
+      const mine = dashData.nextSteps[person][projectId];
+      if (!mine || (step.updated || '').localeCompare(mine.updated || '') > 0) {
+        dashData.nextSteps[person][projectId] = step;
+      }
+    });
+  });
+
+  saveDashData();
+}
+
 function handleImportFile(file) {
   const reader = new FileReader();
   reader.onload = e => {
@@ -911,6 +960,7 @@ function handleImportFile(file) {
       const rawData    = payload.prepro_data    || (payload.projects ? JSON.stringify(payload) : null);
       const rawHistory = payload.prepro_name_history || null;
       const rawEmails  = payload.prepro_people_emails || null;
+      const rawDash    = payload.dash_data || null; // absent in v2 and earlier backups
       if (!rawData) { alert('File doesn\'t look like a PRE-PRO backup.'); return; }
 
       const incoming = JSON.parse(rawData);
@@ -939,6 +989,10 @@ function handleImportFile(file) {
           });
           savePeopleEmails();
         } catch(_) {}
+      }
+
+      if (rawDash) {
+        try { mergeDashData(JSON.parse(rawDash)); } catch(_) {}
       }
 
       renderAll();
