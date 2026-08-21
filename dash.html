@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260820f';
+window.PREPRO_BUILD = '20260821a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,10 +26,10 @@ window.PREPRO_BUILD = '20260820f';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260820f"></script>
+<script type="module" src="./auth.js?v=20260821a"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and ops.html. -->
-<script src="./people.js?v=20260820f"></script>
+<script src="./people.js?v=20260821a"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -321,6 +321,51 @@ a.mp-name:hover { color: var(--accent); }
 .mp-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 10px; color: var(--dim); }
 .mp-meta-next { color: var(--text); }
 .mp-open-badge { font-size: 9px; font-weight: 700; padding: 1px 7px; border-radius: 10px; background: rgba(108,99,255,.15); color: var(--accent); }
+
+/* ── PROJECT GRID PANEL ── */
+.pg-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.pg-hint { font-size: 9px; color: var(--dim); }
+.pg-copy { margin-left: auto; font-size: 10px; font-weight: 600; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px; cursor: pointer; transition: color .15s, border-color .15s; flex-shrink: 0; }
+.pg-copy:hover { color: var(--accent); border-color: var(--accent); }
+.pg-wrap { border: 1px solid var(--border); border-radius: 8px; background: var(--card); overflow-x: auto; }
+.pg-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 880px; }
+.pg-table th { position: sticky; top: 0; z-index: 1; background: var(--card); font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); border-left: 1px solid var(--border); white-space: nowrap; }
+.pg-table th:first-child, .pg-table td:first-child { border-left: none; }
+.pg-table th.sortable { cursor: pointer; user-select: none; }
+.pg-table th.sortable:hover { color: var(--accent); }
+.pg-table th.sorted { color: var(--text); }
+.pg-sort-arrow { font-size: 8px; margin-left: 3px; }
+.pg-table td { padding: 5px 10px; border-bottom: 1px solid var(--border); border-left: 1px solid var(--border); vertical-align: middle; max-width: 0; }
+.pg-table tbody tr:last-child td { border-bottom: none; }
+.pg-table tbody tr:nth-child(even) { background: rgba(127,127,127,.05); }
+.pg-table .status-seg { margin-left: 0; }
+.pg-col-project { width: 22%; }
+.pg-col-roles { width: 1%; white-space: nowrap; }
+.pg-col-status { width: 1%; white-space: nowrap; }
+.pg-col-next { width: 26%; }
+.pg-col-prev { width: 26%; }
+.pg-col-note { width: 22%; }
+.pg-name { font-size: 12px; font-weight: 700; color: var(--text); text-decoration: none; }
+a.pg-name:hover { color: var(--accent); }
+.pg-late-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #e07070; margin-right: 6px; vertical-align: middle; flex-shrink: 0; }
+.pg-cell-edit { cursor: text; min-height: 19px; padding: 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 4px; }
+.pg-cell-edit:hover { color: var(--accent); }
+.pg-cell-edit:focus { outline: 1px solid var(--accent); outline-offset: 2px; }
+.pg-cell-edit.derived, .pg-cell-edit.empty { color: var(--dim); font-style: italic; }
+.pg-input { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; padding: 2px 6px; outline: none; }
+.pg-age { font-size: 9px; color: var(--dim); margin-left: 6px; white-space: nowrap; }
+.pg-prev { display: flex; align-items: center; gap: 5px; overflow: hidden; }
+.pg-prev-body { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-prev-empty { color: var(--dim); font-style: italic; }
+.pg-note-cell { display: flex; align-items: center; gap: 2px; }
+.pg-note-input { flex: 1; min-width: 0; font: inherit; color: var(--text); background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 2px 6px; outline: none; }
+.pg-note-input::placeholder { color: var(--dim); font-style: italic; }
+.pg-note-input:hover { border-color: var(--border); }
+.pg-note-input:focus { border-color: var(--accent); background: var(--bg); }
+.pg-note-more { flex-shrink: 0; opacity: 0; font-size: 12px; color: var(--dim); padding: 2px 4px; line-height: 1; transition: opacity .15s, color .15s; }
+.pg-table tbody tr:hover .pg-note-more, .pg-note-more:focus { opacity: 1; }
+.pg-note-more:hover { color: var(--accent); }
+.pg-empty { color: var(--dim); font-size: 12px; font-style: italic; padding: 12px 0; }
 
 /* ── NEEDS ATTENTION (OVERDUE) PANEL ── */
 .od-list { display: flex; flex-direction: column; gap: 2px; }
@@ -668,6 +713,7 @@ function loadDashData() {
   if (!dashData.completions) dashData.completions = {};
   if (!dashData.subtasks) dashData.subtasks = {};
   if (!dashData.status) dashData.status = {};
+  if (!dashData.nextSteps) dashData.nextSteps = {};
 }
 
 // ── NAME HISTORY & PEOPLE EMAILS (synced via Firebase) ──
@@ -1098,6 +1144,7 @@ window._dashReloadDashData = function(data) {
     if (!dashData.completions) dashData.completions = {};
     if (!dashData.subtasks) dashData.subtasks = {};
     if (!dashData.status) dashData.status = {};
+    if (!dashData.nextSteps) dashData.nextSteps = {};
   }
   renderAll();
 };
@@ -1670,6 +1717,7 @@ const DASH_PANELS = [
   { id: 'comingup',   label: 'Coming Up',        render: renderComingUpSection },
   { id: 'myProjects', label: 'My Projects',      render: renderMyProjectsPanel },
   { id: 'overdue',    label: 'Needs Attention',  render: renderOverduePanel },
+  { id: 'grid',       label: 'Project Grid',     render: renderProjectGridPanel, defaultHidden: true },
   { id: 'checklist',  label: 'My Checklist',     render: renderChecklistPanel, defaultHidden: true },
   { id: 'outlook',    label: 'Workload Outlook', render: renderOutlookPanel,   defaultHidden: true },
   { id: 'activity',   label: 'Recent Activity',  render: renderActivityPanel,  defaultHidden: true },
@@ -2995,6 +3043,418 @@ function renderMyProjectsPanel() {
 
   section.appendChild(list);
   return section;
+}
+
+/* ── PANEL: PROJECT GRID ──────────────────────────────────────────────────────
+ * The same project set My Projects shows, laid out one row per project so it
+ * can be scanned — and pasted — like a spreadsheet.
+ *
+ * Two columns are writable and they deliberately write to different stores:
+ *
+ *   Next Step  → dashData.nextSteps[person][projectId], a per-person overlay,
+ *                the same shape and sync path as status. Two people on one
+ *                project each own their own next step.
+ *   Note       → addNoteToProject(), the project's real note log. Anything
+ *                typed here is a first-class note, so it also surfaces in
+ *                Recent Activity, Look Back and Today. There is no grid-only
+ *                note field, on purpose — that would fork the history in two.
+ *
+ * Previous Note is that log's newest entry, so writing a note moves it one cell
+ * to the left and empties the entry cell for the next thing you have to say.
+ * ─────────────────────────────────────────────────────────────────────────── */
+const PG_SORT_KEY = 'dash_grid_sort';
+const PG_STATUS_ORDER = ['behind', 'on-schedule', 'ahead'];
+
+function getGridSort() {
+  try {
+    const s = JSON.parse(localStorage.getItem(PG_SORT_KEY) || 'null');
+    if (s && s.key) return { key: s.key, dir: s.dir === 'desc' ? 'desc' : 'asc' };
+  } catch (_) {}
+  return { key: 'project', dir: 'asc' };
+}
+function setGridSort(key) {
+  const cur = getGridSort();
+  const dir = cur.key === key && cur.dir === 'asc' ? 'desc' : 'asc';
+  try { localStorage.setItem(PG_SORT_KEY, JSON.stringify({ key, dir })); } catch (_) {}
+  renderAll();
+}
+
+// ── NEXT STEP (per-person overlay) ──
+function getNextStep(person, projectId) {
+  return ((dashData.nextSteps || {})[person] || {})[projectId] || null;
+}
+function setNextStep(person, projectId, text) {
+  if (!dashData.nextSteps) dashData.nextSteps = {};
+  const body = (text || '').trim();
+  const forPerson = dashData.nextSteps[person];
+  if (!body) {
+    // Delete rather than blank it. Assigning undefined anywhere in dashData
+    // makes the Firebase set() throw and takes every later save down with it.
+    if (forPerson) {
+      delete forPerson[projectId];
+      if (!Object.keys(forPerson).length) delete dashData.nextSteps[person];
+    }
+  } else {
+    if (!forPerson) dashData.nextSteps[person] = {};
+    dashData.nextSteps[person][projectId] = { text: body, updated: todayStr() };
+  }
+  saveDashData();
+}
+
+// Fallback shown in grey when nobody has written a next step: the soonest thing
+// actually on the schedule for this person. Editing promotes it to a real one.
+function pgDerivedNextStep(proj, today) {
+  const next = (proj.tasks || [])
+    .filter(t => taskIsForSelected(t) && (t.date || '') >= today)
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''))[0];
+  if (!next) return '';
+  return taskDisplayName(next) + ' · ' + fmtDayShort(next.date, today);
+}
+
+function pgLatestNote(proj) {
+  let best = null, bestKey = '';
+  (proj.notes || []).forEach(n => {
+    if (!n || !n.date) return;
+    const key = n.date + (n.time || '');
+    if (!best || key.localeCompare(bestKey) > 0) { best = n; bestKey = key; }
+  });
+  return best ? { note: best, key: bestKey } : null;
+}
+function pgNoteEmoji(note) {
+  const nt = NOTE_TYPES.find(t => t.key === note.type);
+  return note.emoji || (nt && nt.emoji) || '\u{1F4CB}';
+}
+function pgOverdueCount(proj, today) {
+  return (proj.tasks || []).filter(t => {
+    if (t.isDueDate || t.isReview) return false;
+    if (!taskIsForSelected(t) || isTaskDone(t.id)) return false;
+    const end = t.endDate || t.date;
+    return !!end && end < today;
+  }).length;
+}
+
+/* Re-rendering after a commit destroys the cell you were typing in, so anything
+ * that wants the caret back afterwards parks a request here and the next render
+ * of the grid honours it. */
+let _pgFocus = null; // { projectId, col }
+function pgRestoreFocus() {
+  const want = _pgFocus;
+  _pgFocus = null;
+  if (!want) return;
+  const el = [...document.querySelectorAll('[data-pg-col="' + want.col + '"]')]
+    .find(n => n.dataset.pgProject === want.projectId);
+  if (!el) return;
+  if (el.tagName === 'INPUT') el.focus();
+  else el.click(); // an editable div — open it for typing
+}
+
+function renderProjectGridPanel() {
+  const section = mkPanelSection('Project Grid');
+  const today = todayStr();
+  const info = getAllPeople().get(selectedPerson);
+
+  const rows = (info ? [...info.projects.values()] : []).map(pref => {
+    const proj = (state.projects || []).find(p => p.id === pref.id);
+    if (!proj || isNonWorkProject(proj)) return null;
+    const saved = getNextStep(selectedPerson, proj.id);
+    const derived = pgDerivedNextStep(proj, today);
+    const prev = pgLatestNote(proj);
+    return {
+      proj, pref, saved, derived, prev,
+      status: getStatus(selectedPerson, proj.id),
+      nextText: saved ? saved.text : derived,
+      late: pgOverdueCount(proj, today)
+    };
+  }).filter(Boolean);
+
+  if (!rows.length) {
+    const empty = document.createElement('div');
+    empty.className = 'pg-empty';
+    empty.textContent = 'Not on any active projects.';
+    section.appendChild(empty);
+    return section;
+  }
+
+  const sort = getGridSort();
+  const dir = sort.dir === 'desc' ? -1 : 1;
+  rows.sort((a, b) => {
+    let r = 0;
+    if (sort.key === 'status') r = PG_STATUS_ORDER.indexOf(a.status) - PG_STATUS_ORDER.indexOf(b.status);
+    else if (sort.key === 'roles') r = [...a.pref.roles].sort().join().localeCompare([...b.pref.roles].sort().join());
+    else if (sort.key === 'next') r = (a.nextText || '￿').localeCompare(b.nextText || '￿');
+    // Newest note first when ascending — "least recently touched" is the useful
+    // end of this column, and it reads better as the reversed view.
+    else if (sort.key === 'prev') r = (b.prev ? b.prev.key : '').localeCompare(a.prev ? a.prev.key : '');
+    else r = a.proj.name.localeCompare(b.proj.name);
+    return (r * dir) || a.proj.name.localeCompare(b.proj.name);
+  });
+
+  // ── toolbar ──
+  const toolbar = document.createElement('div');
+  toolbar.className = 'pg-toolbar';
+  const hint = document.createElement('span');
+  hint.className = 'pg-hint';
+  hint.textContent = 'Click a cell to edit · Enter saves · Tab moves down';
+  toolbar.appendChild(hint);
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'pg-copy';
+  copyBtn.textContent = '\u{1F4CB} Copy';
+  copyBtn.title = 'Copy as tab-separated rows — pastes into Excel or Sheets as real cells';
+  copyBtn.addEventListener('click', () => {
+    const lines = [['Project', 'Role', 'Status', 'Next Step', 'Previous Note'].join('\t')];
+    rows.forEach(r => {
+      const prevText = r.prev ? pgNoteEmoji(r.prev.note) + ' ' + (r.prev.note.body || '') : '';
+      lines.push([
+        r.proj.name,
+        [...r.pref.roles].sort().join(', '),
+        r.status === 'on-schedule' ? 'On Track' : r.status === 'behind' ? 'Behind' : 'Ahead',
+        r.nextText || '',
+        prevText
+      ].map(v => String(v).replace(/[\t\r\n]+/g, ' ')).join('\t'));
+    });
+    const tsv = lines.join('\r\n');
+    const done = () => {
+      copyBtn.textContent = '✓ Copied';
+      setTimeout(() => { copyBtn.textContent = '\u{1F4CB} Copy'; }, 1400);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(tsv).then(done).catch(() => pgFallbackCopy(tsv, done));
+    } else pgFallbackCopy(tsv, done);
+  });
+  toolbar.appendChild(copyBtn);
+  section.appendChild(toolbar);
+
+  // ── table ──
+  const wrap = document.createElement('div');
+  wrap.className = 'pg-wrap';
+  const table = document.createElement('table');
+  table.className = 'pg-table';
+
+  const thead = document.createElement('thead');
+  const hrow = document.createElement('tr');
+  [
+    { key: 'project', label: 'Project',       cls: 'pg-col-project' },
+    { key: 'roles',   label: 'Role',          cls: 'pg-col-roles' },
+    { key: 'status',  label: 'Status',        cls: 'pg-col-status' },
+    { key: 'next',    label: 'Next Step',     cls: 'pg-col-next' },
+    { key: 'prev',    label: 'Previous Note', cls: 'pg-col-prev' },
+    { key: null,      label: 'Note',          cls: 'pg-col-note' }
+  ].forEach(col => {
+    const th = document.createElement('th');
+    th.className = col.cls + (col.key ? ' sortable' : '') + (col.key && col.key === sort.key ? ' sorted' : '');
+    th.textContent = col.label;
+    if (col.key) {
+      th.title = 'Sort by ' + col.label;
+      if (col.key === sort.key) {
+        const arrow = document.createElement('span');
+        arrow.className = 'pg-sort-arrow';
+        arrow.textContent = sort.dir === 'asc' ? '▲' : '▼';
+        th.appendChild(arrow);
+      }
+      th.addEventListener('click', () => setGridSort(col.key));
+    }
+    hrow.appendChild(th);
+  });
+  thead.appendChild(hrow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  rows.forEach((r, i) => {
+    tbody.appendChild(pgBuildRow(r, today, rows[i + 1] ? rows[i + 1].proj.id : null));
+  });
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  section.appendChild(wrap);
+
+  if (_pgFocus) setTimeout(pgRestoreFocus, 0);
+  return section;
+}
+
+function pgFallbackCopy(text, done) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); done(); } catch (_) { alert('Copy failed — select the grid and copy manually.'); }
+  ta.remove();
+}
+
+function pgBuildRow(r, today, nextRowId) {
+  const { proj, pref } = r;
+  const tr = document.createElement('tr');
+
+  // Project — with a red dot when something on it is overdue, since the grid
+  // carries no date column of its own.
+  const tdName = document.createElement('td');
+  tdName.className = 'pg-col-project';
+  if (r.late) {
+    const dot = document.createElement('span');
+    dot.className = 'pg-late-dot';
+    dot.title = r.late + ' overdue ' + (r.late === 1 ? 'task' : 'tasks');
+    tdName.appendChild(dot);
+  }
+  const link = document.createElement('a');
+  link.className = 'pg-name';
+  link.href = 'team.html#project=' + encodeURIComponent(proj.id);
+  link.target = '_blank';
+  link.textContent = proj.name;
+  tdName.appendChild(link);
+  tr.appendChild(tdName);
+
+  // Role
+  const tdRoles = document.createElement('td');
+  tdRoles.className = 'pg-col-roles';
+  [...pref.roles].sort().forEach(role => {
+    const tag = document.createElement('span');
+    tag.className = 'role-tag';
+    tag.style.background = getRoleColor(role);
+    tag.textContent = role;
+    tdRoles.appendChild(tag);
+  });
+  tr.appendChild(tdRoles);
+
+  // Status — the same control and store as My Projects, so they stay in step.
+  const tdStatus = document.createElement('td');
+  tdStatus.className = 'pg-col-status';
+  tdStatus.appendChild(buildStatusSeg(proj.id));
+  tr.appendChild(tdStatus);
+
+  tr.appendChild(pgNextStepCell(r, today, nextRowId));
+  tr.appendChild(pgPrevNoteCell(r, today));
+  tr.appendChild(pgNoteEntryCell(proj));
+  return tr;
+}
+
+function pgNextStepCell(r, today, nextRowId) {
+  const { proj, saved, derived } = r;
+  const td = document.createElement('td');
+  td.className = 'pg-col-next';
+
+  const cell = document.createElement('div');
+  cell.className = 'pg-cell-edit' + (saved ? '' : derived ? ' derived' : ' empty');
+  cell.dataset.pgProject = proj.id;
+  cell.dataset.pgCol = 'next';
+  cell.tabIndex = 0;
+  cell.textContent = saved ? saved.text : (derived || 'Set next step…');
+  cell.title = saved
+    ? 'Updated ' + fmtDayShort(saved.updated, today) + ' — click to edit'
+    : derived ? 'From your next scheduled task — click to write your own' : 'Click to add a next step';
+  if (saved && saved.updated && saved.updated !== today) {
+    const age = document.createElement('span');
+    age.className = 'pg-age';
+    age.textContent = fmtDayShort(saved.updated, today);
+    cell.appendChild(age);
+  }
+
+  const startEdit = () => {
+    const input = document.createElement('input');
+    input.className = 'pg-input';
+    input.value = saved ? saved.text : (derived || '');
+    input.placeholder = 'What happens next?';
+    td.innerHTML = '';
+    td.appendChild(input);
+    input.focus();
+    input.select();
+
+    let settled = false;
+    const commit = moveDown => {
+      if (settled) return;
+      settled = true;
+      setNextStep(selectedPerson, proj.id, input.value);
+      if (moveDown && nextRowId) _pgFocus = { projectId: nextRowId, col: 'next' };
+      renderAll();
+    };
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(false); }
+      else if (e.key === 'Escape') { e.preventDefault(); settled = true; renderAll(); }
+      else if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); commit(true); }
+    });
+    input.addEventListener('blur', () => commit(false));
+  };
+  cell.addEventListener('click', startEdit);
+  cell.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); startEdit(); } });
+
+  td.appendChild(cell);
+  return td;
+}
+
+function pgPrevNoteCell(r, today) {
+  const td = document.createElement('td');
+  td.className = 'pg-col-prev';
+  const wrap = document.createElement('div');
+  wrap.className = 'pg-prev';
+
+  if (!r.prev) {
+    const none = document.createElement('span');
+    none.className = 'pg-prev-empty';
+    none.textContent = 'No notes yet';
+    wrap.appendChild(none);
+    td.appendChild(wrap);
+    return td;
+  }
+
+  const note = r.prev.note;
+  const icon = document.createElement('span');
+  icon.textContent = pgNoteEmoji(note);
+  wrap.appendChild(icon);
+
+  const body = document.createElement('span');
+  body.className = 'pg-prev-body';
+  body.textContent = note.body || '';
+  wrap.appendChild(body);
+
+  const age = document.createElement('span');
+  age.className = 'pg-age';
+  age.textContent = fmtDayShort(note.date, today);
+  wrap.appendChild(age);
+
+  // The cell shows one note; the tooltip shows the tail of the log, so the
+  // column reads as a window onto the history rather than a single value.
+  wrap.title = (r.proj.notes || [])
+    .filter(n => n && n.date)
+    .sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')))
+    .slice(0, 3)
+    .map(n => pgNoteEmoji(n) + ' ' + (n.body || '') + '\n    — ' + (n.person || 'Team') + ', ' + n.date + (n.time ? ' ' + n.time : ''))
+    .join('\n');
+
+  td.appendChild(wrap);
+  return td;
+}
+
+function pgNoteEntryCell(proj) {
+  const td = document.createElement('td');
+  td.className = 'pg-col-note';
+  const wrap = document.createElement('div');
+  wrap.className = 'pg-note-cell';
+
+  const input = document.createElement('input');
+  input.className = 'pg-note-input';
+  input.placeholder = 'Add a note…';
+  input.dataset.pgProject = proj.id;
+  input.dataset.pgCol = 'note';
+  input.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const body = input.value.trim();
+    if (!body) return;
+    input.value = '';
+    addNoteToProject(proj.id, 'update', body);
+    _pgFocus = { projectId: proj.id, col: 'note' }; // stay put for the next one
+    renderAll();
+  });
+  wrap.appendChild(input);
+
+  const more = document.createElement('button');
+  more.className = 'pg-note-more';
+  more.textContent = '⋯';
+  more.title = 'Add a typed note — blocker, delay, decision…';
+  more.addEventListener('click', () => showNoteModal(proj.id, proj.name));
+  wrap.appendChild(more);
+
+  td.appendChild(wrap);
+  return td;
 }
 
 // ── PANEL: NEEDS ATTENTION (overdue, incomplete) ──
