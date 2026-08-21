@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260821b';
+window.PREPRO_BUILD = '20260821c';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,10 +26,10 @@ window.PREPRO_BUILD = '20260821b';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260821b"></script>
+<script type="module" src="./auth.js?v=20260821c"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and ops.html. -->
-<script src="./people.js?v=20260821b"></script>
+<script src="./people.js?v=20260821c"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -328,23 +328,37 @@ a.mp-name:hover { color: var(--accent); }
 .pg-copy { margin-left: auto; font-size: 10px; font-weight: 600; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px; cursor: pointer; transition: color .15s, border-color .15s; flex-shrink: 0; }
 .pg-copy:hover { color: var(--accent); border-color: var(--accent); }
 .pg-wrap { border: 1px solid var(--border); border-radius: 8px; background: var(--card); overflow-x: auto; }
-.pg-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 880px; }
-.pg-table th { position: sticky; top: 0; z-index: 1; background: var(--card); font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); border-left: 1px solid var(--border); white-space: nowrap; }
+.pg-table { border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+.pg-table th { position: sticky; top: 0; z-index: 1; overflow: hidden; text-overflow: ellipsis; background: var(--card); font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); border-left: 1px solid var(--border); white-space: nowrap; }
 .pg-table th:first-child, .pg-table td:first-child { border-left: none; }
 .pg-table th.sortable { cursor: pointer; user-select: none; }
 .pg-table th.sortable:hover { color: var(--accent); }
 .pg-table th.sorted { color: var(--text); }
 .pg-sort-arrow { font-size: 8px; margin-left: 3px; }
-.pg-table td { padding: 5px 10px; border-bottom: 1px solid var(--border); border-left: 1px solid var(--border); vertical-align: middle; max-width: 0; }
+.pg-table td { padding: 5px 10px; border-bottom: 1px solid var(--border); border-left: 1px solid var(--border); vertical-align: top; }
 .pg-table tbody tr:last-child td { border-bottom: none; }
 .pg-table tbody tr:nth-child(even) { background: rgba(127,127,127,.05); }
 .pg-table .status-seg { margin-left: 0; }
-.pg-col-project { width: 22%; }
-.pg-col-roles { width: 1%; white-space: nowrap; }
-.pg-col-status { width: 1%; white-space: nowrap; }
-.pg-col-next { width: 26%; }
-.pg-col-prev { width: 26%; }
-.pg-col-note { width: 22%; }
+/* Column widths live on the <colgroup> and are dragged, so no width rules here.
+   The trailing filler column eats any slack when the panel is wider than the
+   sum of the columns, which keeps every dragged width exact. */
+.pg-col-filler { width: auto; }
+.pg-table th.pg-col-filler, .pg-table td.pg-col-filler { padding: 0; }
+.pg-resize { position: absolute; top: 0; right: -3px; width: 7px; height: 100%; cursor: col-resize; z-index: 2; touch-action: none; }
+.pg-resize::after { content: ''; position: absolute; top: 20%; bottom: 20%; left: 3px; width: 1px; background: transparent; transition: background .15s; }
+.pg-resize:hover::after, .pg-resize.dragging::after { background: var(--accent); }
+.pg-table th:last-child .pg-resize { right: 0; }
+
+/* Who else is on the project. All three internal roles resolve to the same
+   colour, so the role has to be spelled out in text rather than shown as a
+   coloured chip. */
+.pg-team { display: flex; flex-direction: column; gap: 2px; }
+.pg-team-line { display: flex; gap: 6px; align-items: baseline; line-height: 1.35; }
+.pg-team-role { flex-shrink: 0; min-width: 52px; font-size: 8px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+.pg-team-names { font-size: 11px; color: var(--text); overflow-wrap: anywhere; }
+.pg-team-me { color: var(--accent); font-weight: 700; }
+.pg-team-more { font-size: 9px; color: var(--dim); }
+.pg-team-empty { font-size: 11px; color: var(--dim); font-style: italic; }
 .pg-name { font-size: 12px; font-weight: 700; color: var(--text); text-decoration: none; }
 a.pg-name:hover { color: var(--accent); }
 .pg-late-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #e07070; margin-right: 6px; vertical-align: middle; flex-shrink: 0; }
@@ -3117,14 +3131,55 @@ function renderMyProjectsPanel() {
  * to the left and empties the entry cell for the next thing you have to say.
  * ─────────────────────────────────────────────────────────────────────────── */
 const PG_SORT_KEY = 'dash_grid_sort';
+const PG_WIDTH_KEY = 'dash_grid_widths';
 const PG_STATUS_ORDER = ['behind', 'on-schedule', 'ahead'];
+const PG_MIN_COL = 60; // a column can be squeezed, never dragged out of existence
+
+/* The columns, in order. `width` is the default in pixels — the starting point
+ * a reset returns to, not what is rendered once someone has dragged. */
+const PG_COLS = [
+  { id: 'project', label: 'Project',       sortable: true,  width: 200 },
+  { id: 'team',    label: 'Team',          sortable: true,  width: 250 },
+  { id: 'status',  label: 'Status',        sortable: true,  width: 150 },
+  { id: 'next',    label: 'Next Step',     sortable: true,  width: 240 },
+  { id: 'prev',    label: 'Previous Note', sortable: true,  width: 240 },
+  { id: 'note',    label: 'Note',          sortable: false, width: 200 }
+];
 
 function getGridSort() {
+  // Validated against the live column list: a sort saved under a key that no
+  // longer exists (the old 'roles' column, say) falls back rather than sorting
+  // by nothing at all.
+  const keys = PG_COLS.filter(c => c.sortable).map(c => c.id);
   try {
     const s = JSON.parse(localStorage.getItem(PG_SORT_KEY) || 'null');
-    if (s && s.key) return { key: s.key, dir: s.dir === 'desc' ? 'desc' : 'asc' };
+    if (s && keys.includes(s.key)) return { key: s.key, dir: s.dir === 'desc' ? 'desc' : 'asc' };
   } catch (_) {}
   return { key: 'project', dir: 'asc' };
+}
+
+// ── COLUMN WIDTHS (per browser, like the sort — a viewing preference, not
+// shared data, so it stays out of dashData) ──
+function getGridWidths() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(PG_WIDTH_KEY) || 'null'); } catch (_) {}
+  const out = {};
+  PG_COLS.forEach(c => {
+    const v = saved && Number(saved[c.id]);
+    out[c.id] = (v && isFinite(v) && v >= PG_MIN_COL) ? Math.round(v) : c.width;
+  });
+  return out;
+}
+function setGridWidth(id, px) {
+  const w = getGridWidths();
+  w[id] = Math.max(PG_MIN_COL, Math.round(px));
+  try { localStorage.setItem(PG_WIDTH_KEY, JSON.stringify(w)); } catch (_) {}
+}
+function resetGridWidths(id) {
+  const w = getGridWidths();
+  PG_COLS.forEach(c => { if (!id || c.id === id) w[c.id] = c.width; });
+  try { localStorage.setItem(PG_WIDTH_KEY, JSON.stringify(w)); } catch (_) {}
+  renderAll();
 }
 function setGridSort(key) {
   const cur = getGridSort();
@@ -3163,6 +3218,49 @@ function pgDerivedNextStep(proj, today) {
     .sort((a, b) => (a.date || '').localeCompare(b.date || ''))[0];
   if (!next) return '';
   return taskDisplayName(next) + ' · ' + fmtDayShort(next.date, today);
+}
+
+/* Everyone from the Video Team on this project, grouped by what they do on it.
+ * Mirrors the credit logic in getAllPeople — roster first, then task owners and
+ * attendees, because projects routinely book people without rostering them —
+ * and then keeps only the three craft roles, so admin blocks, stakeholders and
+ * vendors don't turn into team members. Departed people drop out via
+ * personCapacityOn, the same test the sidebar uses. */
+function pgProjectTeam(proj, today) {
+  const byRole = new Map(); // role -> Set(name)
+  const add = (name, role, trusted) => {
+    // `trusted` is for attendees: their stored role is frequently a chip label
+    // ('Studio Work', 'Meeting'), so isInternalRole would reject them even
+    // though isInternalAttendee already vouched for them. creditRole resolves
+    // the real one from their person record.
+    if (!name || isAdminRole(role)) return;
+    if (!trusted && !isInternalRole(role)) return;
+    if (!hasDashboard(name) || !personCapacityOn(name, today)) return;
+    const r = creditRole(name, role);
+    if (!INTERNAL_ROLES.has(r)) return;
+    if (!byRole.has(r)) byRole.set(r, new Set());
+    byRole.get(r).add(name);
+  };
+
+  Object.entries(proj.roster || {}).forEach(([role, names]) => (names || []).forEach(n => add(n, role, false)));
+  (proj.tasks || []).forEach(t => {
+    if (t.person && !t.isDueDate) add(t.person, t.role, false);
+    (t.attendees || []).forEach(a => { if (a && a.person && isInternalAttendee(a)) add(a.person, a.role, true); });
+  });
+
+  // Producer, Editor, Animator — ROLE_CATS order, which is how the rest of the
+  // app lists them.
+  return [...INTERNAL_ROLES]
+    .filter(role => byRole.has(role))
+    .map(role => ({ role, names: [...byRole.get(role)].sort() }));
+}
+function pgTeamSortKey(groups) {
+  return [...INTERNAL_ROLES]
+    .map(role => { const g = groups.find(x => x.role === role); return g ? g.names.join(',') : '\uffff'; })
+    .join('|');
+}
+function pgTeamText(groups) {
+  return groups.map(g => g.role + ': ' + g.names.join(', ')).join('; ');
 }
 
 function pgLatestNote(proj) {
@@ -3213,8 +3311,10 @@ function renderProjectGridPanel() {
     const saved = getNextStep(selectedPerson, proj.id);
     const derived = pgDerivedNextStep(proj, today);
     const prev = pgLatestNote(proj);
+    const team = pgProjectTeam(proj, today);
     return {
-      proj, pref, saved, derived, prev,
+      proj, pref, saved, derived, prev, team,
+      teamSort: pgTeamSortKey(team),
       status: getStatus(selectedPerson, proj.id),
       nextText: saved ? saved.text : derived,
       late: pgOverdueCount(proj, today)
@@ -3234,7 +3334,7 @@ function renderProjectGridPanel() {
   rows.sort((a, b) => {
     let r = 0;
     if (sort.key === 'status') r = PG_STATUS_ORDER.indexOf(a.status) - PG_STATUS_ORDER.indexOf(b.status);
-    else if (sort.key === 'roles') r = [...a.pref.roles].sort().join().localeCompare([...b.pref.roles].sort().join());
+    else if (sort.key === 'team') r = a.teamSort.localeCompare(b.teamSort);
     else if (sort.key === 'next') r = (a.nextText || '￿').localeCompare(b.nextText || '￿');
     // Newest note first when ascending — "least recently touched" is the useful
     // end of this column, and it reads better as the reversed view.
@@ -3248,19 +3348,19 @@ function renderProjectGridPanel() {
   toolbar.className = 'pg-toolbar';
   const hint = document.createElement('span');
   hint.className = 'pg-hint';
-  hint.textContent = 'Click a cell to edit · Enter saves · Tab moves down';
+  hint.textContent = 'Click a cell to edit · Enter saves · Tab moves down · drag a column edge to resize';
   toolbar.appendChild(hint);
   const copyBtn = document.createElement('button');
   copyBtn.className = 'pg-copy';
   copyBtn.textContent = '\u{1F4CB} Copy';
   copyBtn.title = 'Copy as tab-separated rows — pastes into Excel or Sheets as real cells';
   copyBtn.addEventListener('click', () => {
-    const lines = [['Project', 'Role', 'Status', 'Next Step', 'Previous Note'].join('\t')];
+    const lines = [['Project', 'Team', 'Status', 'Next Step', 'Previous Note'].join('\t')];
     rows.forEach(r => {
       const prevText = r.prev ? pgNoteEmoji(r.prev.note) + ' ' + (r.prev.note.body || '') : '';
       lines.push([
         r.proj.name,
-        [...r.pref.roles].sort().join(', '),
+        pgTeamText(r.team),
         r.status === 'on-schedule' ? 'On Track' : r.status === 'behind' ? 'Behind' : 'Ahead',
         r.nextText || '',
         prevText
@@ -3275,6 +3375,12 @@ function renderProjectGridPanel() {
       navigator.clipboard.writeText(tsv).then(done).catch(() => pgFallbackCopy(tsv, done));
     } else pgFallbackCopy(tsv, done);
   });
+  const resetBtn = document.createElement('button');
+  resetBtn.className = 'pg-copy';
+  resetBtn.textContent = '\u21f9 Reset widths';
+  resetBtn.title = 'Put every column back to its default width';
+  resetBtn.addEventListener('click', () => resetGridWidths());
+  toolbar.appendChild(resetBtn);
   toolbar.appendChild(copyBtn);
   section.appendChild(toolbar);
 
@@ -3284,31 +3390,54 @@ function renderProjectGridPanel() {
   const table = document.createElement('table');
   table.className = 'pg-table';
 
+  // Explicit widths on a colgroup — the only way a drag can own them. The table
+  // is sized to their sum and a trailing filler column absorbs any slack, so
+  // widening the panel never rescales what someone dragged.
+  const widths = getGridWidths();
+  const total = PG_COLS.reduce((n, c) => n + widths[c.id], 0);
+  table.style.width = '100%';
+  table.style.minWidth = total + 'px';
+
+  const colgroup = document.createElement('colgroup');
+  const colEls = {};
+  PG_COLS.forEach(c => {
+    const col = document.createElement('col');
+    col.style.width = widths[c.id] + 'px';
+    colgroup.appendChild(col);
+    colEls[c.id] = col;
+  });
+  const filler = document.createElement('col');
+  filler.className = 'pg-col-filler';
+  colgroup.appendChild(filler);
+  table.appendChild(colgroup);
+
   const thead = document.createElement('thead');
   const hrow = document.createElement('tr');
-  [
-    { key: 'project', label: 'Project',       cls: 'pg-col-project' },
-    { key: 'roles',   label: 'Role',          cls: 'pg-col-roles' },
-    { key: 'status',  label: 'Status',        cls: 'pg-col-status' },
-    { key: 'next',    label: 'Next Step',     cls: 'pg-col-next' },
-    { key: 'prev',    label: 'Previous Note', cls: 'pg-col-prev' },
-    { key: null,      label: 'Note',          cls: 'pg-col-note' }
-  ].forEach(col => {
+  PG_COLS.forEach(c => {
     const th = document.createElement('th');
-    th.className = col.cls + (col.key ? ' sortable' : '') + (col.key && col.key === sort.key ? ' sorted' : '');
-    th.textContent = col.label;
-    if (col.key) {
-      th.title = 'Sort by ' + col.label;
-      if (col.key === sort.key) {
+    th.className = 'pg-col-' + c.id + (c.sortable ? ' sortable' : '') + (c.id === sort.key ? ' sorted' : '');
+    th.textContent = c.label;
+    if (c.sortable) {
+      th.title = 'Sort by ' + c.label;
+      if (c.id === sort.key) {
         const arrow = document.createElement('span');
         arrow.className = 'pg-sort-arrow';
         arrow.textContent = sort.dir === 'asc' ? '▲' : '▼';
         th.appendChild(arrow);
       }
-      th.addEventListener('click', () => setGridSort(col.key));
+      // A drag that ends over the header must not also sort. The suppressed
+      // click consumes the flag, so the very next ordinary click still sorts.
+      th.addEventListener('click', () => {
+        if (_pgDragged) { _pgDragged = false; return; }
+        setGridSort(c.id);
+      });
     }
+    th.appendChild(pgResizeHandle(c, colEls[c.id], table));
     hrow.appendChild(th);
   });
+  const fillerTh = document.createElement('th');
+  fillerTh.className = 'pg-col-filler';
+  hrow.appendChild(fillerTh);
   thead.appendChild(hrow);
   table.appendChild(thead);
 
@@ -3324,6 +3453,59 @@ function renderProjectGridPanel() {
   return section;
 }
 
+/* Suppresses the click a finished drag would otherwise deliver to the header
+ * underneath it. Cleared on the next tick, so an ordinary click still sorts. */
+let _pgDragged = false;
+
+function pgResizeHandle(col, colEl, table) {
+  const handle = document.createElement('span');
+  handle.className = 'pg-resize';
+  handle.dataset.pgResize = col.id;
+  handle.title = 'Drag to resize · double-click to reset this column';
+  handle.addEventListener('click', e => e.stopPropagation());
+  handle.addEventListener('dblclick', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    resetGridWidths(col.id);
+  });
+
+  handle.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    // Measured from the stored width rather than the rendered box: they are the
+    // same number by construction, and this way a drag can't inherit a rounding
+    // error from layout.
+    const startW = getGridWidths()[col.id];
+    let width = startW;
+    let moved = false;
+    handle.classList.add('dragging');
+
+    const onMove = ev => {
+      width = Math.max(PG_MIN_COL, startW + (ev.clientX - startX));
+      if (width !== startW) moved = true;
+      colEl.style.width = width + 'px';
+      const others = PG_COLS.reduce((n, c) => n + (c.id === col.id ? 0 : getGridWidths()[c.id]), 0);
+      table.style.minWidth = (others + width) + 'px';
+    };
+    const onUp = () => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      handle.classList.remove('dragging');
+      if (!moved) return;
+      _pgDragged = true;
+      // Backstop for a drag that ends away from any header, where no click
+      // arrives to consume the flag.
+      setTimeout(() => { _pgDragged = false; }, 0);
+      setGridWidth(col.id, width);
+    };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+  });
+
+  return handle;
+}
+
 function pgFallbackCopy(text, done) {
   const ta = document.createElement('textarea');
   ta.value = text;
@@ -3336,7 +3518,7 @@ function pgFallbackCopy(text, done) {
 }
 
 function pgBuildRow(r, today, nextRowId) {
-  const { proj, pref } = r;
+  const { proj } = r;
   const tr = document.createElement('tr');
 
   // Project — with a red dot when something on it is overdue, since the grid
@@ -3357,17 +3539,7 @@ function pgBuildRow(r, today, nextRowId) {
   tdName.appendChild(link);
   tr.appendChild(tdName);
 
-  // Role
-  const tdRoles = document.createElement('td');
-  tdRoles.className = 'pg-col-roles';
-  [...pref.roles].sort().forEach(role => {
-    const tag = document.createElement('span');
-    tag.className = 'role-tag';
-    tag.style.background = getRoleColor(role);
-    tag.textContent = role;
-    tdRoles.appendChild(tag);
-  });
-  tr.appendChild(tdRoles);
+  tr.appendChild(pgTeamCell(r));
 
   // Status — the same control and store as My Projects, so they stay in step.
   const tdStatus = document.createElement('td');
@@ -3378,7 +3550,69 @@ function pgBuildRow(r, today, nextRowId) {
   tr.appendChild(pgNextStepCell(r, today, nextRowId));
   tr.appendChild(pgPrevNoteCell(r, today));
   tr.appendChild(pgNoteEntryCell(proj));
+  const fillerTd = document.createElement('td');
+  fillerTd.className = 'pg-col-filler';
+  tr.appendChild(fillerTd);
   return tr;
+}
+
+/* Who is on this project and in what role. You are listed too, marked rather
+ * than dropped: omitting yourself would make the column mean something
+ * different on every row, and you lose the confirmation of which role you are
+ * actually credited with here. */
+function pgTeamCell(r) {
+  const td = document.createElement('td');
+  td.className = 'pg-col-team';
+  const wrap = document.createElement('div');
+  wrap.className = 'pg-team';
+
+  if (!r.team.length) {
+    const none = document.createElement('span');
+    none.className = 'pg-team-empty';
+    none.textContent = 'No team recorded';
+    wrap.appendChild(none);
+    td.appendChild(wrap);
+    return td;
+  }
+
+  r.team.forEach(({ role, names }) => {
+    const line = document.createElement('div');
+    line.className = 'pg-team-line';
+
+    const label = document.createElement('span');
+    label.className = 'pg-team-role';
+    label.textContent = role;
+    label.style.color = getRoleColor(role);
+    line.appendChild(label);
+
+    const list = document.createElement('span');
+    list.className = 'pg-team-names';
+    // Three deep per role, then a count — one over-rostered project shouldn't
+    // stretch every other row.
+    names.slice(0, 3).forEach((name, i) => {
+      if (i) list.appendChild(document.createTextNode(', '));
+      const span = document.createElement('span');
+      if (name === selectedPerson) {
+        span.className = 'pg-team-me';
+        span.textContent = name + ' (you)';
+      } else {
+        span.textContent = name;
+      }
+      list.appendChild(span);
+    });
+    if (names.length > 3) {
+      const more = document.createElement('span');
+      more.className = 'pg-team-more';
+      more.textContent = ' +' + (names.length - 3);
+      list.appendChild(more);
+    }
+    line.appendChild(list);
+    line.title = role + ': ' + names.join(', ');
+    wrap.appendChild(line);
+  });
+
+  td.appendChild(wrap);
+  return td;
 }
 
 function pgNextStepCell(r, today, nextRowId) {
