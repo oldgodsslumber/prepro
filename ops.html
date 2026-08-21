@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260821c';
+window.PREPRO_BUILD = '20260821d';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,10 +26,10 @@ window.PREPRO_BUILD = '20260821c';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260821c"></script>
+<script type="module" src="./auth.js?v=20260821d"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20260821c"></script>
+<script src="./people.js?v=20260821d"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -293,13 +293,15 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .op-panel.dragging { opacity: .45; }
 .op-panel.drag-over-above { box-shadow: inset 0 3px 0 0 var(--accent); }
 .op-panel.drag-over-below { box-shadow: inset 0 -3px 0 0 var(--accent); }
-.op-add-bar { position: relative; margin: 6px 0 28px; }
+.op-add-bar { position: relative; margin: 0 0 18px; }
 .op-add-btn { font-size: 11px; font-weight: 600; color: var(--dim); background: var(--card); border: 1px dashed var(--border); border-radius: 6px; padding: 7px 16px; cursor: pointer; transition: color .15s, border-color .15s; }
 .op-add-btn:hover { color: var(--accent); border-color: var(--accent); }
-.op-add-menu { position: absolute; bottom: calc(100% + 6px); left: 0; min-width: 230px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 12px 34px rgba(0,0,0,.45); padding: 6px; z-index: 200; display: flex; flex-direction: column; gap: 2px; }
+.op-add-menu { position: absolute; top: calc(100% + 6px); left: 0; min-width: 230px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 12px 34px rgba(0,0,0,.45); padding: 6px; z-index: 200; display: flex; flex-direction: column; gap: 2px; }
 .op-add-menu-item { font-size: 12px; font-weight: 500; color: var(--text); background: transparent; border: none; border-radius: 5px; padding: 8px 10px; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 9px; }
 .op-add-menu-item:hover { background: var(--card); color: var(--accent); }
 .op-add-menu-item > span { color: var(--accent); font-weight: 700; }
+.op-panel.just-added { outline: 2px solid var(--accent); outline-offset: 5px; border-radius: 6px; transition: outline-color .4s; }
+.op-panel.just-added.fading { outline-color: transparent; }
 .op-add-menu-empty { font-size: 11px; color: var(--dim); font-style: italic; padding: 9px 10px; }
 
 /* ── METRICS VIEW ── */
@@ -2916,7 +2918,29 @@ function reorderPanel(view, dragId, targetId, placeBelow) {
   rerenderPanelView(view);
 }
 function hidePanel(view, id) { const l = getLayout(view); l.hidden.add(id); saveLayout(view, l); rerenderPanelView(view); }
-function showPanel(view, id) { const l = getLayout(view); l.hidden.delete(id); if (!l.order.includes(id)) l.order.push(id); saveLayout(view, l); rerenderPanelView(view); }
+function showPanel(view, id) {
+  const l = getLayout(view);
+  l.hidden.delete(id);
+  if (!l.order.includes(id)) l.order.push(id);
+  saveLayout(view, l);
+  rerenderPanelView(view);
+  // A re-shown panel returns to the slot it was hidden from, which can be far
+  // down a long view. Go to it rather than leaving the reader to hunt.
+  flashPanel(id);
+}
+
+/* Scroll a freshly shown panel into view and ring it briefly. No-op when the
+ * panel rendered nothing — a panel with no data right now isn't in the DOM. */
+function flashPanel(id) {
+  const el = document.querySelector('[data-panel-id="' + id + '"]');
+  if (!el) return;
+  // Guarded: this runs after the panel is already shown, so a host without
+  // scrollIntoView should lose the scroll, not throw out of the click handler.
+  if (el.scrollIntoView) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  el.classList.add('just-added');
+  setTimeout(() => el.classList.add('fading'), 900);
+  setTimeout(() => el.classList.remove('just-added', 'fading'), 1400);
+}
 
 function mkPanelBtn(txt, title) {
   const b = document.createElement('button');
@@ -3028,8 +3052,8 @@ function renderAddBar(view, layout) {
     menu.style.display = open ? 'none' : 'flex';
   });
 
-  bar.appendChild(menu);
   bar.appendChild(btn);
+  bar.appendChild(menu);
   return bar;
 }
 // Close any open add-panel menu on outside click.
@@ -3042,6 +3066,7 @@ function renderPanelView(view) {
   if (!container) return;
   container.innerHTML = '';
   const layout = getLayout(view);
+  container.appendChild(renderAddBar(view, layout));
   const visible = layout.order.filter(id => !layout.hidden.has(id));
   visible.forEach((id, vi) => {
     const def = panelDef(view, id);
@@ -3051,7 +3076,6 @@ function renderPanelView(view) {
     if (!content) return; // panel has no data right now → nothing to show
     container.appendChild(wrapPanel(view, def, content, vi, visible.length));
   });
-  container.appendChild(renderAddBar(view, layout));
 }
 
 // ── OPS DASHBOARD (heads-up) ──
