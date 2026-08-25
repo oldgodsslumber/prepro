@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260825a';
+window.PREPRO_BUILD = '20260825b';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,12 +29,12 @@ window.PREPRO_BUILD = '20260825a';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260825a"></script>
+<script type="module" src="./auth.js?v=20260825b"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20260825a"></script>
+<script src="./people.js?v=20260825b"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260825a"></script>
+<script src="./xlsx.full.min.js?v=20260825b"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -3370,17 +3370,26 @@ function handleExcelImport(file) {
       if (!existing) { newRows.push(o); return; }
       const newStatus     = (o.caseStatus || '').trim();
       const statusChanged = !!newStatus && newStatus !== ((existing.caseStatus || '').trim());
-      const producerFill  = !!(o.producer || '').trim() && !((existing.leadProducer || '').trim());
+      // A producer arriving for an empty slot is a backfill; one that differs
+      // from the lead we already hold is a handoff. Both must flag the row —
+      // treating only the backfill as a change meant a pure producer move was
+      // dropped into `skipped`, and the stale name then outlived the import on
+      // every page that reads leadProducer.
+      const incomingProd  = resolvePersonName(o.producer) || (o.producer || '').trim();
+      const oldProd       = (existing.leadProducer || '').trim();
+      const producerFill  = !!incomingProd && !oldProd;
+      const producerMoved = !!incomingProd && !!oldProd && incomingProd !== oldProd;
       // Ops folks rename tickets while the Case ID stays the same. Compare the
       // incoming Label against the existing project's label (its name minus the
       // Case ID prefix) so a rename is picked up as an update.
       const newLabel      = (o.label || '').trim();
       const oldLabel      = ticketLabelOf(existing);
       const labelChanged  = !!newLabel && newLabel.toLowerCase() !== oldLabel.toLowerCase();
-      if (statusChanged || producerFill || labelChanged) {
+      if (statusChanged || producerFill || producerMoved || labelChanged) {
         updateRows.push(Object.assign({}, o, {
           _update: true, _existingId: existing.id, _oldStatus: existing.caseStatus || '',
-          _oldLabel: oldLabel, _labelChanged: labelChanged
+          _oldLabel: oldLabel, _labelChanged: labelChanged,
+          _oldProducer: oldProd, _producerMoved: producerMoved
         }));
       } else {
         skipped.push(o);
@@ -3443,15 +3452,19 @@ function ticketLabelOf(proj) {
 }
 
 // Apply an "Updated" review row onto its existing project: refresh Case Status,
-// backfill lead producer only when empty, rename it when ops changed the ticket
-// label (Case ID unchanged), and move the project into the section its new status
-// maps to. Everything else (schedule, roster, attendees, notes) is left intact.
+// backfill an empty lead producer or apply a flagged producer handoff, rename it
+// when ops changed the ticket label (Case ID unchanged), and move the project into
+// the section its new status maps to. Everything else (schedule, roster,
+// attendees, notes) is left intact — a producer move does not reassign tasks.
 function applyTicketUpdate(row) {
   const proj = getProject(row._existingId);
   if (!proj) return false;
   const prod      = resolvePersonName(row.producer) || (row.producer || '').trim();
   const newStatus = (row.caseStatus || '').trim();
-  if (prod && !((proj.leadProducer || '').trim())) proj.leadProducer = prod;
+  // Backfill an empty lead, and apply a genuine handoff — but only one the user
+  // saw flagged and left checked in the review grid. A drag-set lead is never
+  // silently clobbered by an import the user didn't get to look at.
+  if (prod && (!((proj.leadProducer || '').trim()) || row._producerMoved)) proj.leadProducer = prod;
   if (newStatus) proj.caseStatus = newStatus;
   // Rename when the incoming Label differs from the last one Excel gave us.
   const newLabel = (row.label || '').trim();
@@ -3566,6 +3579,7 @@ function buildExcelReviewTable() {
       const tips = [];
       if (row._labelChanged) tips.push('Renamed from: "' + (row._oldLabel || '') + '"');
       if (row._oldStatus)    tips.push('Was: ' + row._oldStatus);
+      if (row._producerMoved) tips.push('Producer: ' + row._oldProducer + ' → ' + (row.producer || ''));
       if (tips.length) badge.title = tips.join(' · ');
     }
     kCell.appendChild(badge);

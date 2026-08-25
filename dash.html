@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260825a';
+window.PREPRO_BUILD = '20260825b';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,10 +26,10 @@ window.PREPRO_BUILD = '20260825a';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260825a"></script>
+<script type="module" src="./auth.js?v=20260825b"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and ops.html. -->
-<script src="./people.js?v=20260825a"></script>
+<script src="./people.js?v=20260825b"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -357,6 +357,7 @@ a.mp-name:hover { color: var(--accent); }
 .pg-team-role { flex-shrink: 0; min-width: 52px; font-size: 8px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
 .pg-team-names { font-size: 11px; color: var(--text); overflow-wrap: anywhere; }
 .pg-team-me { color: var(--accent); font-weight: 700; }
+.pg-team-lead { color: var(--accent); font-size: 9px; margin-left: 3px; vertical-align: 1px; }
 .pg-team-more { font-size: 9px; color: var(--dim); }
 .pg-team-empty { font-size: 11px; color: var(--dim); font-style: italic; }
 .pg-name { font-size: 12px; font-weight: 700; color: var(--text); text-decoration: none; }
@@ -3270,6 +3271,18 @@ function pgProjectTeam(proj, today) {
     byRole.get(r).add(name);
   };
 
+  // The curated lead producer goes in first, and unconditionally: a freshly
+  // assigned lead has no tasks yet and may not be on the roster, so deriving the
+  // column from history alone would omit the one name that matters most.
+  // Same sunset/capacity gate everyone else gets, but the role is taken as
+  // stated rather than run through creditRole — the field says Producer.
+  const lead = (proj.leadProducer && hasDashboard(proj.leadProducer)
+    && personCapacityOn(proj.leadProducer, today)) ? proj.leadProducer : null;
+  if (lead) {
+    if (!byRole.has('Producer')) byRole.set('Producer', new Set());
+    byRole.get('Producer').add(lead);
+  }
+
   Object.entries(proj.roster || {}).forEach(([role, names]) => (names || []).forEach(n => add(n, role, false)));
   (proj.tasks || []).forEach(t => {
     if (t.person && !t.isDueDate) add(t.person, t.role, false);
@@ -3277,10 +3290,18 @@ function pgProjectTeam(proj, today) {
   });
 
   // Producer, Editor, Animator — ROLE_CATS order, which is how the rest of the
-  // app lists them.
+  // app lists them. This column is deliberately "everyone who touched this",
+  // so a replaced producer stays listed — the lead marker is what disambiguates
+  // who currently owns it, and the lead sorts to the front so the slice(0, 3)
+  // in the cell renderer can never cut them.
   return [...INTERNAL_ROLES]
     .filter(role => byRole.has(role))
-    .map(role => ({ role, names: [...byRole.get(role)].sort() }));
+    .map(role => {
+      const names = [...byRole.get(role)].sort();
+      const isLead = role === 'Producer' && lead && names.includes(lead);
+      if (isLead) names.sort((a, b) => (b === lead) - (a === lead));
+      return { role, names, lead: isLead ? lead : null };
+    });
 }
 function pgTeamSortKey(groups) {
   return [...INTERNAL_ROLES]
@@ -3288,7 +3309,9 @@ function pgTeamSortKey(groups) {
     .join('|');
 }
 function pgTeamText(groups) {
-  return groups.map(g => g.role + ': ' + g.names.join(', ')).join('; ');
+  return groups.map(g =>
+    g.role + ': ' + g.names.map(n => n === g.lead ? n + ' (lead)' : n).join(', ')
+  ).join('; ');
 }
 
 function pgLatestNote(proj) {
@@ -3604,7 +3627,8 @@ function pgTeamCell(r) {
     return td;
   }
 
-  r.team.forEach(({ role, names }) => {
+  r.team.forEach(g => {
+    const { role, names } = g;
     const line = document.createElement('div');
     line.className = 'pg-team-line';
 
@@ -3628,6 +3652,14 @@ function pgTeamCell(r) {
         span.textContent = name;
       }
       list.appendChild(span);
+      // Who currently owns the project, as opposed to who has worked on it.
+      if (name === g.lead) {
+        const star = document.createElement('span');
+        star.className = 'pg-team-lead';
+        star.textContent = '★';
+        star.title = name + ' is the lead producer';
+        list.appendChild(star);
+      }
     });
     if (names.length > 3) {
       const more = document.createElement('span');
