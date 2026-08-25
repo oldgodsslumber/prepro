@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260825d';
+window.PREPRO_BUILD = '20260825e';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,10 +26,10 @@ window.PREPRO_BUILD = '20260825d';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260825d"></script>
+<script type="module" src="./auth.js?v=20260825e"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and ops.html. -->
-<script src="./people.js?v=20260825d"></script>
+<script src="./people.js?v=20260825e"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -463,7 +463,8 @@ a.lb-proj-name:hover { color: var(--accent); }
 .lb-proj-meta { font-size: 10px; color: var(--dim); margin-top: 2px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .lb-proj-bar-wrap { width: 90px; height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; flex-shrink: 0; }
 .lb-proj-bar { height: 100%; background: var(--accent); border-radius: 3px; }
-.lb-proj-pts { font-size: 11px; font-weight: 700; color: var(--text); width: 42px; text-align: right; flex-shrink: 0; }
+.lb-proj-pts { font-size: 11px; font-weight: 700; color: var(--text); width: 48px; text-align: right; flex-shrink: 0; cursor: help; }
+.lb-proj-clip { font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 8px; background: rgba(224,123,57,.16); color: #e07b39; cursor: help; }
 .lb-empty { color: var(--dim); font-size: 12px; font-style: italic; padding: 20px 0; text-align: center; }
 
 /* ── CUSTOMIZABLE PANELS ── */
@@ -704,7 +705,10 @@ let pendingAddSubtaskFor = null;
 
 // ── LOOK BACK PANEL STATE (per-browser) ──
 let lookbackYear   = new Date().getFullYear();
-let lookbackPeriod = 'H1'; // Q1 Q2 H1 Q3 Q4 H2 FY
+// Q1 Q2 H1 Q3 Q4 H2 FY. Default to the half you are actually in: hardcoding H1
+// meant that from July onward the panel opened on Jan–Jun and reported almost
+// no effort, because everything recent sat outside the window it was clipping to.
+let lookbackPeriod = new Date().getMonth() < 6 ? 'H1' : 'H2';
 (function loadLookback() {
   try {
     const raw = localStorage.getItem('dash_lookback');
@@ -4098,18 +4102,22 @@ function lbPeriodRange(year, periodKey) {
   return { start, end, months: [m0, m1], label, def };
 }
 
+// "Q3 2026" / "Full Year 2026" — the label without its month range in brackets.
+function lbShortLabel(range) { return range.label.replace(/ \(.*\)$/, ''); }
+
 // One pass over ALL non-ghost projects (including completed) collecting the
 // selected person's activity across [start, end].
 function aggregateLookback(start, end) {
   const byDay = {};                 // dateStr -> effort pts
   const byMonth = new Array(12).fill(0);
-  const byProject = new Map();       // projId -> { proj, pts, tasks, roles:Set, completed }
+  const byProject = new Map();       // projId -> { proj, pts, days, tasks, roles:Set, clipped, completed }
   const notes = [];
   let taskCount = 0, totalPts = 0, reviewCount = 0, ptoDays = 0;
 
   (state.projects || []).filter(p => !p.ghost).forEach(proj => {
-    let projPts = 0, projTasks = 0;
+    let projPts = 0, projTasks = 0, projClipped = false;
     const projRoles = new Set();
+    const projDays = new Set();
 
     (proj.tasks || []).forEach(t => {
       const s = t.date;
@@ -4134,16 +4142,20 @@ function aggregateLookback(start, end) {
       if (t.role) projRoles.add(t.role);
       (t.attendees || []).forEach(a => { if (a.person === selectedPerson && a.role) projRoles.add(a.role); });
 
-      // Distribute effort across each spanned day (matches getDayWorkload semantics).
+      // Distribute effort across each spanned day (matches getDayWorkload semantics),
+      // so a 4-day Medium task is 8 pts here, not 2. Days outside the period are
+      // not counted — flag it so the row can say the total is only part of the job.
+      if (from !== s || to !== e) projClipped = true;
       for (let d = from; d <= to; d = addDays(d, 1)) {
         byDay[d] = (byDay[d] || 0) + pts;
         byMonth[new Date(d + 'T00:00:00').getMonth()] += pts;
+        projDays.add(d);
         projPts += pts; totalPts += pts;
       }
     });
 
     if (projTasks > 0) {
-      byProject.set(proj.id, { proj, pts: projPts, tasks: projTasks, roles: projRoles, completed: !!proj.completed });
+      byProject.set(proj.id, { proj, pts: projPts, days: projDays.size, tasks: projTasks, roles: projRoles, clipped: projClipped, completed: !!proj.completed });
       (proj.notes || []).forEach(n => {
         if (n && n.date && n.date >= start && n.date <= end) notes.push({ note: n, projectName: proj.name });
       });
@@ -4274,8 +4286,18 @@ function renderLookbackPanel() {
     const meta = document.createElement('div');
     meta.className = 'lb-proj-meta';
     const roleTxt = [...r.roles].sort().join(', ') || '—';
-    meta.textContent = r.tasks + ' task' + (r.tasks === 1 ? '' : 's') + ' · ' + roleTxt;
+    // Days are spelled out because the points are effort × days: without them a
+    // low row reads like a miscount rather than like a short stint.
+    meta.textContent = r.tasks + ' task' + (r.tasks === 1 ? '' : 's') + ' · '
+      + r.days + ' day' + (r.days === 1 ? '' : 's') + ' · ' + roleTxt;
     main.appendChild(meta);
+    if (r.clipped) {
+      const clip = document.createElement('span');
+      clip.className = 'lb-proj-clip';
+      clip.textContent = 'runs outside ' + lbShortLabel(range);
+      clip.title = 'Some of your work on this project falls outside the selected period, so only the days inside it are counted here. Widen the period to see the rest.';
+      meta.appendChild(clip);
+    }
     row.appendChild(main);
 
     const barWrap = document.createElement('div');
@@ -4288,7 +4310,10 @@ function renderLookbackPanel() {
 
     const pts = document.createElement('div');
     pts.className = 'lb-proj-pts';
-    pts.textContent = r.pts + ' pt';
+    pts.textContent = r.pts + (r.pts === 1 ? ' pt' : ' pts');
+    pts.title = r.pts + ' effort points = each task’s level of effort counted once per day it runs'
+      + ' (low 1 · medium 2 · high 3), across ' + r.days + ' day' + (r.days === 1 ? '' : 's')
+      + ' in ' + lbShortLabel(range) + '.';
     row.appendChild(pts);
 
     projList.appendChild(row);
@@ -4417,7 +4442,8 @@ function buildLookbackSummaryText(range, agg) {
   lines.push('PROJECTS (by effort)');
   [...agg.byProject.values()].sort((a, b) => b.pts - a.pts).forEach(r => {
     const roleTxt = [...r.roles].sort().join(', ') || '—';
-    lines.push('  • ' + r.proj.name + (r.completed ? ' [completed]' : '') + ' — ' + r.pts + ' pts, ' + r.tasks + ' tasks (' + roleTxt + ')');
+    lines.push('  • ' + r.proj.name + (r.completed ? ' [completed]' : '') + ' — ' + r.pts + ' pts, '
+      + r.tasks + ' tasks over ' + r.days + ' days (' + roleTxt + ')' + (r.clipped ? ' [also runs outside this period]' : ''));
   });
   if (agg.notes.length) {
     lines.push('');
