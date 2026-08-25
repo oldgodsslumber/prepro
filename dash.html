@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260821e';
+window.PREPRO_BUILD = '20260825a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,10 +26,10 @@ window.PREPRO_BUILD = '20260821e';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260821e"></script>
+<script type="module" src="./auth.js?v=20260825a"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and ops.html. -->
-<script src="./people.js?v=20260821e"></script>
+<script src="./people.js?v=20260825a"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -1756,7 +1756,9 @@ function renderSidebar() {
         myPerson = name;
         localStorage.setItem('dash_me', name);
       }
-      renderSidebar();
+      // Panels key "(you)" off myPerson, so the whole dashboard repaints —
+      // a sidebar-only redraw would leave the old marker on screen.
+      renderAll();
     });
     el.appendChild(meBtn);
 
@@ -3585,7 +3587,8 @@ function pgBuildRow(r, today, nextRowId) {
 /* Who is on this project and in what role. You are listed too, marked rather
  * than dropped: omitting yourself would make the column mean something
  * different on every row, and you lose the confirmation of which role you are
- * actually credited with here. */
+ * actually credited with here. "You" is the starred identity (myPerson) only —
+ * browsing someone else's dashboard must never relabel them as you. */
 function pgTeamCell(r) {
   const td = document.createElement('td');
   td.className = 'pg-col-team';
@@ -3618,7 +3621,7 @@ function pgTeamCell(r) {
     names.slice(0, 3).forEach((name, i) => {
       if (i) list.appendChild(document.createTextNode(', '));
       const span = document.createElement('span');
-      if (name === selectedPerson) {
+      if (myPerson && name === myPerson) {
         span.className = 'pg-team-me';
         span.textContent = name + ' (you)';
       } else {
