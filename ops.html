@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260825b';
+window.PREPRO_BUILD = '20260825c';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,10 +26,10 @@ window.PREPRO_BUILD = '20260825b';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260825b"></script>
+<script type="module" src="./auth.js?v=20260825c"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20260825b"></script>
+<script src="./people.js?v=20260825c"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -83,6 +83,8 @@ window._fbReady.then(({ db, ref, onValue }) => {
   /* Alternating week band on the Gantt/timeline — sits over --card. */
   --tl-band:    rgba(255,255,255,.045);
   --tl-band-hd: rgba(255,255,255,.05);
+  /* Hard divider drawn at the start of every week on the Gantt. */
+  --tl-week-line: #000;
 }
 
 /* ── LIGHT THEME ── */
@@ -96,6 +98,7 @@ window._fbReady.then(({ db, ref, onValue }) => {
   --accent:  #5a51e6;
   --tl-band:    rgba(27,28,38,.055);
   --tl-band-hd: rgba(27,28,38,.06);
+  --tl-week-line: #000;
 }
 :root[data-theme="light"] .m-gantt-track,
 :root[data-theme="light"] .m-cat-bar { background: #e2e4ee; }
@@ -443,6 +446,7 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .tl-day-cell.wk-band { background: var(--tl-band-hd); }
 .tl-day-cell.today   { background: rgba(108,99,255,.18); color: var(--accent); font-weight: 800; }
 .tl-day-cell.weekend { opacity: .4; }
+.tl-day-cell.wk-start { border-left: 1px solid var(--tl-week-line); }
 
 /* Person rows */
 .tl-person-row { display: flex; border-bottom: 1px solid var(--border); }
@@ -465,18 +469,24 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .tl-track {
   flex: 1; position: relative;
   background-color: var(--card);
-  background-image: linear-gradient(to right, var(--tl-band) 0%, var(--tl-band) 50%, transparent 50%, transparent 100%);
-  background-size: calc(var(--tl-band-w, 0px) * 2) 100%;
-  background-position: var(--tl-band-off, 0px) 0;
-  background-repeat: repeat;
+  /* Two tiles, both phased off --tl-band-off: a 1px week divider (repeats every
+     week) over the 2-week alternating shade. */
+  background-image:
+    linear-gradient(to right, var(--tl-week-line) 0, var(--tl-week-line) 1px, transparent 1px, transparent 100%),
+    linear-gradient(to right, var(--tl-band) 0%, var(--tl-band) 50%, transparent 50%, transparent 100%);
+  background-size: var(--tl-band-w, 0px) 100%, calc(var(--tl-band-w, 0px) * 2) 100%;
+  background-position: var(--tl-band-off, 0px) 0, var(--tl-band-off, 0px) 0;
+  background-repeat: repeat, repeat;
 }
 
 /* Task bars */
 .tl-task-bar { position: absolute; border-radius: 3px; color: #fff; display: flex; align-items: center; overflow: visible; cursor: grab; user-select: none; }
 .tl-task-bar:active { cursor: grabbing; }
 .tl-task-bar.dragging { opacity: .6; z-index: 50 !important; }
-.tl-pto-bar { cursor: default; background: repeating-linear-gradient(45deg, #3a8fb7 0, #3a8fb7 6px, #2e7396 6px, #2e7396 12px); border: 1px solid #57b0d4; }
+.tl-pto-bar { cursor: default; background: repeating-linear-gradient(45deg, #6e6e7b 0, #6e6e7b 6px, #56565f 6px, #56565f 12px); border: 1px solid #9a9aa6; }
 .tl-pto-bar .tl-bar-name { font-weight: 700; opacity: 1; }
+.tl-studio-bar { cursor: default; }
+.tl-studio-bar .tl-bar-name { font-weight: 700; opacity: 1; }
 .tl-resize-handle { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; z-index: 3; }
 .tl-resize-handle.left  { left: -3px; }
 .tl-resize-handle.right { right: -3px; }
@@ -1424,6 +1434,41 @@ function getPtoEntries() {
   return out;
 }
 
+// ── STUDIO BLOCKS ──
+// Studio Shoots / On-Location Shoots / "Studio Work" (set builds, strikes,
+// maintenance) are review-type tasks, so getOpsEntries only emits them once
+// they carry an Internal Team attendee with a name. Studio Work blocks are
+// created with an empty attendee list and usually never get crew, so the
+// studio's own booked time never reached the Gantt at all — the Studio
+// Calendar only escapes this by rendering straight from getStudioShoots().
+//
+// Returned timeline-shaped (same shape as getPtoEntries) and rendered on one
+// "Studio" resource row. Blocks that DO have named internal crew are left out:
+// those already draw on each crew member's row, and repeating them here would
+// double-count the same booking.
+const STUDIO_ROW = 'Studio';
+function getStudioBlockEntries() {
+  const out = [];
+  const today = todayStr();
+  (state.projects || []).filter(p => !isInactive(p) && !p.ghost).forEach(proj => {
+    (proj.tasks || []).forEach(task => {
+      if (!task.isReview || !isStudioLabel(task.reviewLabel)) return;
+      const onSomeonesRow = (task.attendees || []).some(a =>
+        a.category === 'Internal Team' && a.person && personCapacityOn(a.person, today));
+      if (onSomeonesRow) return;
+      const cat = getTaskCat(task);
+      out.push({
+        person: STUDIO_ROW, date: task.date, endDate: task.endDate || task.date,
+        cat, color: CAT_COLORS[cat] || '#c0394f', loe: task.loe || 'low',
+        taskName: task.taskName || task.reviewLabel || 'Studio',
+        projectName: proj.name, projectId: proj.id, taskId: task.id,
+        isStudioBlock: true
+      });
+    });
+  });
+  return out;
+}
+
 // ── PEOPLE LIST ──
 function getAllPeople() {
   const people = new Set();
@@ -1444,6 +1489,9 @@ function getTimelinePeople() {
   const today = todayStr();
   getOpsEntries().forEach(e => { if (e.person && personCapacityOn(e.person, today)) people.add(e.person); });
   getPtoEntries().forEach(e => { if (e.person && personCapacityOn(e.person, today)) people.add(e.person); });
+  // The studio is a resource, not a person, so it only exists on this list —
+  // getAllPeople (workload, pickers, breakdowns) deliberately never sees it.
+  if (getStudioBlockEntries().length) people.add(STUDIO_ROW);
   const alpha = [...people].sort();
   if (!personOrder.length) return alpha;
   const ordered = personOrder.filter(p => people.has(p));
@@ -1789,7 +1837,7 @@ function startTlDrag(e, entry, bar, personRow) {
     // Vertical — highlight target person row
     const targetPerson = getPersonRowAtY(ev.clientY);
     if (lastHighlightRow) lastHighlightRow.classList.remove('drop-target');
-    if (targetPerson && targetPerson !== entry.person) {
+    if (targetPerson && targetPerson !== entry.person && targetPerson !== STUDIO_ROW) {
       const rows = document.querySelectorAll('.tl-person-row');
       for (const r of rows) {
         const nm = r.querySelector('.tl-row-name-text');
@@ -1835,7 +1883,7 @@ function startTlDrag(e, entry, bar, personRow) {
 
     // Apply person reassignment
     const targetPerson = getPersonRowAtY(ev.clientY);
-    if (targetPerson && targetPerson !== entry.person) {
+    if (targetPerson && targetPerson !== entry.person && targetPerson !== STUDIO_ROW) {
       if (entry.attIdx != null) {
         // Reassign the attendee (reviews and role tasks alike)
         const att = (task.attendees || [])[entry.attIdx];
@@ -1997,8 +2045,10 @@ function renderTimeline() {
     const d   = new Date(ds + 'T00:00:00');
     const dow = d.getDay();
     const cell = document.createElement('div');
+    const bw = bandWeek(ds);
     cell.className = 'tl-day-cell'
-      + (bandWeek(ds).week % 2 ? ' wk-band' : '')
+      + (bw.week % 2 ? ' wk-band' : '')
+      + (bw.pos === 0 ? ' wk-start' : '')
       + (ds === today ? ' today' : '')
       + (dow === 0 || dow === 6 ? ' weekend' : '');
     cell.style.width = tlColW + 'px';
@@ -2017,10 +2067,12 @@ function renderTimeline() {
 
   const allEntries = getOpsEntries();
   const ptoAll     = getPtoEntries();
+  const studioAll  = getStudioBlockEntries();
   // Includes people who only appear on PTO, ordered by the saved row order.
   const people     = getTimelinePeople();
   const personColor = {};
   allEntries.forEach(e => { if (e.person && !personColor[e.person]) personColor[e.person] = e.color; });
+  personColor[STUDIO_ROW] = CAT_COLORS['Production'];
 
   const todayCol = tlDateMap.get(today) ?? null;
 
@@ -2030,11 +2082,12 @@ function renderTimeline() {
   }
 
   people.forEach(person => {
-    const entries    = allEntries.filter(e => e.person === person);
-    const ptoEntries = ptoAll.filter(e => e.person === person);
-    if (!entries.length && !ptoEntries.length) return;
+    const entries       = allEntries.filter(e => e.person === person);
+    const ptoEntries    = ptoAll.filter(e => e.person === person);
+    const studioEntries = studioAll.filter(e => e.person === person);
+    if (!entries.length && !ptoEntries.length && !studioEntries.length) return;
 
-    const laned    = assignLanes([...entries, ...ptoEntries]);
+    const laned    = assignLanes([...entries, ...ptoEntries, ...studioEntries]);
     const numLanes = Math.max(...laned.map(e => e.lane)) + 1;
     const trackH   = TL_PAD * 2 + numLanes * TL_LANE_H;
 
@@ -2113,6 +2166,26 @@ function renderTimeline() {
         pInner.appendChild(pLbl);
         pto.appendChild(pInner);
         track.appendChild(pto);
+        return;
+      }
+
+      // Studio blocks are a room booking, not somebody's task: read-only here
+      // (no drag/resize/reassign — there is no person to reassign them to).
+      if (entry.isStudioBlock) {
+        const sb = document.createElement('div');
+        sb.className = 'tl-task-bar tl-studio-bar';
+        sb.style.cssText = `left:${left}px;width:${width}px;top:${top}px;height:${TL_BAR_H}px;background:${entry.color};z-index:2;`;
+        sb.title = `Studio · ${entry.taskName}
+${entry.date}${entry.endDate && entry.endDate !== entry.date ? ' → ' + entry.endDate : ''} (${entry.projectName})`;
+        const sInner = document.createElement('div');
+        sInner.className = 'tl-bar-inner';
+        sInner.style.pointerEvents = 'none';
+        const sLbl = document.createElement('span');
+        sLbl.className = 'tl-bar-name';
+        sLbl.textContent = '🎬 ' + entry.taskName;
+        sInner.appendChild(sLbl);
+        sb.appendChild(sInner);
+        track.appendChild(sb);
         return;
       }
 

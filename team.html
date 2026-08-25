@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260825b';
+window.PREPRO_BUILD = '20260825c';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,12 +29,12 @@ window.PREPRO_BUILD = '20260825b';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260825b"></script>
+<script type="module" src="./auth.js?v=20260825c"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20260825b"></script>
+<script src="./people.js?v=20260825c"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260825b"></script>
+<script src="./xlsx.full.min.js?v=20260825c"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -78,6 +78,8 @@ input  { font: inherit; }
   /* Folder Gantt alternating-week shading (mirrors ops.html) */
   --tl-band:    rgba(255,255,255,.045);
   --tl-band-hd: rgba(255,255,255,.05);
+  /* Hard divider drawn at the start of every week on the Gantt. */
+  --tl-week-line: #000;
   /* Holiday country codes. Written as letters, not flag emoji — Chrome/Edge on
      Windows have no regional-indicator glyphs, so 🇺🇸 renders as a letterbox.
      The colour is what marks them as holiday markings at a glance. */
@@ -108,6 +110,7 @@ input  { font: inherit; }
   --ghost-ink-idle: rgba(27,28,38,.38);
   --tl-band:    rgba(27,28,38,.055);
   --tl-band-hd: rgba(27,28,38,.06);
+  --tl-week-line: #000;
   --holiday:      #a06a00;
   --holiday-soft: rgba(160,106,0,.14);
 }
@@ -442,6 +445,7 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 .tl-day-cell.wk-band { background: var(--tl-band-hd); }
 .tl-day-cell.today   { background: rgba(108,99,255,.18); color: var(--accent); font-weight: 800; }
 .tl-day-cell.weekend { opacity: .4; }
+.tl-day-cell.wk-start { border-left: 1px solid var(--tl-week-line); }
 
 /* Project group header — spans the full width, sticky left so the name stays put */
 .tl-group-row { display: flex; background: var(--panel); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
@@ -465,19 +469,29 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 .tl-track {
   flex: 1; position: relative;
   background-color: var(--card);
-  background-image: linear-gradient(to right, var(--tl-band) 0%, var(--tl-band) 50%, transparent 50%, transparent 100%);
-  background-size: calc(var(--tl-band-w, 0px) * 2) 100%;
-  background-position: var(--tl-band-off, 0px) 0;
-  background-repeat: repeat;
+  /* Two tiles, both phased off --tl-band-off: a 1px week divider (repeats every
+     week) over the 2-week alternating shade. */
+  background-image:
+    linear-gradient(to right, var(--tl-week-line) 0, var(--tl-week-line) 1px, transparent 1px, transparent 100%),
+    linear-gradient(to right, var(--tl-band) 0%, var(--tl-band) 50%, transparent 50%, transparent 100%);
+  background-size: var(--tl-band-w, 0px) 100%, calc(var(--tl-band-w, 0px) * 2) 100%;
+  background-position: var(--tl-band-off, 0px) 0, var(--tl-band-off, 0px) 0;
+  background-repeat: repeat, repeat;
 }
-.tl-group-row .tl-track { background-color: transparent; background-image: none; }
+/* Project header rows drop the week shade but keep the week dividers. */
+.tl-group-row .tl-track {
+  background-color: transparent;
+  background-image: linear-gradient(to right, var(--tl-week-line) 0, var(--tl-week-line) 1px, transparent 1px, transparent 100%);
+  background-size: var(--tl-band-w, 0px) 100%;
+  background-position: var(--tl-band-off, 0px) 0;
+}
 
 /* Task bars */
 .tl-task-bar { position: absolute; border-radius: 3px; color: #fff; display: flex; align-items: center; overflow: visible; cursor: grab; user-select: none; }
 .tl-task-bar:active { cursor: grabbing; }
 .tl-task-bar.dragging { opacity: .6; z-index: 50 !important; }
 .tl-task-bar.drag-accepting { outline: 2px solid var(--accent); outline-offset: 1px; }
-.tl-pto-bar { cursor: default; background: repeating-linear-gradient(45deg, #3a8fb7 0, #3a8fb7 6px, #2e7396 6px, #2e7396 12px); border: 1px solid #57b0d4; }
+.tl-pto-bar { cursor: default; background: repeating-linear-gradient(45deg, #6e6e7b 0, #6e6e7b 6px, #56565f 6px, #56565f 12px); border: 1px solid #9a9aa6; }
 .tl-pto-bar .tl-bar-name { font-weight: 700; opacity: 1; }
 .tl-holiday-bar { cursor: default; background: repeating-linear-gradient(45deg, #b58017 0, #b58017 6px, #8f6410 6px, #8f6410 12px); border: 1px solid #f0b429; }
 .tl-holiday-bar .tl-bar-name { font-weight: 700; opacity: 1; }
@@ -5365,8 +5379,10 @@ function renderFolderGantt() {
   tlDates.forEach(ds => {
     const d = new Date(ds + 'T00:00:00');
     const cell = document.createElement('div');
+    const bw = tlBandWeek(ds);
     cell.className = 'tl-day-cell'
-      + (tlBandWeek(ds).week % 2 ? ' wk-band' : '')
+      + (bw.week % 2 ? ' wk-band' : '')
+      + (bw.pos === 0 ? ' wk-start' : '')
       + (ds === today ? ' today' : '')
       + (isWeekend(d.getDay()) ? ' weekend' : '');
     cell.style.width = tlColW + 'px';
