@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260825e';
+window.PREPRO_BUILD = '20260826a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,10 +26,10 @@ window.PREPRO_BUILD = '20260825e';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260825e"></script>
+<script type="module" src="./auth.js?v=20260826a"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20260825e"></script>
+<script src="./people.js?v=20260826a"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -417,6 +417,31 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .person-view { flex: 1; min-height: 0; display: none; flex-direction: column; overflow: hidden; }
 .person-view.visible { display: flex; }
 
+.tl-filter-bar { display: none; align-items: center; gap: 8px; padding: 6px 14px; border-bottom: 1px solid var(--border); background: var(--panel); flex-shrink: 0; font-size: 11px; }
+.tl-filter-bar.on { display: flex; }
+.tl-filter-pill { display: inline-flex; align-items: center; gap: 6px; background: rgba(108,99,255,.16); border: 1px solid var(--accent); color: var(--accent); border-radius: 20px; padding: 2px 4px 2px 10px; font-weight: 700; }
+.tl-filter-pill button { background: none; border: none; color: inherit; cursor: pointer; font-size: 12px; line-height: 1; padding: 2px 5px; border-radius: 50%; }
+.tl-filter-pill button:hover { background: rgba(108,99,255,.3); }
+.tl-filter-note { color: var(--dim); }
+
+/* Legend popover (Gantt) */
+.ops-legend-wrap { position: relative; flex-shrink: 0; }
+.ops-legend-pop { position: absolute; top: calc(100% + 6px); right: 0; z-index: 200; width: 340px; max-height: 70vh; overflow-y: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 10px 32px rgba(0,0,0,.45); padding: 12px 14px; }
+.ops-legend-sec { font-size: 9px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .09em; margin: 0 0 7px; }
+.ops-legend-sec.spaced { margin-top: 14px; }
+.ops-legend-row { display: flex; align-items: flex-start; gap: 8px; padding: 4px 6px; border-radius: 5px; border: 1px solid transparent; }
+.ops-legend-row.pick { cursor: pointer; user-select: none; }
+.ops-legend-row.pick:hover { background: var(--card); }
+.ops-legend-row.pick.on { border-color: var(--accent); background: rgba(108,99,255,.1); }
+.ops-legend-row.pick.dim { opacity: .4; }
+.ops-legend-sw { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; margin-top: 2px; }
+.ops-legend-sw.pto { background: repeating-linear-gradient(45deg, #6e6e7b 0 3px, #56565f 3px 6px); border: 1px solid #9a9aa6; }
+.ops-legend-txt { min-width: 0; }
+.ops-legend-name { font-size: 11px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 6px; }
+.ops-legend-abbr { font-size: 8px; font-weight: 800; letter-spacing: .06em; color: var(--dim); border: 1px solid var(--border); border-radius: 3px; padding: 0 3px; }
+.ops-legend-why { font-size: 10px; color: var(--dim); line-height: 1.4; margin-top: 1px; }
+.ops-legend-foot { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+
 .tl-scroll { flex: 1; overflow: auto; position: relative; min-height: 0; }
 .tl-inner  { position: relative; display: inline-block; min-width: 100%; }
 
@@ -577,6 +602,10 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
     <button class="ops-zoom-btn" id="zoomInBtn" title="Zoom in">+</button>
   </div>
   <button class="ops-wknd-btn" id="wkndBtn">Show Weekends</button>
+  <div class="ops-legend-wrap" id="legendWrap">
+    <button class="ops-wknd-btn" id="legendBtn" title="What the bar colours mean — click a colour to filter the Gantt">&#127912; Legend</button>
+    <div class="ops-legend-pop" id="legendPop" style="display:none"></div>
+  </div>
   <button class="ops-wknd-btn" id="refreshBtn" title="Reload latest data from the scheduler">↺ Refresh</button>
   <button class="theme-toggle" id="themeToggle" title="Toggle light / dark mode">☀</button>
 </div>
@@ -613,6 +642,7 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 </div>
 
 <div class="person-view" id="personView">
+  <div class="tl-filter-bar" id="tlFilterBar"></div>
   <div class="tl-scroll" id="tlScroll">
     <div class="tl-inner" id="tlInner">
       <div class="tl-header" id="tlHeader">
@@ -720,6 +750,24 @@ let calLatestDate   = null;
 let calObserver     = null;
 let chipDisplay = 'categories'; // 'categories' | 'tasks'
 let personOrder = JSON.parse(localStorage.getItem('ops_person_order') || '[]'); // persisted row order
+/* ── GANTT LENS FILTER ──────────────────────────────────────────────────────
+ * The set of "lenses" the Gantt is currently narrowed to. Empty means show
+ * everything — an explicit "all" member would have to be kept in sync with
+ * CAT_COLORS forever, and empty-means-all needs no migration for people who
+ * already have the key stored.
+ *
+ * A lens is one of the CAT_COLORS categories, or the synthetic 'Studio'.
+ * Selected lenses OR together, so Animation + Studio shows both.
+ * ─────────────────────────────────────────────────────────────────────────── */
+let tlLens = (() => {
+  try {
+    const raw = JSON.parse(localStorage.getItem('ops_lens_filter') || '[]');
+    return new Set(Array.isArray(raw) ? raw : []);
+  } catch (_) { return new Set(); }
+})();
+function saveLens() {
+  try { localStorage.setItem('ops_lens_filter', JSON.stringify([...tlLens])); } catch (_) {}
+}
 const VALID_VIEW_MODES = ['headsup', 'person', 'studio', 'metrics', 'standup'];
 let viewMode = (() => {
   const saved = localStorage.getItem('ops_view_mode');
@@ -1362,13 +1410,18 @@ function getOpsEntries(opts) {
       if (task.isReview) {
         const cat = getTaskCat(task);
         const color = CAT_COLORS[cat] || '#6c63ff';
+        // Studio-ness rides on the review label, not the category: only the two
+        // shoot labels map to Production, so "Studio Work" would otherwise fall
+        // into whatever getProducerCat makes of its name and vanish from a
+        // studio-focused view. See lensesOf.
+        const isStudio = isStudioLabel(task.reviewLabel);
         // Iterate the FULL attendees array so attIdx is the real index into
         // task.attendees. Drag-reassign writes back by this index, so using a
         // filtered index would corrupt the wrong attendee when an external
         // attendee precedes an internal one.
         (task.attendees || []).forEach((att, attIdx) => {
           if (att.category !== 'Internal Team') return;
-          entries.push({ date: task.date, endDate: task.endDate || task.date, person: att.person || att.role, role: att.role, unassigned: !att.person, cat, taskName: task.taskName || task.reviewLabel || 'Review', loe, color, projectName: proj.name, projectId: proj.id, taskId: task.id, isReview: true, attIdx });
+          entries.push({ date: task.date, endDate: task.endDate || task.date, person: att.person || att.role, role: att.role, unassigned: !att.person, cat, taskName: task.taskName || task.reviewLabel || 'Review', loe, color, projectName: proj.name, projectId: proj.id, taskId: task.id, isReview: true, attIdx, reviewLabel: task.reviewLabel || '', isStudio });
         });
         return;
       }
@@ -1436,6 +1489,7 @@ function getStudioBlockEntries() {
         cat, color: CAT_COLORS[cat] || '#c0394f', loe: task.loe || 'low',
         taskName: task.taskName || task.reviewLabel || 'Studio',
         projectName: proj.name, projectId: proj.id, taskId: task.id,
+        reviewLabel: task.reviewLabel || '', isStudio: true,
         isStudioBlock: true
       });
     });
@@ -1615,6 +1669,201 @@ function renderFilterChips() {
 // Three letters each, matching team.html's ROLE_ABBR where the concepts line up
 // (Producing→PRD like Producer, Editing→EDT like Editor, Animation→ANM).
 const SHORT_CAT = { 'Pre-Production':'PRE','Producing':'PRD','Post-Producing':'PST','Editing':'EDT','Animation':'ANM','Production':'SHT','Administrative':'ADM' };
+
+/* -- LENS FILTER + LEGEND ----------------------------------------------------
+ * LENSES is the legend's content AND the filter's domain -- one list, so a new
+ * category can never show up as a colour with no explanation, or as an
+ * explanation you cannot filter by.
+ *
+ * `why` is the actual rule from getRoleCat / getProducerCat, not a paraphrase.
+ * The producer categories are decided by keyword-matching the TASK NAME, which
+ * is the single most surprising thing about this palette, so it says so.
+ * -------------------------------------------------------------------------- */
+const LENSES = [
+  { key: 'Pre-Production', why: 'Producer task whose name matches a pre keyword \u2014 script, storyboard, brief, concept, planning, casting, VO, scouting\u2026' },
+  { key: 'Producing',      why: 'Producer task matching neither keyword list. The catch-all, so an unnamed producer task lands here.' },
+  { key: 'Post-Producing', why: 'Producer task whose name matches a post keyword \u2014 edit, motion, vfx, v1/v2, revision, colour, mix, delivery, approval\u2026' },
+  { key: 'Editing',        why: 'Anyone working the Editor role. Never depends on the task name.' },
+  { key: 'Animation',      why: 'Anyone working the Animator role. Never depends on the task name.' },
+  { key: 'Production',     why: 'A Studio Shoot or On-Location Shoot.' },
+  { key: 'Administrative', why: 'Administrative or Team/Other Event role.' },
+  { key: 'Studio',         label: 'Studio (any)', color: CAT_COLORS['Production'], abbr: 'STU',
+    why: 'Cuts across the colours above: every shoot plus Studio Work, including studio blocks with no crew booked. Studio Work is not a shoot label, so it is usually coloured Producing.' }
+];
+function lensLabel(l) { return l.label || l.key; }
+function lensColor(l) { return l.color || CAT_COLORS[l.key] || '#6c63ff'; }
+function lensAbbr(l)  { return l.abbr  || SHORT_CAT[l.key] || ''; }
+
+// Every lens an entry answers to. Studio is additive -- a shoot is both
+// Production and Studio, so filtering by either one finds it.
+function lensesOf(entry) {
+  const out = entry.cat ? [entry.cat] : [];
+  if (entry.isStudio || entry.isStudioBlock) out.push('Studio');
+  return out;
+}
+// Empty filter means unfiltered. PTO is never tested: it stays visible on every
+// row that survives, because it is the reason a filtered lane looks empty.
+function passesLens(entry) {
+  if (!tlLens.size) return true;
+  return lensesOf(entry).some(l => tlLens.has(l));
+}
+
+function setLens(keys) {
+  tlLens = new Set(keys);
+  saveLens();
+  renderLegend();
+  syncLegendBtn();
+  if (viewMode === 'person') renderTimeline();
+}
+function toggleLens(key) {
+  const next = new Set(tlLens);
+  if (next.has(key)) next.delete(key); else next.add(key);
+  setLens(next);
+}
+
+function legendRow(opts) {
+  const row = document.createElement('div');
+  row.className = 'ops-legend-row' + (opts.pick ? ' pick' : '');
+  const sw = document.createElement('span');
+  sw.className = 'ops-legend-sw' + (opts.swClass ? ' ' + opts.swClass : '');
+  if (opts.color) sw.style.background = opts.color;
+  if (opts.emoji) {
+    sw.style.background = 'none';
+    sw.textContent = opts.emoji;
+    sw.style.marginTop = '0';
+    sw.style.fontSize = '11px';
+  }
+  row.appendChild(sw);
+  const txt = document.createElement('div');
+  txt.className = 'ops-legend-txt';
+  const name = document.createElement('div');
+  name.className = 'ops-legend-name';
+  name.appendChild(document.createTextNode(opts.name));
+  if (opts.abbr) {
+    const a = document.createElement('span');
+    a.className = 'ops-legend-abbr';
+    a.textContent = opts.abbr;
+    name.appendChild(a);
+  }
+  txt.appendChild(name);
+  if (opts.why) {
+    const why = document.createElement('div');
+    why.className = 'ops-legend-why';
+    why.textContent = opts.why;
+    txt.appendChild(why);
+  }
+  row.appendChild(txt);
+  return row;
+}
+
+function legendActionBtn(label, title, onClick) {
+  const b = document.createElement('button');
+  b.className = 'ops-filter-action-btn';
+  b.textContent = label;
+  if (title) b.title = title;
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+function renderLegend() {
+  const pop = document.getElementById('legendPop');
+  if (!pop) return;
+  pop.innerHTML = '';
+  const filtering = tlLens.size > 0;
+
+  const t1 = document.createElement('div');
+  t1.className = 'ops-legend-sec';
+  t1.textContent = 'Bar colour = work category \u00b7 click to filter';
+  pop.appendChild(t1);
+
+  LENSES.forEach(l => {
+    const row = legendRow({ pick: true, color: lensColor(l), name: lensLabel(l), abbr: lensAbbr(l), why: l.why });
+    if (tlLens.has(l.key)) row.classList.add('on');
+    else if (filtering) row.classList.add('dim');
+    row.addEventListener('click', () => toggleLens(l.key));
+    pop.appendChild(row);
+  });
+
+  const t2 = document.createElement('div');
+  t2.className = 'ops-legend-sec spaced';
+  t2.textContent = 'Dot at the end of a bar = level of effort';
+  pop.appendChild(t2);
+  [['\ud83d\udfe2', 'Low', '1 pt/day'], ['\ud83d\udfe1', 'Medium', '2 pts/day'], ['\ud83d\udd34', 'High', '3 pts/day']]
+    .forEach(e => pop.appendChild(legendRow({ emoji: e[0], name: e[1], why: e[2] })));
+
+  const t3 = document.createElement('div');
+  t3.className = 'ops-legend-sec spaced';
+  t3.textContent = 'Other bars';
+  pop.appendChild(t3);
+  pop.appendChild(legendRow({ swClass: 'pto', name: '\ud83c\udfd6 PTO / Holiday', why: 'Read-only here. Set on the project as a PTO or Holiday milestone, not by these colours. Stays visible when a filter is on.' }));
+  pop.appendChild(legendRow({ color: CAT_COLORS['Production'], name: '\ud83c\udfac Studio block', why: 'A studio booking with no named internal crew, drawn on the Studio resource row.' }));
+
+  const t4 = document.createElement('div');
+  t4.className = 'ops-legend-sec spaced';
+  t4.textContent = 'Not this palette';
+  pop.appendChild(t4);
+  pop.appendChild(legendRow({
+    color: (TEAMS[0] && TEAMS[0].color) || '#4a90d9',
+    name: 'Dot beside a person\u2019s name',
+    why: 'That is their TEAM colour (' + TEAMS.map(t => t.label).join(', ') + ') \u2014 a separate palette that reuses some of the same hex values. Blue on a bar means Pre-Production; blue on a name dot means Video Team.'
+  }));
+
+  const foot = document.createElement('div');
+  foot.className = 'ops-legend-foot';
+  foot.appendChild(legendActionBtn('All', 'Clear the filter', () => setLens([])));
+  foot.appendChild(legendActionBtn('Animator only', 'Only work in the Animation category', () => setLens(['Animation'])));
+  foot.appendChild(legendActionBtn('Studio only', 'Every shoot, Studio Work, and unassigned studio blocks', () => setLens(['Studio'])));
+  pop.appendChild(foot);
+}
+
+function renderTlFilterBar() {
+  const bar = document.getElementById('tlFilterBar');
+  if (!bar) return;
+  bar.innerHTML = '';
+  if (!tlLens.size) { bar.classList.remove('on'); return; }
+  bar.classList.add('on');
+  // Pills follow LENSES order, not click order, so the bar reads the same way
+  // the legend does.
+  LENSES.filter(l => tlLens.has(l.key)).forEach(l => {
+    const pill = document.createElement('span');
+    pill.className = 'tl-filter-pill';
+    const dot = document.createElement('span');
+    dot.style.cssText = 'width:8px;height:8px;border-radius:50%;flex-shrink:0;background:' + lensColor(l);
+    pill.appendChild(dot);
+    pill.appendChild(document.createTextNode(lensLabel(l)));
+    const x = document.createElement('button');
+    x.textContent = '\u2715';
+    x.title = 'Remove this filter';
+    x.addEventListener('click', () => toggleLens(l.key));
+    pill.appendChild(x);
+    bar.appendChild(pill);
+  });
+  const note = document.createElement('span');
+  note.className = 'tl-filter-note';
+  note.textContent = 'Rows with no matching work are hidden. PTO still shows.';
+  bar.appendChild(note);
+  bar.appendChild(legendActionBtn('Clear', 'Show everything again', () => setLens([])));
+}
+
+function toggleLegendPop(force) {
+  const pop = document.getElementById('legendPop');
+  if (!pop) return;
+  const open = force === undefined ? pop.style.display === 'none' : force;
+  if (open) renderLegend();
+  pop.style.display = open ? '' : 'none';
+}
+
+// The Legend button doubles as the filter's status light, so a filtered Gantt
+// stays obvious with the popover closed.
+function syncLegendBtn() {
+  const btn = document.getElementById('legendBtn');
+  if (!btn) return;
+  btn.classList.toggle('on', tlLens.size > 0);
+  btn.textContent = tlLens.size ? '\uD83C\uDFA8 Legend \u00b7 ' + tlLens.size : '\uD83C\uDFA8 Legend';
+  btn.title = tlLens.size
+    ? 'Gantt filtered to ' + LENSES.filter(l => tlLens.has(l.key)).map(lensLabel).join(', ') + ' \u2014 click to change'
+    : 'What the bar colours mean \u2014 click a colour to filter the Gantt';
+}
 
 function buildOpsChip(entry) {
   const chip = document.createElement('div');
@@ -1995,9 +2244,12 @@ function renderTimeline() {
   const rows = document.getElementById('tlRows');
   rows.innerHTML = '';
 
-  const allEntries = getOpsEntries();
+  renderTlFilterBar();
+  const filtering  = tlLens.size > 0;
+  // PTO is deliberately not filtered: see passesLens.
+  const allEntries = getOpsEntries().filter(passesLens);
   const ptoAll     = getPtoEntries();
-  const studioAll  = getStudioBlockEntries();
+  const studioAll  = getStudioBlockEntries().filter(passesLens);
   // Includes people who only appear on PTO, ordered by the saved row order.
   const people     = getTimelinePeople();
   const personColor = {};
@@ -2010,12 +2262,22 @@ function renderTimeline() {
     rows.innerHTML = '<div style="padding:20px;color:var(--dim);font-size:12px">No internal team tasks found.</div>';
     return;
   }
+  // A filter that matches nothing must not look like missing data.
+  if (filtering && !allEntries.length && !studioAll.length) {
+    rows.innerHTML = '<div style="padding:20px;color:var(--dim);font-size:12px">No work matches this filter. Clear it in the bar above, or from the Legend.</div>';
+    return;
+  }
 
   people.forEach(person => {
     const entries       = allEntries.filter(e => e.person === person);
     const ptoEntries    = ptoAll.filter(e => e.person === person);
     const studioEntries = studioAll.filter(e => e.person === person);
-    if (!entries.length && !ptoEntries.length && !studioEntries.length) return;
+    // Unfiltered, a PTO-only row is worth showing — it says where somebody is.
+    // Filtered, it is noise: "animator work only" should not list every producer
+    // with a holiday booked. So while a lens is on, a row has to earn its place
+    // with real matching work, and PTO then rides along on the rows that stay.
+    if (filtering ? (!entries.length && !studioEntries.length)
+                  : (!entries.length && !ptoEntries.length && !studioEntries.length)) return;
 
     const laned    = assignLanes([...entries, ...ptoEntries, ...studioEntries]);
     const numLanes = Math.max(...laned.map(e => e.lane)) + 1;
@@ -2235,9 +2497,14 @@ function applyViewMode() {
   const wkndBtn = document.getElementById('wkndBtn');
   const isTimeline = viewMode === 'person';
   const isStudio = viewMode === 'studio';
+  const legendWrap = document.getElementById('legendWrap');
   chipToggle.style.display = isTimeline ? '' : 'none';
   zoomGroup.style.display = isTimeline ? '' : 'none';
   wkndBtn.style.display = (isTimeline || isStudio) ? '' : 'none';
+  if (legendWrap) legendWrap.style.display = isTimeline ? '' : 'none';
+  // The filter itself persists across views — only the popover closes, so
+  // coming back to the Gantt finds it exactly as you left it.
+  if (!isTimeline) toggleLegendPop(false);
 
   // Standup uses the .visible class for display; clear it on every switch and
   // let the standup branch below re-add it, so we don't have to touch each view.
@@ -5167,6 +5434,20 @@ function init() {
 
   document.getElementById('refreshBtn').addEventListener('click', () => {
     if (window._fbState) reloadState(window._fbState);
+  });
+
+  // ── Gantt legend / lens filter ──
+  document.getElementById('legendBtn').addEventListener('click', e => {
+    e.stopPropagation();
+    toggleLegendPop();
+  });
+  // Clicks inside the popover toggle lenses and must not close it; anything
+  // outside does close it. Escape closes it too.
+  document.getElementById('legendPop').addEventListener('click', e => e.stopPropagation());
+  syncLegendBtn();
+  document.addEventListener('click', () => toggleLegendPop(false));
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') toggleLegendPop(false);
   });
 
   document.getElementById('wkndBtn').addEventListener('click', () => {
