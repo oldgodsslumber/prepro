@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260828d';
+window.PREPRO_BUILD = '20260828e';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,15 +29,15 @@ window.PREPRO_BUILD = '20260828d';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260828d"></script>
+<script type="module" src="./auth.js?v=20260828e"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260828d"></script>
+<script src="./whatsnew.js?v=20260828e"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20260828d"></script>
+<script src="./people.js?v=20260828e"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260828d"></script>
+<script src="./xlsx.full.min.js?v=20260828e"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -8758,7 +8758,44 @@ function renderExportPanel() {
     };
     mkPNGOpt('Show attendees',   exportPNGAttendees, v => { exportPNGAttendees = v; });
     mkPNGOpt('Show PTO & holidays', exportPNGPTO,    v => { exportPNGPTO       = v; });
-    mkPNGOpt('Overlay company holidays', exportPNGHolidays, v => { exportPNGHolidays = v; });
+    mkPNGOpt('Overlay company holidays', exportPNGHolidays, v => { exportPNGHolidays = v; renderExportPanel(); });
+
+    // Say up front what the overlay will actually draw. A holiday that falls
+    // outside these weeks, or one nobody on this project is based for, is a
+    // legitimate empty result — but it looks exactly like a broken option, so
+    // the count and the reason are on screen rather than left to guesswork.
+    if (exportPNGHolidays) {
+      const p2 = getProject(activeProjectId);
+      const hStatus = document.createElement('div');
+      hStatus.className = 'export-note';
+      hStatus.style.cssText = 'flex-basis:100%;margin-top:2px';
+      if (p2) {
+        const range = pngExportDays(p2);
+        const inWin = collectHolidayDays(p2);
+        const names = new Set();
+        range.days.forEach(ds => (inWin.get(ds) || []).forEach(h => names.add(h.name)));
+        // Every holiday in the workspace, ignoring both filters — the difference
+        // between this and `names` is the whole diagnosis.
+        let total = 0;
+        (state.projects || []).forEach(pr => {
+          if (pr.isFolder) return;
+          (pr.tasks || []).forEach(t => { if (isHolidayTask(t)) total++; });
+        });
+        if (names.size) {
+          hStatus.textContent = '🎆 ' + names.size + ' holiday' + (names.size === 1 ? '' : 's')
+            + ' in this export: ' + Array.from(names).join(', ');
+        } else if (!total) {
+          hStatus.textContent = '🎆 Nothing to overlay — no Holiday key dates exist yet. '
+            + 'A holiday has to be a key date with the Holiday type (🎆), not PTO (🏖).';
+        } else {
+          hStatus.textContent = '🎆 Nothing to overlay — ' + total + ' holiday'
+            + (total === 1 ? '' : 's') + ' on file, but none falls between '
+            + range.days[0] + ' and ' + range.days[range.days.length - 1]
+            + ' for the offices this project’s people are in.';
+        }
+      }
+      opts.appendChild(hStatus);
+    }
 
     const actions = document.createElement('div');
     actions.className = 'export-actions';
@@ -8973,13 +9010,12 @@ function canvasRoundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-function exportPNG() {
-  const proj = getProject(activeProjectId);
-  if (!proj) return;
-
-  // ── date range ──
+// The weeks a PNG export covers: the Monday of the week the first task starts
+// in, four weeks minimum, extended to the end of the week the last task ends
+// in. Lifted out of exportPNG so the export panel can say what actually falls
+// inside the window before you click Download.
+function pngExportDays(proj) {
   const todayD = new Date(); todayD.setHours(0,0,0,0);
-
   // Start from the Monday of the week containing the first task
   let startD;
   if (proj.tasks.length) {
@@ -9017,6 +9053,17 @@ function exportPNG() {
       days.push(fmtDate(cur.getFullYear(), cur.getMonth() + 1, cur.getDate()));
     cur.setDate(cur.getDate() + 1);
   }
+  return { days, startD, endD };
+}
+
+function exportPNG() {
+  const proj = getProject(activeProjectId);
+  if (!proj) return;
+
+  // ── date range ──
+  const todayD = new Date(); todayD.setHours(0,0,0,0);
+
+  const { days, startD, endD } = pngExportDays(proj);
 
   // ── company holidays ──
   // Drawn as a banner across the top of the day rather than as a chip: it isn't
