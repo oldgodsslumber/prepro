@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260828a';
+window.PREPRO_BUILD = '20260828b';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,15 +29,15 @@ window.PREPRO_BUILD = '20260828a';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260828a"></script>
+<script type="module" src="./auth.js?v=20260828b"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260828a"></script>
+<script src="./whatsnew.js?v=20260828b"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20260828a"></script>
+<script src="./people.js?v=20260828b"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260828a"></script>
+<script src="./xlsx.full.min.js?v=20260828b"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1306,14 +1306,22 @@ function holidayFlagText(task) { return holidayFlags(task).join(', '); }
 // Every holiday in the workspace, keyed by the days it covers — the PNG export
 // draws a project's own tasks only, so without this a company holiday sitting in
 // the shared Holidays project is invisible on every other project's export.
-// `excludeProjectId` keeps the Holidays project itself from drawing each holiday
-// twice (once as its own chip, once as the overlay banner).
-function collectHolidayDays(excludeProjectId) {
+// `forProject` is the project being exported: it's excluded as a source (so the
+// Holidays project doesn't draw each holiday twice, once as its own chip and once
+// as the overlay banner), and its people decide which holidays are worth showing.
+// A holiday tagged to specific offices is only relevant if somebody on this
+// project is actually based in one of them; an untagged holiday is company-wide
+// and always shows.
+function collectHolidayDays(forProject) {
+  const excludeId = forProject ? forProject.id : null;
+  const countries = projectCountries(forProject);
   const byDate = new Map();   // dateStr → [{ name, codes }]
   (state.projects || []).forEach(p => {
-    if (p.isFolder || p.ghost || isInactive(p) || p.id === excludeProjectId) return;
+    if (p.isFolder || p.ghost || isInactive(p) || p.id === excludeId) return;
     (p.tasks || []).forEach(t => {
       if (!isHolidayTask(t)) return;
+      const flags = holidayFlags(t);
+      if (flags.length && !flags.some(c => countries.has(c))) return;
       const name  = t.taskName || milestoneLabel('holiday');
       const codes = holidayFlagText(t);
       const end   = new Date((t.endDate || t.date) + 'T00:00:00');
@@ -1329,6 +1337,26 @@ function collectHolidayDays(excludeProjectId) {
     });
   });
   return byDate;
+}
+
+// The home countries represented on a project — its roster plus anyone assigned
+// to or invited onto a task. People with no country recorded (externals, mostly)
+// contribute nothing, and people who have left entirely don't count as being on
+// the project any more.
+function projectCountries(proj) {
+  const out = new Set();
+  if (!proj) return out;
+  const add = name => {
+    if (!name || personGoneEntirely(name)) return;
+    const c = personCountry(name);
+    if (c) out.add(c);
+  };
+  Object.values(proj.roster || {}).forEach(names => (names || []).forEach(add));
+  (proj.tasks || []).forEach(t => {
+    add(t.person);
+    (t.attendees || []).forEach(a => add(a.person));
+  });
+  return out;
 }
 
 // ── MILESTONE TYPE DISPLAY ──
@@ -8992,7 +9020,7 @@ function exportPNG() {
   // sized off the busiest day in the whole export and reserved in EVERY cell, so
   // multi-day bars keep the same lane height across cells that do and don't have
   // a holiday on them.
-  const holiDays = exportPNGHolidays ? collectHolidayDays(proj.id) : new Map();
+  const holiDays = exportPNGHolidays ? collectHolidayDays(proj) : new Map();
   const holiMax  = days.reduce((m, ds) => Math.max(m, (holiDays.get(ds) || []).length), 0);
 
   const COLS   = showWeekends ? 7 : 5;
