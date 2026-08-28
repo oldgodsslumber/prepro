@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260828c';
+window.PREPRO_BUILD = '20260828d';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,15 +29,15 @@ window.PREPRO_BUILD = '20260828c';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260828c"></script>
+<script type="module" src="./auth.js?v=20260828d"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260828c"></script>
+<script src="./whatsnew.js?v=20260828d"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20260828c"></script>
+<script src="./people.js?v=20260828d"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260828c"></script>
+<script src="./xlsx.full.min.js?v=20260828d"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1311,17 +1311,23 @@ function holidayFlagText(task) { return holidayFlags(task).join(', '); }
 // as the overlay banner), and its people decide which holidays are worth showing.
 // A holiday tagged to specific offices is only relevant if somebody on this
 // project is actually based in one of them; an untagged holiday is company-wide
-// and always shows.
+// and always shows. Country is a hand-filled field, so a project where nobody
+// has one recorded gets every holiday rather than none — unknown is not the
+// same as "nobody here celebrates it".
 function collectHolidayDays(forProject) {
   const excludeId = forProject ? forProject.id : null;
   const countries = projectCountries(forProject);
   const byDate = new Map();   // dateStr → [{ name, codes }]
   (state.projects || []).forEach(p => {
-    if (p.isFolder || p.ghost || isInactive(p) || p.id === excludeId) return;
+    // Only folders and the exported project itself are skipped. The Holidays
+    // project is routinely ghosted (hidden from Ops) and can read as inactive,
+    // but a company holiday is a fact about the calendar either way — filtering
+    // on project status is what stopped this drawing anything at all.
+    if (p.isFolder || p.id === excludeId) return;
     (p.tasks || []).forEach(t => {
       if (!isHolidayTask(t)) return;
       const flags = holidayFlags(t);
-      if (flags.length && !flags.some(c => countries.has(c))) return;
+      if (flags.length && countries.size && !flags.some(c => countries.has(c))) return;
       const name  = t.taskName || milestoneLabel('holiday');
       const codes = holidayFlagText(t);
       const end   = new Date((t.endDate || t.date) + 'T00:00:00');
@@ -9020,6 +9026,13 @@ function exportPNG() {
   // a holiday on them.
   const holiDays = exportPNGHolidays ? collectHolidayDays(proj) : new Map();
   const holiMax  = days.reduce((m, ds) => Math.max(m, (holiDays.get(ds) || []).length), 0);
+  // Nothing to draw is a legitimate outcome (no holiday in these weeks), but it
+  // looks identical to the option being broken, so say which one it was.
+  if (exportPNGHolidays && !holiMax) {
+    console.info('PNG export: no holiday banners drawn.',
+      holiDays.size ? holiDays.size + ' holiday day(s) exist, but none fall inside ' + days[0] + '–' + days[days.length - 1]
+                    : 'No Holiday key dates found outside this project.');
+  }
 
   const COLS   = showWeekends ? 7 : 5;
   const SC     = 2;                        // retina scale
