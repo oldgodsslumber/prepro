@@ -17,6 +17,21 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-08-28',
+    title: 'Company holidays on the PNG export',
+    dateLabel: 'Aug 28, 2026',
+    groups: [
+      {
+        area: 'Team · PNG Export',
+        items: [
+          { tag: 'new', text: 'A new Overlay company holidays option puts every holiday from the shared Holidays project onto the exported calendar, as an amber banner across the top of the day. Until now the PNG only drew the project’s own tasks, so a company shutdown was invisible on every other project’s export.' },
+          { tag: 'new', text: 'The banner carries the country codes the same way the on-screen overlay does — “US·IN”, “ALL” when every office is off, and nothing at all when no office is picked, which reads as company-wide.' },
+          { tag: 'fix', text: 'Turning it on makes the day cells taller rather than squeezing the banners in, so a busy day cannot quietly drop a task off the bottom of the export.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-08-26',
     title: 'Gantt colours, the Look Back window, and one lead producer',
     // Human range, not a commit range: this covers the work from the afternoon

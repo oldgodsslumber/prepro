@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260826b';
+window.PREPRO_BUILD = '20260828a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,13 +26,13 @@ window.PREPRO_BUILD = '20260826b';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260826b"></script>
+<script type="module" src="./auth.js?v=20260828a"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260826b"></script>
+<script src="./whatsnew.js?v=20260828a"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and ops.html. -->
-<script src="./people.js?v=20260826b"></script>
+<script src="./people.js?v=20260828a"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {

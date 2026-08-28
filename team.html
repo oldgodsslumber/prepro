@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260826b';
+window.PREPRO_BUILD = '20260828a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,15 +29,15 @@ window.PREPRO_BUILD = '20260826b';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260826b"></script>
+<script type="module" src="./auth.js?v=20260828a"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260826b"></script>
+<script src="./whatsnew.js?v=20260828a"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20260826b"></script>
+<script src="./people.js?v=20260828a"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260826b"></script>
+<script src="./xlsx.full.min.js?v=20260828a"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1303,6 +1303,34 @@ function holidayFlags(task) {
 // "US" / "US, IN" / "" when nothing is picked (reads as company-wide).
 function holidayFlagText(task) { return holidayFlags(task).join(', '); }
 
+// Every holiday in the workspace, keyed by the days it covers — the PNG export
+// draws a project's own tasks only, so without this a company holiday sitting in
+// the shared Holidays project is invisible on every other project's export.
+// `excludeProjectId` keeps the Holidays project itself from drawing each holiday
+// twice (once as its own chip, once as the overlay banner).
+function collectHolidayDays(excludeProjectId) {
+  const byDate = new Map();   // dateStr → [{ name, codes }]
+  (state.projects || []).forEach(p => {
+    if (p.isFolder || p.ghost || isInactive(p) || p.id === excludeProjectId) return;
+    (p.tasks || []).forEach(t => {
+      if (!isHolidayTask(t)) return;
+      const name  = t.taskName || milestoneLabel('holiday');
+      const codes = holidayFlagText(t);
+      const end   = new Date((t.endDate || t.date) + 'T00:00:00');
+      let d = new Date(t.date + 'T00:00:00');
+      while (d <= end) {
+        const ds = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+        if (!byDate.has(ds)) byDate.set(ds, []);
+        const list = byDate.get(ds);
+        // The same holiday can be entered on two projects; it's still one day off.
+        if (!list.some(h => h.name === name && h.codes === codes)) list.push({ name, codes });
+        d.setDate(d.getDate() + 1);
+      }
+    });
+  });
+  return byDate;
+}
+
 // ── MILESTONE TYPE DISPLAY ──
 // One table instead of the emoji/label ternary chain that used to be copy-pasted
 // across the chip, the panel, the type switcher, the exports and the PNG render.
@@ -1486,6 +1514,7 @@ let exportOptAttendees  = true;
 let exportPNGRoles      = true;
 let exportPNGAttendees  = true;
 let exportPNGPTO        = false;
+let exportPNGHolidays   = false;
 let showWeekends    = false;
 let showGhosts      = true;
 let resizeState     = null;
@@ -8697,6 +8726,7 @@ function renderExportPanel() {
     mkPNGOpt('Include roles',    exportPNGRoles,     v => { exportPNGRoles     = v; });
     mkPNGOpt('Show attendees',   exportPNGAttendees, v => { exportPNGAttendees = v; });
     mkPNGOpt('Show PTO & holidays', exportPNGPTO,    v => { exportPNGPTO       = v; });
+    mkPNGOpt('Overlay company holidays', exportPNGHolidays, v => { exportPNGHolidays = v; });
 
     const actions = document.createElement('div');
     actions.className = 'export-actions';
@@ -8956,10 +8986,23 @@ function exportPNG() {
     cur.setDate(cur.getDate() + 1);
   }
 
+  // ── company holidays ──
+  // Drawn as a banner across the top of the day rather than as a chip: it isn't
+  // this project's work, it's a day the office is shut. The block of banners is
+  // sized off the busiest day in the whole export and reserved in EVERY cell, so
+  // multi-day bars keep the same lane height across cells that do and don't have
+  // a holiday on them.
+  const holiDays = exportPNGHolidays ? collectHolidayDays(proj.id) : new Map();
+  const holiMax  = days.reduce((m, ds) => Math.max(m, (holiDays.get(ds) || []).length), 0);
+
   const COLS   = showWeekends ? 7 : 5;
   const SC     = 2;                        // retina scale
   const CW     = 155 * SC;
-  const CH     = 150 * SC;
+  const HOLI_ROW = 15 * SC;                // banner height + its gap
+  const HOLI_H   = holiMax * HOLI_ROW;
+  // The cell grows by the banner block instead of the banners eating into the
+  // chip budget — otherwise a busy day would silently drop a task off the export.
+  const CH     = 150 * SC + HOLI_H;
   const HDR_H  = 28 * SC;
   const TTL_H  = 46 * SC;
   const ROWS   = Math.ceil(days.length / COLS);
@@ -9053,11 +9096,39 @@ function exportPNG() {
       ctx.fillText(d.toLocaleDateString('en-US',{month:'short'}), cx + 25*SC, cy + 18*SC);
     }
 
+    // Company-holiday banners. Same amber as the on-screen overlay, and the same
+    // compact code form ("US·IN", "ALL" for every office, nothing at all when
+    // no code is picked — that reads as company-wide).
+    (holiDays.get(dateStr) || []).forEach((h, i) => {
+      const by = cy + 24*SC + i * HOLI_ROW;
+      const bx = cx + 4*SC;
+      const bw = CW - 8*SC;
+      const bh = 13*SC;
+      ctx.fillStyle = 'rgba(240,180,41,0.16)';
+      canvasRoundRect(ctx, bx, by, bw, bh, 3*SC);
+      ctx.fill();
+      ctx.strokeStyle = '#f0b429';
+      ctx.lineWidth = SC;
+      ctx.stroke();
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(bx + 3*SC, by, bw - 6*SC, bh);
+      ctx.clip();
+      const codeList = h.codes ? h.codes.split(', ') : [];
+      const short = codeList.length === HOLIDAY_CODES.length ? 'ALL' : codeList.join('·');
+      ctx.fillStyle = '#f0b429';
+      ctx.font = `bold ${7*SC}px system-ui,sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.fillText(milestoneEmoji('holiday') + (short ? ' ' + short : '') + '  ' + h.name, bx + 4*SC, by + 9*SC);
+      ctx.restore();
+    });
+
     // Render per lane so multi-day cards align vertically across cells and
     // use the same height on every segment (single tall card, not start-tall/
     // continuation-short).
     const laneArr = layout.get(dateStr) || [];
-    let ty = cy + 28*SC;
+    let ty = cy + 28*SC + HOLI_H;
 
     laneArr.forEach(entry => {
       if (!entry) return;
