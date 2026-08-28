@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260828b';
+window.PREPRO_BUILD = '20260828c';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,15 +29,15 @@ window.PREPRO_BUILD = '20260828b';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260828b"></script>
+<script type="module" src="./auth.js?v=20260828c"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260828b"></script>
+<script src="./whatsnew.js?v=20260828c"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20260828b"></script>
+<script src="./people.js?v=20260828c"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260828b"></script>
+<script src="./xlsx.full.min.js?v=20260828c"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1539,7 +1539,6 @@ let exportOptAlign      = true;
 let exportOptDueDate    = true;
 let exportOptPTO        = false;
 let exportOptAttendees  = true;
-let exportPNGRoles      = true;
 let exportPNGAttendees  = true;
 let exportPNGPTO        = false;
 let exportPNGHolidays   = false;
@@ -8751,7 +8750,6 @@ function renderExportPanel() {
       el.appendChild(cb); el.appendChild(document.createTextNode(lbl));
       opts.appendChild(el);
     };
-    mkPNGOpt('Include roles',    exportPNGRoles,     v => { exportPNGRoles     = v; });
     mkPNGOpt('Show attendees',   exportPNGAttendees, v => { exportPNGAttendees = v; });
     mkPNGOpt('Show PTO & holidays', exportPNGPTO,    v => { exportPNGPTO       = v; });
     mkPNGOpt('Overlay company holidays', exportPNGHolidays, v => { exportPNGHolidays = v; });
@@ -9286,7 +9284,7 @@ function exportPNG() {
           ctx.rect(chipX + 3*SC, ty, chipW - 6*SC, taskH);
           ctx.clip();
           const loeStr = task.loe ? LOE_EMOJI[task.loe] + ' ' : '';
-          const roleStr = exportPNGRoles && task.role ? ` (${task.role})` : '';
+          const roleStr = task.role ? ` (${task.role})` : '';
           const title = loeStr + (task.taskName || roleVerb(task.role)) + roleStr;
           ctx.fillStyle = '#fff';
           ctx.font = `${8*SC}px system-ui,sans-serif`;

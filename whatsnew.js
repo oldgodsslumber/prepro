@@ -27,6 +27,7 @@ var WHATSNEW_RELEASES = [
           { tag: 'new', text: 'A new Overlay company holidays option puts every holiday from the shared Holidays project onto the exported calendar, as an amber banner across the top of the day. Until now the PNG only drew the project’s own tasks, so a company shutdown was invisible on every other project’s export.' },
           { tag: 'new', text: 'A holiday tagged to specific offices only appears if somebody on the project is actually based in one of them, so a US-only export is not littered with holidays nobody on it takes. Untagged holidays read as company-wide and always show.' },
           { tag: 'new', text: 'The banner carries the country codes the same way the on-screen overlay does — “US·IN”, “ALL” when every office is off, and nothing at all when no office is picked.' },
+          { tag: 'fix', text: 'The Include roles checkbox is gone — a task’s role is now always on the PNG. It was the one export option nobody turned off, and dropping it makes the export match what the calendar shows.' },
           { tag: 'fix', text: 'Turning it on makes the day cells taller rather than squeezing the banners in, so a busy day cannot quietly drop a task off the bottom of the export.' }
         ]
       }
