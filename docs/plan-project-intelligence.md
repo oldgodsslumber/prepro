@@ -3,7 +3,12 @@
 Turning the nudge engine from a calendar-adjacency guesser into something that
 reasons over what a project actually *is*, and giving subtasks a real job.
 
-Written 2026-08-30. Branch `testing`. Nothing here is built yet.
+Written 2026-08-30. Branch `testing`.
+
+**All eight phases shipped 2026-08-31** (builds `20260831a`–`g`). Each phase
+section below records what actually landed, including where the plan was wrong
+and what was decided instead — the original scope is kept underneath each for
+comparison. 354 tests across nine suites.
 
 ---
 
@@ -481,7 +486,29 @@ Convert from ES module to classic script per Phase 0.
 *Acceptance:* a Settings "test connection" button round-trips a schema-
 constrained JSON call.
 
-### Phase 7 — Extraction (the paste box)
+### Phase 7 — Extraction — SHIPPED 2026-08-31, build `20260831g`
+
+- **`prepro-ai.js`** holds both AI features. Every entry point is gated on
+  `ppLlmConfigured()`; with no key the module draws nothing — not a disabled
+  button, not an upsell.
+- Paste box in the Plan tab. Context is deliberately **not** the full dossier:
+  extraction needs the cast list, what is already tracked, and today's date, and
+  nothing else. Sending the whole dossier would spend tokens making the model
+  worse at a narrow job.
+- `PP_EXTRACT_SCHEMA` is sent as a real `responseSchema`. Each row carries a
+  **`quote`** — the sentence it came from. A proposal you cannot trace back to a
+  sentence is one you should not accept, so the receipt is always on screen.
+- **`ppNormalizeExtracted` is the trust boundary.** Model output never reaches
+  the store: blank rows dropped, non-ISO dates discarded rather than passed
+  through, unknown directions defaulted, duplicates of existing loops removed,
+  owners folded onto real names. Rows arrive pre-ticked and the reviewer unticks.
+- **`ppResolveOwner` does two passes.** `resolvePersonName` handles aliases but
+  only for people with records; plenty of names — a client, a vendor contact —
+  exist only in a roster, and a loop filed against "Walsh, Ryan" would never
+  match the nudges' lookups for "Ryan Walsh". The second pass matches the
+  project's own cast list on the same normalised key.
+
+### Phase 7 — original scope, for reference
 
 One box in the Plan tab: paste an email thread, Teams thread, or meeting
 bullets. Input is the *new text*; the dossier rides along as context only, so
@@ -495,7 +522,29 @@ uses. Nothing is written until you tick and confirm.
 *Acceptance:* pasting a real thread yields commitments you would actually keep,
 and a hallucinated one is visibly rejectable before it lands.
 
-### Phase 8 — Advisory + the dossier hash cache
+### Phase 8 — Advisory + cache — SHIPPED 2026-08-31, build `20260831g`
+
+- Full dossier in, structured out: `health`, one-line `summary`, `risks` each
+  with the dossier line as `evidence`, and `proposed` loops addable in one click.
+  The prompt forbids a risk that cannot cite a line.
+- **`prepro/advisory`**, keyed by project, stamped with `ppHash` of the dossier
+  it was computed from. Shared, not per-person — that is what lets one person
+  with a key cover teammates who never set one up, and it was the deciding
+  argument for per-person keys back in decision 5.
+- **Never runs on render.** `ppRunAdvisory` returns the cache unless `force`.
+  Tests pin the whole cost story: first run spends one request, an unchanged
+  second run spends none, `force` spends one, and a change to the project makes
+  the next run spend one again.
+- The stale marker falls out for free — "from Aug 29, before the latest changes
+  to this project" — and stale content renders faded rather than hidden.
+- Adding a suggested loop removes it from the cached record, so it cannot be
+  added twice.
+
+*Verified:* 60 tests across both phases — hash stability, context assembly,
+every normalisation guard, cache currency, echo comparison, the gate, and the
+request-count behaviour above. **354 total across nine suites.**
+
+### Phase 8 — original scope, for reference
 
 "Read this whole project and tell me what's slipping." Input *is* the dossier.
 Output is structured — a health line, proposed commitments, stale-note flags —

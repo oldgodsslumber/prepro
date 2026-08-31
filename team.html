@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260831f';
+window.PREPRO_BUILD = '20260831g';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,24 +29,27 @@ window.PREPRO_BUILD = '20260831f';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260831f"></script>
+<script type="module" src="./auth.js?v=20260831g"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260831f"></script>
+<script src="./whatsnew.js?v=20260831g"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20260831f"></script>
+<script src="./people.js?v=20260831g"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20260831f"></script>
+<script src="./commitments.js?v=20260831g"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20260831f"></script>
+<script src="./dossier.js?v=20260831g"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20260831f"></script>
+<script src="./prepro-llm.js?v=20260831g"></script>
+<!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
+     app behaves exactly as it did before this file existed. -->
+<script src="./prepro-ai.js?v=20260831g"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260831f"></script>
+<script src="./xlsx.full.min.js?v=20260831g"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -788,6 +791,26 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 .pi-edit::placeholder { color: var(--dim); opacity: .7; }
 textarea.pi-edit { resize: vertical; min-height: 46px; white-space: pre-wrap; }
 .pi-hint { font-size: 10px; color: var(--dim); padding: 4px 2px 8px; line-height: 1.4; }
+/* AI in the Plan tab */
+.ai-paste { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 7px 9px; font: inherit; font-size: 12px; resize: vertical; min-height: 70px; outline: none; margin-top: 4px; }
+.ai-paste:focus { border-color: var(--accent); }
+.ai-prop-check { margin-top: 5px; flex: 0 0 auto; accent-color: var(--accent); }
+.ai-prop-text { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; color: var(--text); padding: 4px 6px; font: inherit; font-size: 12px; outline: none; }
+.ai-prop-text:focus { border-color: var(--accent); }
+.ai-prop-meta { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+.ai-prop-input { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); padding: 2px 5px; font: inherit; font-size: 10px; outline: none; flex: 0 1 110px; min-width: 0; }
+.ai-prop-date { width: 122px; color-scheme: dark; }
+.ai-prop-quote { font-size: 10px; color: var(--dim); font-style: italic; margin-top: 3px; line-height: 1.4; border-left: 2px solid var(--border); padding-left: 6px; }
+.ai-health { display: flex; align-items: flex-start; gap: 7px; font-size: 12px; color: var(--text); line-height: 1.45; padding: 8px 2px; }
+.ai-health-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; background: var(--dim); }
+.ai-health-on-track .ai-health-dot { background: #4cba6a; }
+.ai-health-watch .ai-health-dot { background: #e0a33a; }
+.ai-health-at-risk .ai-health-dot { background: var(--danger); }
+.ai-risk { padding: 5px 2px; border-bottom: 1px solid var(--border); }
+.ai-risk-text { font-size: 12px; color: var(--text); line-height: 1.4; }
+.ai-faded { opacity: .55; }
+.ai-stale { color: #e0a33a; }
+
 /* AI settings tab */
 .ai-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
 .ai-label { font-size: 12px; color: var(--dim); font-weight: 600; flex: 0 0 100px; }
@@ -9194,6 +9217,7 @@ function renderPlanPanel(content) {
     e.className = 'plan-empty';
     e.textContent = 'No open loops on this project yet. Add one above, or leave one from the Notes tab when you log a blocker — the dashboard chases whatever lands here.';
     content.appendChild(e);
+    renderPlanAi(content, proj, me, refresh);
     return;
   }
 
@@ -9209,6 +9233,319 @@ function renderPlanPanel(content) {
   group('Waiting on others', waiting);
   group('Mine', mine);
   group('Recently closed', closed, { closed: true });
+  renderPlanAi(content, proj, me, refresh);
+}
+
+// ── AI SECTIONS ──
+// Appended to the Plan tab, and only when a key is set. With no key these draw
+// nothing at all — not a disabled button, not an upsell. The deterministic app
+// above is the whole product.
+function renderPlanAi(content, proj, me, refresh) {
+  if (!ppLlmConfigured()) return;
+  renderPasteBox(content, proj, me, refresh);
+  renderAdvisorySection(content, proj, me, refresh);
+}
+
+// Phase 7 — paste a thread, get proposed loops.
+let _pasteProposals = null;   // survives a re-render so ticking a row doesn't lose the list
+let _pasteBusy = false;
+
+function renderPasteBox(content, proj, me, refresh) {
+  const title = document.createElement('div');
+  title.className = 'pi-section-title';
+  title.textContent = 'Read a thread';
+  content.appendChild(title);
+
+  const ta = document.createElement('textarea');
+  ta.className = 'ai-paste';
+  ta.placeholder = 'Paste an email thread, a Teams conversation, or your notes from a call…';
+  ta.rows = 4;
+  content.appendChild(ta);
+
+  const bar = document.createElement('div');
+  bar.className = 'export-actions';
+  const go = document.createElement('button');
+  go.className = 'settings-btn primary';
+  go.textContent = _pasteBusy ? 'Reading…' : 'Find open loops';
+  go.disabled = _pasteBusy;
+  const status = document.createElement('span');
+  status.className = 'export-note';
+  status.textContent = 'Nothing is saved until you tick it.';
+
+  go.addEventListener('click', () => {
+    const text = ta.value.trim();
+    if (!text) { ta.focus(); return; }
+    _pasteBusy = true;
+    go.disabled = true;
+    go.textContent = 'Reading…';
+    status.textContent = 'Asking Gemini…';
+    ppExtractCommitments(proj, text)
+      .then(list => {
+        _pasteBusy = false;
+        _pasteProposals = list;
+        if (!list.length) {
+          status.textContent = 'Nothing found that looks like an open loop.';
+          go.disabled = false; go.textContent = 'Find open loops';
+          return;
+        }
+        refresh();
+      })
+      .catch(err => {
+        _pasteBusy = false;
+        go.disabled = false;
+        go.textContent = 'Find open loops';
+        status.textContent = (err && err.message) || String(err);
+        status.classList.add('ai-spent');
+      });
+  });
+  bar.appendChild(go);
+  bar.appendChild(status);
+  content.appendChild(bar);
+
+  if (!_pasteProposals || !_pasteProposals.length) return;
+
+  // ── Review list ──
+  // Same shape as the Excel import review: proposed rows, editable, ticked in
+  // or out, nothing written until confirmed.
+  const rTitle = document.createElement('div');
+  rTitle.className = 'plan-group-title';
+  rTitle.textContent = 'Proposed · ' + _pasteProposals.length + ' — untick anything wrong';
+  content.appendChild(rTitle);
+
+  _pasteProposals.forEach((p, i) => {
+    const row = document.createElement('div');
+    row.className = 'plan-row';
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = p.accept !== false;
+    cb.className = 'ai-prop-check';
+    cb.addEventListener('change', () => { p.accept = cb.checked; });
+    row.appendChild(cb);
+
+    const main = document.createElement('div');
+    main.className = 'plan-main';
+
+    const txt = document.createElement('input');
+    txt.type = 'text';
+    txt.className = 'ai-prop-text';
+    txt.value = p.text;
+    txt.addEventListener('change', () => { p.text = txt.value.trim(); });
+    main.appendChild(txt);
+
+    const meta = document.createElement('div');
+    meta.className = 'ai-prop-meta';
+
+    const own = document.createElement('input');
+    own.type = 'text';
+    own.className = 'ai-prop-input';
+    own.placeholder = 'Owner';
+    own.value = p.owner || '';
+    own.setAttribute('list', 'planPeople');
+    own.addEventListener('change', () => { p.owner = own.value.trim(); });
+    meta.appendChild(own);
+
+    const dir = document.createElement('select');
+    dir.className = 'ai-prop-input';
+    [['theirs', 'waiting on them'], ['mine', 'on me']].forEach(([v, l]) => {
+      const o = document.createElement('option');
+      o.value = v; o.textContent = l; o.selected = p.direction === v;
+      dir.appendChild(o);
+    });
+    dir.addEventListener('change', () => { p.direction = dir.value; });
+    meta.appendChild(dir);
+
+    const due = document.createElement('input');
+    due.type = 'date';
+    due.className = 'ai-prop-input ai-prop-date';
+    due.value = p.due || '';
+    due.addEventListener('change', () => { p.due = due.value; });
+    meta.appendChild(due);
+    main.appendChild(meta);
+
+    // The receipt. A proposal you cannot trace back to a sentence is one you
+    // should not accept, so the sentence is always on screen.
+    if (p.quote) {
+      const q = document.createElement('div');
+      q.className = 'ai-prop-quote';
+      q.textContent = '“' + p.quote + '”';
+      main.appendChild(q);
+    }
+    row.appendChild(main);
+    content.appendChild(row);
+  });
+
+  const confirmBar = document.createElement('div');
+  confirmBar.className = 'export-actions';
+  const add = document.createElement('button');
+  add.className = 'settings-btn primary';
+  add.textContent = 'Add ticked';
+  add.addEventListener('click', () => {
+    const picked = _pasteProposals.filter(p => p.accept !== false && p.text);
+    const today = cmTodayStr();
+    picked.forEach(p => {
+      const theirs = p.direction === 'theirs';
+      createCommitment({
+        projectId: proj.id,
+        text: p.text,
+        owner: p.owner || (theirs ? '' : me),
+        direction: theirs ? 'theirs' : 'mine',
+        state: theirs ? 'waiting' : 'open',
+        waitingOn: theirs ? (p.owner || '') : '',
+        waitingSince: theirs ? today : null,
+        due: p.due || null,
+        source: 'llm',
+        createdBy: me,
+        createdAt: today
+      });
+    });
+    _pasteProposals = null;
+    refresh();
+  });
+  const drop = document.createElement('button');
+  drop.className = 'settings-btn';
+  drop.textContent = 'Discard';
+  drop.addEventListener('click', () => { _pasteProposals = null; refresh(); });
+  confirmBar.appendChild(add);
+  confirmBar.appendChild(drop);
+  content.appendChild(confirmBar);
+}
+
+// Phase 8 — the whole-project read, cached against the dossier hash.
+let _advisoryBusy = false;
+
+function renderAdvisorySection(content, proj, me, refresh) {
+  const title = document.createElement('div');
+  title.className = 'pi-section-title';
+  title.textContent = 'Project review';
+  content.appendChild(title);
+
+  const rec = ppAdvisoryFor(proj.id);
+  const current = ppAdvisoryIsCurrent(proj);
+
+  const bar = document.createElement('div');
+  bar.className = 'export-actions';
+  const run = document.createElement('button');
+  run.className = 'settings-btn' + (rec ? '' : ' primary');
+  run.textContent = _advisoryBusy ? 'Reading…' : (rec ? 'Re-run' : 'Review this project');
+  run.disabled = _advisoryBusy;
+  const note = document.createElement('span');
+  note.className = 'export-note';
+
+  if (!rec) {
+    note.textContent = 'Reads the whole dossier and says what is slipping. Costs one request.';
+  } else if (current) {
+    note.textContent = 'Up to date as of ' + rec.generatedAt + (rec.by ? ' · ' + rec.by : '') + '.';
+  } else {
+    // Falls out of hashing for free, and is the most useful thing the cache says.
+    note.textContent = 'From ' + rec.generatedAt + ', before the latest changes to this project.';
+    note.classList.add('ai-stale');
+  }
+
+  run.addEventListener('click', () => {
+    _advisoryBusy = true;
+    run.disabled = true;
+    run.textContent = 'Reading…';
+    ppRunAdvisory(proj, { by: me, force: true })
+      .then(() => { _advisoryBusy = false; refresh(); })
+      .catch(err => {
+        _advisoryBusy = false;
+        run.disabled = false;
+        run.textContent = rec ? 'Re-run' : 'Review this project';
+        note.textContent = (err && err.message) || String(err);
+        note.classList.add('ai-spent');
+      });
+  });
+  bar.appendChild(run);
+  bar.appendChild(note);
+  content.appendChild(bar);
+
+  if (!rec) return;
+
+  const head = document.createElement('div');
+  head.className = 'ai-health ai-health-' + (rec.health || 'on-track') + (current ? '' : ' ai-faded');
+  const dot = document.createElement('span');
+  dot.className = 'ai-health-dot';
+  head.appendChild(dot);
+  const sum = document.createElement('span');
+  sum.textContent = rec.summary || '';
+  head.appendChild(sum);
+  content.appendChild(head);
+
+  if (rec.risks.length) {
+    const rt = document.createElement('div');
+    rt.className = 'plan-group-title';
+    rt.textContent = 'Worth a look · ' + rec.risks.length;
+    content.appendChild(rt);
+    rec.risks.forEach(r => {
+      const row = document.createElement('div');
+      row.className = 'ai-risk' + (current ? '' : ' ai-faded');
+      const txt = document.createElement('div');
+      txt.className = 'ai-risk-text';
+      txt.textContent = r.text;
+      row.appendChild(txt);
+      if (r.evidence) {
+        const ev = document.createElement('div');
+        ev.className = 'ai-prop-quote';
+        ev.textContent = r.evidence;
+        row.appendChild(ev);
+      }
+      content.appendChild(row);
+    });
+  }
+
+  if (rec.proposed.length) {
+    const pt = document.createElement('div');
+    pt.className = 'plan-group-title';
+    pt.textContent = 'Suggested loops · ' + rec.proposed.length;
+    content.appendChild(pt);
+    rec.proposed.forEach((p, i) => {
+      const row = document.createElement('div');
+      row.className = 'plan-row' + (current ? '' : ' ai-faded');
+      const main = document.createElement('div');
+      main.className = 'plan-main';
+      const txt = document.createElement('div');
+      txt.className = 'plan-text';
+      txt.textContent = p.text;
+      main.appendChild(txt);
+      const meta = document.createElement('div');
+      meta.className = 'plan-meta';
+      if (p.owner) { const s = document.createElement('span'); s.textContent = '👤 ' + p.owner; meta.appendChild(s); }
+      if (p.due)   { const s = document.createElement('span'); s.textContent = '📅 ' + fmtDateShortIso(p.due); meta.appendChild(s); }
+      if (p.why)   { const s = document.createElement('span'); s.textContent = p.why; meta.appendChild(s); }
+      main.appendChild(meta);
+      row.appendChild(main);
+
+      const acts = document.createElement('div');
+      acts.className = 'plan-acts';
+      const addBtn = document.createElement('button');
+      addBtn.className = 'plan-act';
+      addBtn.textContent = '+ Add';
+      addBtn.title = 'Turn this into a real open loop';
+      addBtn.addEventListener('click', () => {
+        const today = cmTodayStr();
+        const theirs = p.direction === 'theirs';
+        createCommitment({
+          projectId: proj.id, text: p.text,
+          owner: p.owner || (theirs ? '' : me),
+          direction: theirs ? 'theirs' : 'mine',
+          state: theirs ? 'waiting' : 'open',
+          waitingOn: theirs ? (p.owner || '') : '',
+          waitingSince: theirs ? today : null,
+          due: p.due || null,
+          source: 'llm', createdBy: me, createdAt: today
+        });
+        // Drop it from the cached record so it cannot be added twice.
+        const next = ppAdvisoryFor(proj.id);
+        next.proposed = next.proposed.filter((_, j) => j !== i);
+        ppSaveAdvisory(proj.id, next);
+        refresh();
+      });
+      acts.appendChild(addBtn);
+      row.appendChild(acts);
+      content.appendChild(row);
+    });
+  }
 }
 
 function planRow(c, me, today, refresh, opts) {
@@ -10137,6 +10474,7 @@ function applyRemoteState(snapshot) {
   if (applyRemoteSunset(data.sunsetPeople))   changed = true;
   if (applyRemotePeople(data.people))         changed = true;
   if (applyRemoteCommitments(data.commitments)) changed = true;
+  if (applyRemoteAdvisory(data.advisory))       changed = true;
 
   return changed;
 }

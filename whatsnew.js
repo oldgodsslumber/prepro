@@ -17,6 +17,28 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-08-31g',
+    title: 'Paste a thread, get open loops',
+    dateLabel: 'Aug 31, 2026',
+    groups: [
+      {
+        area: 'Team · Plan tab',
+        items: [
+          { tag: 'new', text: 'Paste an email thread, a Teams conversation or your notes from a call, and prepro proposes the open loops in it — who owes what, and by when. Every row is editable and quotes the sentence it came from, so you can check it before you accept. Nothing is saved until you tick it.' },
+          { tag: 'new', text: 'It is told who is on the project and what is already tracked, so it uses real names rather than inventing “the design team”, and does not propose a loop you are already chasing.' },
+          { tag: 'new', text: 'Project review reads the whole dossier and says where things stand: a one-line summary, a health marker, the things worth a look with the evidence for each, and suggested loops you can add with one click.' },
+          { tag: 'new', text: 'A review is cached and shared with the team, so one person running it covers everyone — including people who never set a key up. It only re-runs when the project has actually changed, and says “from Aug 29, before the latest changes” when what you are reading has been overtaken.' }
+        ]
+      },
+      {
+        area: 'Everywhere',
+        items: [
+          { tag: 'fix', text: 'Still entirely optional. Without a key none of this appears — no buttons, no prompts, no nagging — and every nudge, open loop and dossier goes on being worked out on your own machine.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-08-31f',
     title: 'Optional AI — bring your own key, or don’t',
     dateLabel: 'Aug 31, 2026',
