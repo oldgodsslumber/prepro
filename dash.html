@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260831c';
+window.PREPRO_BUILD = '20260831d';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,16 +26,16 @@ window.PREPRO_BUILD = '20260831c';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260831c"></script>
+<script type="module" src="./auth.js?v=20260831d"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260831c"></script>
+<script src="./whatsnew.js?v=20260831d"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and ops.html. -->
-<script src="./people.js?v=20260831c"></script>
+<script src="./people.js?v=20260831d"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20260831c"></script>
+<script src="./commitments.js?v=20260831d"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -217,6 +217,23 @@ a.today-card-project:hover { color: var(--accent); }
 .task-suggestion { font-size: 11px; color: var(--accent); background: rgba(108,99,255,.08); border-left: 2px solid var(--accent); padding: 6px 10px 6px 8px; margin: 2px 0 4px 26px; border-radius: 0 6px 6px 0; line-height: 1.55; }
 .task-suggestion .ts-icon { margin-right: 4px; }
 .task-suggestion .ts-line { line-height: 1.55; }
+/* Open Loops panel */
+.ol-empty { font-size: 12px; color: var(--dim); padding: 10px 2px; line-height: 1.5; }
+.ol-group { font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); padding: 10px 2px 4px; }
+.ol-row { display: flex; align-items: flex-start; gap: 8px; padding: 6px 2px; border-bottom: 1px solid var(--border); }
+.ol-row:last-child { border-bottom: none; }
+.ol-check { flex: 0 0 auto; width: 15px; height: 15px; border-radius: 4px; border: 1px solid var(--border); background: var(--card); margin-top: 2px; }
+.ol-check:hover { border-color: var(--accent); background: var(--accent); }
+.ol-main { flex: 1; min-width: 0; }
+.ol-text { font-size: 12px; color: var(--text); line-height: 1.4; word-break: break-word; }
+.ol-meta { font-size: 10px; color: var(--dim); margin-top: 2px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ol-proj { color: var(--dim); text-decoration: none; border-bottom: 1px dotted var(--border); }
+.ol-proj:hover { color: var(--accent); border-bottom-color: var(--accent); }
+.ol-warm { color: #e0a33a; }
+.ol-hot { color: var(--danger); font-weight: 600; }
+.ol-acts { display: flex; gap: 3px; flex: 0 0 auto; }
+.ol-act { font-size: 10px; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 2px 5px; line-height: 1.3; cursor: pointer; }
+.ol-act:hover { color: var(--text); border-color: var(--accent); }
 .ts-acts { display: flex; gap: 4px; margin-top: 5px; flex-wrap: wrap; }
 .ts-act { font-size: 10px; font-weight: 600; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; line-height: 1.4; cursor: pointer; }
 .ts-act:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
@@ -1937,6 +1954,9 @@ const DASH_PANELS = [
   { id: 'comingup',   label: 'Coming Up',        render: renderComingUpSection },
   { id: 'myProjects', label: 'My Projects',      render: renderMyProjectsPanel },
   { id: 'overdue',    label: 'Needs Attention',  render: renderOverduePanel },
+  // Visible by default: it is the panel that answers the question the whole
+  // commitment layer exists for, and a hidden one would never be found.
+  { id: 'openLoops',  label: 'Open Loops',       render: renderOpenLoopsPanel },
   { id: 'grid',       label: 'Project Grid',     render: renderProjectGridPanel, defaultHidden: true },
   { id: 'checklist',  label: 'My Checklist',     render: renderChecklistPanel, defaultHidden: true },
   { id: 'outlook',    label: 'Workload Outlook', render: renderOutlookPanel,   defaultHidden: true },
@@ -2313,7 +2333,71 @@ function buildTaskContext(task, personName, dateStr, proj) {
     return d !== null && d >= 0 && d <= 14;
   }).sort((a, b) => b.date.localeCompare(a.date))[0] || null;
 
-  return { prev, next, nextReview, nextShoot, nextKeyDate, personPTO, recentNotes, lastTouched, pastIncomplete, brief, scopeChange };
+  // ── Open loops ──
+  // The half of the project that is not on the calendar. Everything below is
+  // why Phase 2 existed: these are facts, not inferences from what sits next to
+  // what on the timeline.
+  const loops = typeof commitmentsForProject === 'function'
+    ? commitmentsForProject(proj.id, { openOnly: true }) : [];
+
+  // Longest-waiting loop this person is the one chasing. Scoped to them on
+  // purpose — being told to chase somebody else's loop is noise.
+  const myWaits = loops.filter(c => c.state === 'waiting' && sameName(c.createdBy, personName));
+  const staleWait = myWaits
+    .map(c => ({ c, days: commitmentWaitingDays(c, today) }))
+    .filter(x => x.days != null && x.days >= 5)
+    .sort((a, b) => b.days - a.days)[0] || null;
+
+  // Something this person owes that is late, or lands within two days.
+  const owed = loops
+    .filter(c => c.direction === 'mine' && c.due && sameName(c.owner, personName))
+    .map(c => ({ c, late: commitmentOverdueDays(c, today), inDays: daysBetween(today, c.due) }))
+    .filter(x => x.late != null || (x.inDays != null && x.inDays <= 2))
+    .sort((a, b) => (b.late || 0) - (a.late || 0) || (a.inDays ?? 99) - (b.inDays ?? 99))[0] || null;
+
+  // A blocker note that still has an open loop against it — the difference
+  // between "somebody flagged a blocker" and "the blocker is still live, and
+  // here is who owns clearing it".
+  const blockerNote = (proj.notes || []).filter(n => {
+    if (!n || !n.date || n.type !== 'blocker') return false;
+    const d = daysBetween(n.date, today);
+    return d !== null && d >= 0 && d <= 30;
+  }).sort((a, b) => b.date.localeCompare(a.date))[0] || null;
+  const blockerLoop = blockerNote
+    ? loops.find(c => c.source === 'note' && c.sourceId === blockerNote.id) || null
+    : null;
+
+  // Days since anything at all happened on this project — any task, any note.
+  // Distinct from `lastTouched`, which is only about this person.
+  const projectQuiet = projectQuietDays(proj, today);
+
+  return { prev, next, nextReview, nextShoot, nextKeyDate, personPTO, recentNotes, lastTouched, pastIncomplete, brief, scopeChange,
+           loops, staleWait, owed, blockerNote, blockerLoop, projectQuiet, cadence: proj.cadenceDays || null };
+}
+
+// Name comparison that goes through people.js's alias resolution where it can,
+// so "Walsh, Ryan" from a Pega import still matches "Ryan Walsh".
+function sameName(a, b) {
+  if (!a || !b) return false;
+  if (typeof normalizePersonKey === 'function') {
+    return normalizePersonKey(a) === normalizePersonKey(b);
+  }
+  return String(a).toLowerCase() === String(b).toLowerCase();
+}
+
+// How long the project has been quiet: days since the most recent task date in
+// the past, or note, whichever is later. Null when there is nothing to go on.
+function projectQuietDays(proj, today) {
+  let latest = '';
+  (proj.tasks || []).forEach(t => {
+    const d = t.endDate || t.date;
+    if (d && d <= today && d > latest) latest = d;
+  });
+  (proj.notes || []).forEach(n => {
+    if (n && n.date && n.date <= today && n.date > latest) latest = n.date;
+  });
+  if (!latest) return null;
+  return daysBetween(latest, today);
 }
 
 function findHeavyReviewer(reviewTask) {
@@ -2345,6 +2429,54 @@ function patternShootApproaching(task, personName, dateStr, proj, ctx) {
   const shootType = lbl.includes('on-location') ? 'On-location shoot' : 'Studio shoot';
   const day = fmtDayShort(ctx.nextShoot.date, dateStr);
   return `${shootType} ${day} — has the shotlist and call sheet gone out to the crew?`;
+}
+
+// The nudge this whole redesign was for. Nothing derived from the calendar
+// could ever say this, because "the ball is in Sarah's court" is not a date.
+function patternWaitingStale(task, personName, dateStr, proj, ctx) {
+  if (!ctx.staleWait) return null;
+  const { c, days } = ctx.staleWait;
+  const who = c.waitingOn || c.owner || 'someone';
+  const since = fmtDayShort(c.waitingSince, dateStr);
+  const weeks = Math.floor(days / 7);
+  // Past a fortnight, "18 days" lands harder than "since the 13th".
+  const when = days >= 14 ? `${days} days` : `since ${since}`;
+  const chase = weeks >= 2 ? 'Time to escalate?' : 'Worth a chase?';
+  return `⏳ Waiting on ${who} for “${c.text}” ${when}. ${chase}`;
+}
+
+// Something you owe that is late, or about to be. Distinct from the task list:
+// a commitment is not scheduled work and appears on no timeline.
+function patternOwedByMe(task, personName, dateStr, proj, ctx) {
+  if (!ctx.owed) return null;
+  const { c, late, inDays } = ctx.owed;
+  if (late != null) {
+    return `📌 You owe “${c.text}” — ${late} day${late === 1 ? '' : 's'} past its date. Still happening?`;
+  }
+  const when = inDays === 0 ? 'today' : inDays === 1 ? 'tomorrow' : fmtDayShort(c.due, dateStr);
+  return `📌 “${c.text}” is due ${when}. On track?`;
+}
+
+// Replaces the blind half of patternRecentNote for blockers: this one knows
+// whether the blocker is still open and who owns clearing it.
+function patternOpenBlocker(task, personName, dateStr, proj, ctx) {
+  if (!ctx.blockerNote || !ctx.blockerLoop) return null;
+  const c = ctx.blockerLoop;
+  const daysAgo = daysBetween(ctx.blockerNote.date, dateStr);
+  const age = daysAgo === 0 ? 'today' : daysAgo === 1 ? 'yesterday' : `${daysAgo} days ago`;
+  if (c.state === 'waiting' && c.waitingOn) {
+    return `🚧 The blocker raised ${age} is still open, with ${c.waitingOn} — has anything moved?`;
+  }
+  return `🚧 The blocker raised ${age} is still open and it is on you — clear it today?`;
+}
+
+// The cheapest possible fix for "I forgot to email them back": a project with a
+// stated rhythm that has quietly fallen out of it.
+function patternCadenceLapsed(task, personName, dateStr, proj, ctx) {
+  if (!ctx.cadence || ctx.projectQuiet == null) return null;
+  if (ctx.projectQuiet <= ctx.cadence) return null;
+  const rhythm = ctx.cadence === 7 ? 'weekly' : ctx.cadence === 14 ? 'fortnightly' : ctx.cadence === 30 ? 'monthly' : `every ${ctx.cadence} days`;
+  return `📻 Nothing has happened on ${proj.name} in ${ctx.projectQuiet} days, and it is a ${rhythm} project — time for a check-in?`;
 }
 
 // A scope change lands, and the goal the project was signed off against is still
@@ -2413,7 +2545,16 @@ function patternDrought(task, personName, dateStr, proj, ctx) {
   if (ctx.lastTouched == null) return null;
   if (ctx.lastTouched <= 14) return null;
   const weeks = Math.round(ctx.lastTouched / 7);
-  return `First time back on ${proj.name} in ${weeks} week${weeks === 1 ? '' : 's'} — worth a quick resync with the producer before starting?`;
+  const back = `First time back on ${proj.name} in ${weeks} week${weeks === 1 ? '' : 's'}`;
+  // Naming what was actually left open beats suggesting a generic resync — the
+  // point of coming back is knowing what you are walking into.
+  const open = (ctx.loops || []).filter(c => c.state === 'waiting' || c.direction === 'mine');
+  if (open.length) {
+    const c = open[0];
+    const on = c.state === 'waiting' && c.waitingOn ? ` (with ${c.waitingOn})` : '';
+    return `${back}. Still open: “${c.text}”${on} — pick that up first?`;
+  }
+  return `${back} — worth a quick resync with the producer before starting?`;
 }
 
 function patternStalledCluster(task, personName, dateStr, proj, ctx) {
@@ -2432,18 +2573,30 @@ function getTaskSuggestion(task, personName, dateStr) {
 
   // Patterns are named so a dismissal can be scoped to *this* nudge on *this*
   // task, rather than silencing every nudge the task might ever raise.
+  // Order is first-match-wins, so it encodes priority. Dated, unmovable things
+  // first (someone is away, a shoot happens whether or not you are ready), then
+  // the commitment-driven ones, which are concrete facts rather than inferences
+  // from the calendar, then the softer observations.
   const patterns = [
     patternPTOHandoff,
     patternShootApproaching,
     patternKeyDateApproaching,
+    // Above the review/handoff patterns: a loop that has sat for a week is more
+    // actionable than a general question about an upcoming review, and unlike
+    // those it will not resolve itself by the date arriving.
+    patternWaitingStale,
+    patternOwedByMe,
     patternReviewApproaching,
     patternHandoffToNext,
-    // Must sit above patternRecentNote: that one also matches `direction` notes,
-    // and being earlier in the chain it would otherwise always win and answer
-    // the vaguer question ("does today's task still fit?") when we can now ask
-    // the specific one.
+    // Must sit above patternRecentNote, which also matches `blocker` notes and
+    // can only say that one was flagged. This one knows whether it is still
+    // open and who owns clearing it.
+    patternOpenBlocker,
+    // Must sit above patternRecentNote for the same reason, for `direction`
+    // notes: otherwise the vaguer question always wins.
     patternGoalDrift,
     patternRecentNote,
+    patternCadenceLapsed,
     patternDrought,
     patternStalledCluster,
   ];
@@ -4304,6 +4457,125 @@ function renderChecklistPanel() {
 
     section.appendChild(group);
   });
+  return section;
+}
+
+// ── PANEL: OPEN LOOPS ──
+// The cross-project answer to "what am I forgetting". Every other panel is
+// organised by project or by day; this one is organised by how long something
+// has been sitting, which is the only ordering that surfaces the thing you have
+// stopped seeing.
+function renderOpenLoopsPanel() {
+  const section = mkPanelSection('Open Loops');
+  const today = todayStr();
+  const me = selectedPerson;
+
+  if (!me) {
+    const e = document.createElement('div');
+    e.className = 'ol-empty';
+    e.textContent = 'Pick a person to see their open loops.';
+    section.appendChild(e);
+    return section;
+  }
+
+  const projName = id => {
+    const p = (state.projects || []).find(x => x.id === id);
+    return p ? p.name : '(project deleted)';
+  };
+
+  const waiting = commitmentsAwaitedBy(me, { openOnly: true })
+    .map(c => ({ c, days: commitmentWaitingDays(c, today) }))
+    .sort((a, b) => (b.days || 0) - (a.days || 0));
+
+  const owed = commitmentsOwedBy(me, { openOnly: true })
+    .map(c => ({ c, late: commitmentOverdueDays(c, today) }))
+    .sort((a, b) => (b.late || 0) - (a.late || 0) || cmSort(a.c, b.c));
+
+  if (!waiting.length && !owed.length) {
+    const e = document.createElement('div');
+    e.className = 'ol-empty';
+    e.textContent = '✓ No open loops. Leave one from a note, a nudge, or the Plan tab in Team.';
+    section.appendChild(e);
+    return section;
+  }
+
+  const group = (title, rows, kind) => {
+    if (!rows.length) return;
+    const h = document.createElement('div');
+    h.className = 'ol-group';
+    h.textContent = title + ' · ' + rows.length;
+    section.appendChild(h);
+
+    rows.forEach(({ c, days, late }) => {
+      const row = document.createElement('div');
+      row.className = 'ol-row';
+
+      const check = document.createElement('button');
+      check.className = 'ol-check';
+      check.title = 'Mark done';
+      check.addEventListener('click', () => { completeCommitment(c.id, { today }); renderAll(); });
+      row.appendChild(check);
+
+      const main = document.createElement('div');
+      main.className = 'ol-main';
+
+      const txt = document.createElement('div');
+      txt.className = 'ol-text';
+      txt.textContent = c.text;
+      main.appendChild(txt);
+
+      const meta = document.createElement('div');
+      meta.className = 'ol-meta';
+      const bit = (s, cls) => { const el = document.createElement('span'); el.textContent = s; if (cls) el.className = cls; meta.appendChild(el); };
+
+      const link = document.createElement('a');
+      link.className = 'ol-proj';
+      link.textContent = projName(c.projectId);
+      link.href = 'team.html#project=' + encodeURIComponent(c.projectId);
+      link.target = '_blank';
+      link.title = 'Open in Team';
+      meta.appendChild(link);
+
+      if (kind === 'waiting') {
+        bit('⏳ ' + (c.waitingOn || 'someone') + (days != null && days > 0 ? ' · ' + days + 'd' : ''),
+            days != null && days >= 10 ? 'ol-hot' : days != null && days >= 5 ? 'ol-warm' : '');
+      }
+      if (c.due) bit((late ? '⚠ ' : '📅 ') + fmtDateShort(c.due) + (late ? ' · ' + late + 'd late' : ''), late ? 'ol-hot' : '');
+      main.appendChild(meta);
+      row.appendChild(main);
+
+      const acts = document.createElement('div');
+      acts.className = 'ol-acts';
+      const act = (label, title, fn) => {
+        const b = document.createElement('button');
+        b.className = 'ol-act';
+        b.textContent = label; b.title = title;
+        b.addEventListener('click', fn);
+        acts.appendChild(b);
+      };
+      if (c.state === 'waiting') {
+        // Chasing restarts the clock: the useful question is "how long since I
+        // last pushed", not "how long since this first existed".
+        act('↻', 'I chased them today — restart the clock', () => {
+          updateCommitment(c.id, { waitingSince: today });
+          renderAll();
+        });
+        act('↩', 'It is back on me', () => { reopenCommitment(c.id, { today }); renderAll(); });
+      } else {
+        act('⏳', 'Waiting on someone', () => {
+          const who = prompt('Waiting on whom?', c.owner && c.owner !== me ? c.owner : '');
+          if (who == null || !who.trim()) return;
+          waitOnCommitment(c.id, who.trim(), { today });
+          renderAll();
+        });
+      }
+      row.appendChild(acts);
+      section.appendChild(row);
+    });
+  };
+
+  group('Waiting on others', waiting, 'waiting');
+  group('On me', owed, 'mine');
   return section;
 }
 

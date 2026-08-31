@@ -17,6 +17,31 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-08-31d',
+    title: 'The dashboard starts chasing things for you',
+    dateLabel: 'Aug 31, 2026',
+    groups: [
+      {
+        area: 'Dash · Open Loops panel',
+        items: [
+          { tag: 'new', text: 'A new Open Loops panel, on by default, answering the one question no other panel could: what am I forgetting, across everything. It is ordered by how long something has been sitting rather than by project or by day, because that is the only ordering that surfaces the thing you have stopped noticing.' },
+          { tag: 'new', text: 'Split into what you are waiting on other people for and what is on you. Anything waiting five days turns amber, ten days red, and overdue items carry the number of days late.' },
+          { tag: 'new', text: 'Chased somebody? The ↻ button restarts the clock, so the count answers “how long since I last pushed” rather than “how long has this existed”. Each loop links straight through to its project in Team.' }
+        ]
+      },
+      {
+        area: 'Dash · Nudges',
+        items: [
+          { tag: 'new', text: 'Nudges now read open loops. “Waiting on Sarah for the VO approval since Tuesday — worth a chase?” Past a fortnight it switches to a day count and suggests escalating instead.' },
+          { tag: 'new', text: 'A nudge for what you owe, whether it is already late or lands in the next couple of days. Commitments are not scheduled work, so they appear on no timeline and nothing could previously surface them.' },
+          { tag: 'new', text: 'Blocker nudges know whether the blocker is still open and who is holding it, rather than only that one was flagged at some point.' },
+          { tag: 'new', text: 'Set a rhythm on a project in the Team Plan tab and the dashboard notices when it lapses — “nothing on Brand Refresh in 9 days, and it is a weekly project”.' },
+          { tag: 'fix', text: 'Coming back to a project after a few weeks now tells you what was actually left open, and who has it, instead of generically suggesting a resync.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-08-31c',
     title: 'Capture: leave an open loop where the thought already is',
     dateLabel: 'Aug 31, 2026',

@@ -333,7 +333,38 @@ Everything above dies if entering data is work. Three funnels, no new habits:
 *Acceptance:* a blocker note can become an owned, dated commitment without
 leaving the notes tab.
 
-### Phase 4 — Nudge engine v2
+### Phase 4 — Nudge engine v2 — SHIPPED 2026-08-31, build `20260831d`
+
+All five patterns built, plus the panel.
+
+- `buildTaskContext` now carries `loops`, `staleWait`, `owed`, `blockerNote`,
+  `blockerLoop`, `projectQuiet` and `cadence`. **`staleWait` and `owed` are
+  scoped to the viewing person** — `staleWait` by `createdBy` (whoever is doing
+  the chasing), `owed` by `owner`. Being told to chase somebody else's loop is
+  noise, and there is a test pinning both.
+- `sameName()` routes through people.js's `normalizePersonKey`, so a Pega-format
+  "Walsh, Ryan" still matches "Ryan Walsh".
+- `projectQuietDays()` is deliberately distinct from the existing `lastTouched`:
+  that one is about this person, this one is about the project.
+- **Chain order** encodes priority: unmovable dated things first, then the
+  commitment-driven ones (concrete facts, and they will not resolve themselves
+  by a date arriving), then the softer observations. `patternOpenBlocker` and
+  `patternGoalDrift` both sit above `patternRecentNote`, which matches the same
+  note types and would otherwise always win with vaguer wording.
+- **Open Loops panel**, default-visible. Ordered by how long something has sat.
+  The `↻` action restarts `waitingSince`, so the count means "since I last
+  pushed" rather than "since this existed" — the more useful question once you
+  have actually chased someone.
+
+*Verified:* 42 pattern tests + 18 context-integration tests, and all 115 earlier
+tests re-run green — 175 total across six suites.
+
+**The loop is now closed end to end:** a blocker note in Team can be promoted to
+an open loop, that loop drives a nudge in Dash, answering the nudge updates the
+loop, and the panel ranks it against everything else you are waiting on. That
+was the whole point of phases 1–4.
+
+### Phase 4 — original scope, for reference
 
 New patterns in the `getTaskSuggestion` chain, plus a cross-project **Open
 Loops** panel added to `DASH_PANELS`:
