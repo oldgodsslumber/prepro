@@ -383,7 +383,32 @@ Loops** panel added to `DASH_PANELS`:
 *Acceptance:* the panel answers "what am I forgetting" across all projects,
 ordered by how long the ball has been in someone else's court.
 
-### Phase 5 — `buildProjectDossier()`
+### Phase 5 — `buildProjectDossier()` — SHIPPED 2026-08-31, build `20260831e`
+
+- **`dossier.js`** — pure, deterministic, no network and no page state beyond
+  the project handed in. Sections: header, BRIEF, TEAM, TIMELINE, OPEN LOOPS,
+  NOTES, DERIVED. Uses page helpers (`milestoneLabel`, `roleVerb`, `personTeam`)
+  where they exist so wording cannot drift from what is on screen, and falls
+  back where they do not — it is loaded by all three pages.
+- Shipped as a **Text tab format switch** (Schedule / Dossier) in team.html,
+  persisted like the active tab. Useful today with no LLM anywhere near it.
+- `dossierThin()` and `buildDossierBundle()` for the cross-project case.
+- **Empty sections announce themselves** rather than vanishing. "(empty — no
+  brief imported and no goal typed in the Info tab)" is usually the most useful
+  line on the page, and vanishing would have hidden it.
+
+**Bug found by writing this, present since Phase 4:** a task spanning today was
+counted as no activity at all. `endDate || date` tested against today drops an
+in-flight multi-day task entirely, so a project someone was actively editing
+could read as silent and fire `patternCadenceLapsed`. Both the nudge and the
+DERIVED line now go through one `dsProjectQuietDays()`, and an in-flight task
+resolves to "active today". This is exactly the class of bug the plan's phase-5
+rationale predicted — *it forces the question "what do we actually know about a
+project?"*
+
+*Verified:* 56 dossier tests, and 231 total across seven suites.
+
+### Phase 5 — original scope, for reference
 
 A **pure, deterministic** serializer in a new `dossier.js`. No LLM. Renders one
 project as compact text: identity, brief fields, roster, timeline

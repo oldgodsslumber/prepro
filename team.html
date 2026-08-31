@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260831d';
+window.PREPRO_BUILD = '20260831e';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,18 +29,21 @@ window.PREPRO_BUILD = '20260831d';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260831d"></script>
+<script type="module" src="./auth.js?v=20260831e"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260831d"></script>
+<script src="./whatsnew.js?v=20260831e"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20260831d"></script>
+<script src="./people.js?v=20260831e"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20260831d"></script>
+<script src="./commitments.js?v=20260831e"></script>
+<!-- Project dossier serializer — pure text rendering of a whole project.
+     Classic script, loaded after commitments.js whose globals it reads. -->
+<script src="./dossier.js?v=20260831e"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260831d"></script>
+<script src="./xlsx.full.min.js?v=20260831e"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -782,6 +785,11 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 .pi-edit::placeholder { color: var(--dim); opacity: .7; }
 textarea.pi-edit { resize: vertical; min-height: 46px; white-space: pre-wrap; }
 .pi-hint { font-size: 10px; color: var(--dim); padding: 4px 2px 8px; line-height: 1.4; }
+.export-fmt { display: flex; gap: 4px; padding: 8px 2px 4px; }
+.export-fmt-btn { font-size: 11px; font-weight: 600; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 5px; padding: 4px 10px; }
+.export-fmt-btn:hover { color: var(--text); border-color: var(--accent); }
+.export-fmt-btn.active { color: #fff; background: var(--accent); border-color: var(--accent); }
+.export-dossier { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; line-height: 1.5; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin-top: 6px; white-space: pre; overflow: auto; }
 
 /* Note → open loop promotion, inline in the compose box. */
 .note-promo { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -1581,6 +1589,9 @@ function saveExpandedIds() {
 let dragPayload     = null;
 let panelContext    = null;
 let exportTabActive  = localStorage.getItem('prepro_export_tab') || 'projectinfo';
+// Which document the Text tab renders: the schedule, or the whole-project
+// dossier. Persisted like the active tab is.
+let exportTextFormat = localStorage.getItem('prepro_export_text_format') || 'schedule';
 // 'notes' is no longer its own tab — the feed lives inside Project Info. Anyone
 // whose localStorage still points at it falls through to projectinfo below.
 const TAB_TITLES = { projectinfo: 'Project Info & Notes', roster: 'Role Assignees', plan: 'Plan & Open Loops', text: 'Text Export', table: 'Table / Excel', png: 'PNG Export', 'invites-web': 'Meeting Invites', cea: 'CEA' };
@@ -9171,6 +9182,55 @@ function renderExportPanel() {
     renderPlanPanel(content);
     return;
   } else if (exportTabActive === 'text') {
+    // ── Format switch ──
+    // Two different documents, not two skins of one. The schedule answers "what
+    // is happening when"; the dossier answers "what is this project, and where
+    // has it got to" — brief, team, arc, open loops, notes and the numbers that
+    // fall out of them.
+    const fmtBar = document.createElement('div');
+    fmtBar.className = 'export-fmt';
+    [['schedule', 'Schedule'], ['dossier', 'Dossier']].forEach(([key, label]) => {
+      const b = document.createElement('button');
+      b.className = 'export-fmt-btn' + (exportTextFormat === key ? ' active' : '');
+      b.textContent = label;
+      b.addEventListener('click', () => {
+        exportTextFormat = key;
+        try { localStorage.setItem('prepro_export_text_format', key); } catch (_) {}
+        renderExportPanel();
+      });
+      fmtBar.appendChild(b);
+    });
+    content.appendChild(fmtBar);
+
+    if (exportTextFormat === 'dossier') {
+      const proj = getProject(activeProjectId);
+      const text = proj ? buildProjectDossier(proj, { isTaskDone: () => false }) : '';
+
+      const acts = document.createElement('div');
+      acts.className = 'export-actions';
+      const copy = document.createElement('button');
+      copy.className = 'settings-btn primary';
+      copy.textContent = 'Copy';
+      copy.addEventListener('click', () => {
+        const done = () => { copy.textContent = 'Copied'; setTimeout(() => { copy.textContent = 'Copy'; }, 1200); };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done));
+        } else fallbackCopy(text, done);
+      });
+      acts.appendChild(copy);
+      const n = document.createElement('span');
+      n.className = 'export-note';
+      n.textContent = 'Plain text — everything known about this project on one page.';
+      acts.appendChild(n);
+      content.appendChild(acts);
+
+      const pre = document.createElement('pre');
+      pre.className = 'export-dossier';
+      pre.textContent = text;
+      content.appendChild(pre);
+      return;
+    }
+
     // ── Format options ──
     const opts = document.createElement('div');
     opts.className = 'export-opts';

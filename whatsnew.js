@@ -17,6 +17,28 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-08-31e',
+    title: 'The dossier — a whole project on one page',
+    dateLabel: 'Aug 31, 2026',
+    groups: [
+      {
+        area: 'Team · Text export',
+        items: [
+          { tag: 'new', text: 'The Text tab now offers two documents rather than one. Schedule is what was always there — what is happening when. Dossier is new: the brief, the team, the whole arc past and future, every open loop, the notes, and the numbers that fall out of them, on a single page you can copy anywhere.' },
+          { tag: 'new', text: 'The timeline reads as one list rather than two tables, with a tick against finished work, an arrow at whatever is in flight, and a marker on today — so where a project has got to is visible at a glance.' },
+          { tag: 'new', text: 'Empty sections say so out loud instead of quietly disappearing. A project with no brief now reads “empty — no brief imported and no goal typed”, which is usually the most useful thing on the page.' },
+          { tag: 'new', text: 'The derived line does the counting for you: days since anything happened, tasks past their date, how long until due, open loops, the oldest thing waiting on somebody else, and whether the project has fallen past its own cadence.' }
+        ]
+      },
+      {
+        area: 'Dash · Nudges',
+        items: [
+          { tag: 'fix', text: 'A project being actively worked on could be mistaken for a silent one. A task running across today was not counted as activity at all, so a multi-day edit in progress could trigger a “nothing has happened in N days” nudge on a project somebody was working on right then. Both the nudge and the dossier now share one definition of quiet.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-08-31d',
     title: 'The dashboard starts chasing things for you',
     dateLabel: 'Aug 31, 2026',

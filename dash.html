@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260831d';
+window.PREPRO_BUILD = '20260831e';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,16 +26,19 @@ window.PREPRO_BUILD = '20260831d';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260831d"></script>
+<script type="module" src="./auth.js?v=20260831e"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260831d"></script>
+<script src="./whatsnew.js?v=20260831e"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and ops.html. -->
-<script src="./people.js?v=20260831d"></script>
+<script src="./people.js?v=20260831e"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20260831d"></script>
+<script src="./commitments.js?v=20260831e"></script>
+<!-- Project dossier serializer — pure text rendering of a whole project.
+     Classic script, loaded after commitments.js whose globals it reads. -->
+<script src="./dossier.js?v=20260831e"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -2385,17 +2388,22 @@ function sameName(a, b) {
   return String(a).toLowerCase() === String(b).toLowerCase();
 }
 
-// How long the project has been quiet: days since the most recent task date in
-// the past, or note, whichever is later. Null when there is nothing to go on.
+// How long the project has been quiet. Delegates to dossier.js so the cadence
+// nudge and the dossier's DERIVED line can never disagree about what "quiet"
+// means — they did briefly, and the bug was that a task spanning today counted
+// as no activity at all, making a project somebody was actively editing look
+// silent. The fallback below is only for a page load where dossier.js is
+// missing, and carries the same fix.
 function projectQuietDays(proj, today) {
+  if (typeof dsProjectQuietDays === 'function') return dsProjectQuietDays(proj, today);
   let latest = '';
+  const bump = d => { if (d && d <= today && d > latest) latest = d; };
   (proj.tasks || []).forEach(t => {
-    const d = t.endDate || t.date;
-    if (d && d <= today && d > latest) latest = d;
+    if (!t || !t.date || t.date > today) return;
+    const end = t.endDate || t.date;
+    bump(end > today ? today : end);
   });
-  (proj.notes || []).forEach(n => {
-    if (n && n.date && n.date <= today && n.date > latest) latest = n.date;
-  });
+  (proj.notes || []).forEach(n => { if (n) bump(n.date); });
   if (!latest) return null;
   return daysBetween(latest, today);
 }
