@@ -17,6 +17,40 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-08-31h',
+    title: 'Fixes from a proper test pass',
+    dateLabel: 'Aug 31, 2026',
+    groups: [
+      {
+        area: 'AI · reliability',
+        items: [
+          { tag: 'fix', text: 'The AI features could fail permanently for anyone who had just set up a key. The default model has been returning “temporarily unavailable” from Google, and prepro kept retrying that one model instead of moving to the next — so it never reached a working one. It now falls through the list on an outage, exactly as it already did when a model ran out of requests.' },
+          { tag: 'fix', text: 'One busy moment could switch AI off for the rest of the day and blame you for it. A model in the fallback list no longer exists for newly created keys, and once prepro landed on it, it kept going back to it and telling you to pick a different model in Settings. That model is out of the list, and any model that turns out to be unreachable is now skipped for the day.' },
+          { tag: 'fix', text: '“Out of requests for today” and “cannot reach any model” now say different things, because waiting until midnight only fixes one of them.' }
+        ]
+      },
+      {
+        area: 'AI · what it writes',
+        items: [
+          { tag: 'fix', text: 'Project review was returning no suggested actions at all on most projects. The fault was in how prepro asked, not in the model — it now returns them, and they can be added as open loops in one click.' },
+          { tag: 'fix', text: 'A proposal could be saved as “you are waiting on yourself”, which then never appeared in your own list and never triggered a follow-up reminder. Who owes something and which way it points are now worked out together, the same way the manual add box has always done it.' },
+          { tag: 'fix', text: 'Proposals read on one project could be added to a different one if you switched projects with the review list still open. The list now belongs to the project it came from.' },
+          { tag: 'fix', text: 'An impossible date such as 2026-13-45 used to be accepted, producing a loop that counted as overdue but never actually reminded you. Dates are checked against a real calendar now.' },
+          { tag: 'fix', text: 'The “do not suggest something already being tracked” check only caught exact matches, so a reworded version of a loop you were already chasing slipped through — sometimes pointing the opposite way. It now recognises rephrasings.' },
+          { tag: 'fix', text: 'Only the people on the project are sent to Google when reading a thread, rather than the whole staff list.' },
+          { tag: 'fix', text: 'Completed and cancelled projects are no longer offered a review — the old one rated a finished project “at risk” because its past work sat after its scheduled dates.' },
+          { tag: 'fix', text: 'A very large paste is now refused up front rather than spending one of your daily requests on something that cannot fit in a reply.' }
+        ]
+      },
+      {
+        area: 'Everywhere',
+        items: [
+          { tag: 'fix', text: 'The project dossier can finally tell finished work from late work: it reads the ticks from your dashboard, so “tasks past their scheduled date” means what it says, and completed work shows a ✓ on the timeline.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-08-31g',
     title: 'Paste a thread, get open loops',
     dateLabel: 'Aug 31, 2026',

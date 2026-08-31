@@ -1,6 +1,6 @@
 {
   "generated": "2026-08-22T00:00:00Z",
-  "generatedBy": "hand-seeded from the 2026-08-21 audit; re-run index.html to replace",
+  "generatedBy": "hand-seeded from the 2026-08-21 audit; re-run index.html to replace | 2026-08-31: gemini-2.5-flash moved out of the chain after live 404 on a new key",
   "apiVersion": "v1beta",
   "_note": "caps are recorded ONLY where the behaviour was actually observed against the live API. An absent cap means untested, not false — consumers must fall back to their own heuristic rather than assume.",
   "defaults": {
@@ -10,7 +10,6 @@
   "chain": [
     "gemini-3.7-flash",
     "gemini-3.5-flash-lite",
-    "gemini-2.5-flash",
     "gemma-4-31b-it",
     "gemma-4-26b-a4b-it"
   ],
@@ -28,7 +27,8 @@
   ],
   "grandfathered": [
     "gemini-2.5-flash-lite",
-    "gemini-2.5-pro"
+    "gemini-2.5-pro",
+    "gemini-2.5-flash"
   ],
   "models": {
     "gemini-3.7-flash": {
@@ -113,13 +113,14 @@
       "lastVerified": "2026-08-21"
     },
     "gemini-2.5-flash": {
-      "status": "live",
+      "status": "grandfathered",
       "label": "Gemini 2.5 Flash",
       "family": "gemini",
       "inputTokenLimit": 1048576,
       "outputTokenLimit": 65536,
       "caps": {},
-      "lastVerified": "2026-08-21"
+      "lastVerified": "2026-08-21",
+      "note": "404s for keys created after it was retired for new users; verified live 2026-08-31"
     },
     "gemma-4-31b-it": {
       "status": "live",

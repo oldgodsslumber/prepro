@@ -41,6 +41,23 @@ function ppHash(str) {
   return ('0000000' + h.toString(16)).slice(-8);
 }
 
+// Shape-checking a date is not validating it. `2026-13-45` matches the regex,
+// and the commitment it produces is worse than one with no date at all:
+// commitmentIsOverdue() says true, commitmentOverdueDays() says null, and dash's
+// daysBetween() yields NaN — so the "you owe this and it is late" nudge silently
+// never fires. An invisible loop is worse than a rejected one.
+function ppValidIsoDate(v) {
+  var s = String(v == null ? '' : v).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return '';
+  var d = new Date(s + 'T00:00:00');
+  if (isNaN(d)) return '';
+  // Round-trip guard: Date rolls 2026-02-31 forward to March rather than failing.
+  var back = d.getFullYear() + '-' +
+             String(d.getMonth() + 1).padStart(2, '0') + '-' +
+             String(d.getDate()).padStart(2, '0');
+  return back === s ? s : '';
+}
+
 function ppAiToday() {
   return (typeof cmTodayStr === 'function') ? cmTodayStr() : new Date().toISOString().slice(0, 10);
 }
@@ -56,16 +73,21 @@ function ppKnownNames(proj) {
     if (t && t.person) set[t.person] = true;
     ((t && t.attendees) || []).forEach(function (a) { if (a && a.person) set[a.person] = true; });
   });
-  if (typeof peopleRecords === 'object' && peopleRecords) {
-    Object.keys(peopleRecords).forEach(function (n) {
-      if (typeof personGoneEntirely === 'function' && personGoneEntirely(n)) return;
-      set[n] = true;
-    });
-  }
+  // Deliberately NOT every person record. This list is sent to Google on every
+  // paste, and the whole staff directory is both a privacy cost with no upside
+  // and worse at the actual job — the names that disambiguate "Marcus" are the
+  // ones on this project, and a hundred unrelated names only invite a wrong match.
+  Object.keys(set).forEach(function (n) {
+    if (typeof personGoneEntirely === 'function' && personGoneEntirely(n)) delete set[n];
+  });
   return Object.keys(set).sort();
 }
 
 // ── 1. EXTRACTION ──
+
+// Roughly 8k tokens: comfortably more than any real email thread, far below
+// the point where the reply gets truncated.
+var PP_PASTE_MAX = 30000;
 
 var PP_EXTRACT_SCHEMA = {
   type: 'object',
@@ -161,32 +183,77 @@ function ppResolveOwner(owner, proj) {
   return owner;
 }
 
+// Loose key for "is this the same loop?". Exact string match was the whole
+// guard, so a paraphrase — or a trailing full stop — slipped straight through
+// and the project gained a second loop for the same thing, sometimes pointing
+// the opposite way to the one already tracked.
+function ppLoopKey(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\b(the|a|an|to|for|of|on|in|with|from|please|can|you|we|i|our|my)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Two loop texts describing the same thing? Loose key equality, plus a
+// containment check so "Chase legal for the licence" matches "Chase legal".
+function ppSameLoop(a, b) {
+  var ka = ppLoopKey(a), kb = ppLoopKey(b);
+  if (!ka || !kb) return false;
+  if (ka === kb) return true;
+  if (ka.length > 12 && kb.length > 12) {
+    if (ka.indexOf(kb) === 0 || kb.indexOf(ka) === 0) return true;
+  }
+  return false;
+}
+
+// `owner` and `direction` are not independent, and treating them as two free
+// fields let the model produce "Ryan is waiting on Ryan" — a loop invisible to
+// its own owner's list AND to patternOwedByMe, because the Phase 4 scoping
+// assumes the two agree. The manual add box has always derived one from the
+// other; the AI paths must too.
+//
+// Rules: naming nobody cannot be a wait. Naming yourself cannot be a wait.
+// Anything else stands as the model called it.
+function ppCoherentDirection(owner, direction, me) {
+  var o = String(owner || '').trim();
+  if (!o) return 'mine';                                   // nobody to wait on
+  if (me && typeof normalizePersonKey === 'function' &&
+      normalizePersonKey(o) === normalizePersonKey(me)) return 'mine';
+  if (me && o === me) return 'mine';
+  return direction === 'theirs' ? 'theirs' : 'mine';
+}
+
 // Resolves and sanitises whatever came back. The model's output never reaches
 // the store directly, so this exists to make the review list trustworthy —
 // dates that are not dates, owners that are not people, empty rows.
-function ppNormalizeExtracted(raw, proj) {
+function ppNormalizeExtracted(raw, proj, opts) {
   var out = [];
   var list = (raw && raw.commitments) || [];
   if (!Array.isArray(list)) return out;
 
-  var existing = {};
+  var existing = [];
   if (typeof commitmentsForProject === 'function' && proj) {
     (commitmentsForProject(proj.id, { openOnly: true }) || []).forEach(function (c) {
-      existing[String(c.text).trim().toLowerCase()] = true;
+      existing.push(c.text);
     });
   }
+  var me = (opts && opts.me) || '';
 
   list.forEach(function (item) {
     if (!item) return;
     var text = String(item.text || '').trim();
     if (!text) return;
-    if (existing[text.toLowerCase()]) return; // model ignored the instruction
+    // The prompt asks it not to repeat existing loops; this is the backstop for
+    // when it does anyway, which it does with paraphrases.
+    if (existing.some(function (e) { return ppSameLoop(e, text); })) return;
+    if (out.some(function (o) { return ppSameLoop(o.text, text); })) return; // dupes within one reply
 
     var owner = ppResolveOwner(String(item.owner || '').trim(), proj);
-    var due = String(item.due || '').trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) due = '';
+    var due = ppValidIsoDate(item.due);
 
-    var direction = item.direction === 'theirs' ? 'theirs' : 'mine';
+    var direction = ppCoherentDirection(owner, item.direction, me);
     out.push({
       text: text,
       owner: owner,
@@ -205,6 +272,14 @@ function ppExtractCommitments(proj, text, opts) {
   if (!ppLlmConfigured()) return Promise.reject(new Error('No Gemini key set.'));
   var body = String(text || '').trim();
   if (!body) return Promise.resolve([]);
+  // A 200KB paste is ~50k tokens against a daily budget of about twenty
+  // requests, and the reply then reliably dies on MAX_TOKENS — a charged
+  // request that can never succeed. Refuse before spending it.
+  if (body.length > PP_PASTE_MAX) {
+    return Promise.reject(new Error(
+      'That is ' + Math.round(body.length / 1000) + 'KB of text — too much to read in one go (limit ' +
+      Math.round(PP_PASTE_MAX / 1000) + 'KB). Paste the part of the thread that matters.'));
+  }
 
   return ppCallLLMJson({
     system: PP_EXTRACT_SYSTEM,
@@ -213,7 +288,7 @@ function ppExtractCommitments(proj, text, opts) {
     temperature: 0,
     signal: opts.signal
   }).then(function (raw) {
-    return ppNormalizeExtracted(raw, proj);
+    return ppNormalizeExtracted(raw, proj, { me: opts.me });
   });
 }
 
@@ -250,7 +325,11 @@ var PP_ADVISORY_SCHEMA = {
       }
     }
   },
-  required: ['health', 'summary']
+  // risks and proposed MUST be required. Left optional, the model simply omits
+  // them — `proposed` came back empty on 3 of 4 test projects, which quietly
+  // disabled the accept-into-loops payoff this whole feature exists for. An
+  // empty array is a fine answer; a missing field is not.
+  required: ['health', 'summary', 'risks', 'proposed']
 };
 
 var PP_ADVISORY_SYSTEM = [
@@ -282,24 +361,35 @@ function ppBuildAdvisoryPrompt(proj) {
 // load would be a runaway, and one person's sweep should serve the whole team.
 var advisoryRecords = {};
 
-function ppNormalizeAdvisory(a) {
+var PP_HEALTH_VALUES = ['on-track', 'watch', 'at-risk'];
+
+function ppNormalizeAdvisory(a, proj) {
   a = a || {};
+  // `health` is declared as an enum in the schema but a schema is a request,
+  // not a guarantee. team.html builds a CSS class out of this value and it is
+  // written to the shared advisory node, so an arbitrary string would reach
+  // every teammate's screen. Clamp it.
+  var health = PP_HEALTH_VALUES.indexOf(a.health) >= 0 ? a.health : 'on-track';
   return {
     hash:        String(a.hash || ''),
     generatedAt: String(a.generatedAt || ''),
     by:          String(a.by || ''),
     model:       String(a.model || ''),
-    health:      String(a.health || ''),
-    summary:     String(a.summary || ''),
+    health:      health,
+    summary:     typeof a.summary === 'string' ? a.summary : '',
     risks:       Array.isArray(a.risks) ? a.risks.map(function (r) {
                    return { text: String((r && r.text) || ''), evidence: String((r && r.evidence) || '') };
                  }).filter(function (r) { return !!r.text; }) : [],
     proposed:    Array.isArray(a.proposed) ? a.proposed.map(function (p) {
+                   // Same resolution the extraction path gets. Without it an
+                   // aliased owner ("Marcus D") is stored raw and the loop is
+                   // invisible to every name-keyed query and nudge.
+                   var owner = ppResolveOwner(String((p && p.owner) || '').trim(), proj);
                    return {
                      text: String((p && p.text) || ''),
-                     owner: String((p && p.owner) || ''),
-                     direction: (p && p.direction) === 'theirs' ? 'theirs' : 'mine',
-                     due: /^\d{4}-\d{2}-\d{2}$/.test((p && p.due) || '') ? p.due : '',
+                     owner: owner,
+                     direction: ppCoherentDirection(owner, p && p.direction, ''),
+                     due: ppValidIsoDate(p && p.due),
                      why: String((p && p.why) || '')
                    };
                  }).filter(function (p) { return !!p.text; }) : []
@@ -355,6 +445,12 @@ function ppRunAdvisory(proj, opts) {
   opts = opts || {};
   if (!ppLlmConfigured()) return Promise.reject(new Error('No Gemini key set.'));
   if (!proj) return Promise.reject(new Error('No project.'));
+  // A finished project has nothing to slip. Asking anyway spent a request to be
+  // told a completed project was "at-risk" because tasks in its past sat after
+  // their scheduled date — which is what finished work looks like.
+  if (proj.completed || proj.cancelled) {
+    return Promise.reject(new Error('This project is ' + (proj.completed ? 'completed' : 'cancelled') + ' — there is nothing to review.'));
+  }
 
   if (!opts.force && ppAdvisoryIsCurrent(proj)) {
     return Promise.resolve(ppAdvisoryFor(proj.id));
@@ -378,7 +474,16 @@ function ppRunAdvisory(proj, opts) {
       summary: raw && raw.summary,
       risks: raw && raw.risks,
       proposed: raw && raw.proposed
-    });
+    }, proj);
+    // Drop suggestions that duplicate a loop already on the project — the
+    // advisory has no "do not repeat" rule of its own and cheerfully proposes
+    // one that is already being chased, sometimes pointing the other way.
+    if (typeof commitmentsForProject === 'function') {
+      var live = (commitmentsForProject(proj.id, { openOnly: true }) || []).map(function (c) { return c.text; });
+      rec.proposed = rec.proposed.filter(function (p) {
+        return !live.some(function (t) { return ppSameLoop(t, p.text); });
+      });
+    }
     ppSaveAdvisory(proj.id, rec);
     return rec;
   });

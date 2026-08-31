@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260831g';
+window.PREPRO_BUILD = '20260831h';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,27 +29,27 @@ window.PREPRO_BUILD = '20260831g';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260831g"></script>
+<script type="module" src="./auth.js?v=20260831h"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260831g"></script>
+<script src="./whatsnew.js?v=20260831h"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20260831g"></script>
+<script src="./people.js?v=20260831h"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20260831g"></script>
+<script src="./commitments.js?v=20260831h"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20260831g"></script>
+<script src="./dossier.js?v=20260831h"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20260831g"></script>
+<script src="./prepro-llm.js?v=20260831h"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20260831g"></script>
+<script src="./prepro-ai.js?v=20260831h"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260831g"></script>
+<script src="./xlsx.full.min.js?v=20260831h"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1671,6 +1671,10 @@ let tlDateMap  = new Map();  // date string → column index
 // Same localStorage key dash.html stars into, so both pages share one identity.
 // Used for note attribution and to narrow the PTO invites to your own leave.
 let myPerson = localStorage.getItem('dash_me') || null;
+// Task completions, mirrored read-only from prepro/dash. team.html has no other
+// way to know a past task is finished rather than late.
+let dashCompletions = {};
+function isTaskDoneHere(taskId) { return !!dashCompletions[taskId]; }
 
 // ── ROSTER ──
 let rosterOpen = true;
@@ -9247,7 +9251,14 @@ function renderPlanAi(content, proj, me, refresh) {
 }
 
 // Phase 7 — paste a thread, get proposed loops.
-let _pasteProposals = null;   // survives a re-render so ticking a row doesn't lose the list
+// { projectId, list } — survives a re-render so ticking a row does not lose the
+// list, but is ignored the moment you are looking at a different project. It
+// used to be a bare array, which meant switching project kept the review list on
+// screen and "Add ticked" filed those loops onto the project now open.
+let _pasteProposals = null;
+function pasteProposalsFor(projectId) {
+  return (_pasteProposals && _pasteProposals.projectId === projectId) ? _pasteProposals.list : null;
+}
 let _pasteBusy = false;
 
 function renderPasteBox(content, proj, me, refresh) {
@@ -9279,10 +9290,10 @@ function renderPasteBox(content, proj, me, refresh) {
     go.disabled = true;
     go.textContent = 'Reading…';
     status.textContent = 'Asking Gemini…';
-    ppExtractCommitments(proj, text)
+    ppExtractCommitments(proj, text, { me: me })
       .then(list => {
         _pasteBusy = false;
-        _pasteProposals = list;
+        _pasteProposals = { projectId: proj.id, list: list };
         if (!list.length) {
           status.textContent = 'Nothing found that looks like an open loop.';
           go.disabled = false; go.textContent = 'Find open loops';
@@ -9302,17 +9313,18 @@ function renderPasteBox(content, proj, me, refresh) {
   bar.appendChild(status);
   content.appendChild(bar);
 
-  if (!_pasteProposals || !_pasteProposals.length) return;
+  const proposals = pasteProposalsFor(proj.id);
+  if (!proposals || !proposals.length) return;
 
   // ── Review list ──
   // Same shape as the Excel import review: proposed rows, editable, ticked in
   // or out, nothing written until confirmed.
   const rTitle = document.createElement('div');
   rTitle.className = 'plan-group-title';
-  rTitle.textContent = 'Proposed · ' + _pasteProposals.length + ' — untick anything wrong';
+  rTitle.textContent = 'Proposed · ' + proposals.length + ' — untick anything wrong';
   content.appendChild(rTitle);
 
-  _pasteProposals.forEach((p, i) => {
+  proposals.forEach((p, i) => {
     const row = document.createElement('div');
     row.className = 'plan-row';
 
@@ -9381,17 +9393,20 @@ function renderPasteBox(content, proj, me, refresh) {
   add.className = 'settings-btn primary';
   add.textContent = 'Add ticked';
   add.addEventListener('click', () => {
-    const picked = _pasteProposals.filter(p => p.accept !== false && p.text);
+    const picked = proposals.filter(p => p.accept !== false && p.text);
     const today = cmTodayStr();
     picked.forEach(p => {
-      const theirs = p.direction === 'theirs';
+      // ppCoherentDirection refuses a wait with nobody to wait on, and a wait
+      // on yourself. Same rule the manual add box has always applied.
+      const dir = ppCoherentDirection(p.owner, p.direction, me);
+      const theirs = dir === 'theirs';
       createCommitment({
         projectId: proj.id,
         text: p.text,
-        owner: p.owner || (theirs ? '' : me),
-        direction: theirs ? 'theirs' : 'mine',
+        owner: p.owner || me,
+        direction: dir,
         state: theirs ? 'waiting' : 'open',
-        waitingOn: theirs ? (p.owner || '') : '',
+        waitingOn: theirs ? p.owner : '',
         waitingSince: theirs ? today : null,
         due: p.due || null,
         source: 'llm',
@@ -9415,6 +9430,9 @@ function renderPasteBox(content, proj, me, refresh) {
 let _advisoryBusy = false;
 
 function renderAdvisorySection(content, proj, me, refresh) {
+  // Nothing to say about finished work, and asking spent a request to be told a
+  // completed project was "at-risk" because its past tasks sat after their dates.
+  if (proj.completed || proj.cancelled) return;
   const title = document.createElement('div');
   title.className = 'pi-section-title';
   title.textContent = 'Project review';
@@ -9524,13 +9542,14 @@ function renderAdvisorySection(content, proj, me, refresh) {
       addBtn.title = 'Turn this into a real open loop';
       addBtn.addEventListener('click', () => {
         const today = cmTodayStr();
-        const theirs = p.direction === 'theirs';
+        const dir = ppCoherentDirection(p.owner, p.direction, me);
+        const theirs = dir === 'theirs';
         createCommitment({
           projectId: proj.id, text: p.text,
-          owner: p.owner || (theirs ? '' : me),
-          direction: theirs ? 'theirs' : 'mine',
+          owner: p.owner || me,
+          direction: dir,
           state: theirs ? 'waiting' : 'open',
-          waitingOn: theirs ? (p.owner || '') : '',
+          waitingOn: theirs ? p.owner : '',
           waitingSince: theirs ? today : null,
           due: p.due || null,
           source: 'llm', createdBy: me, createdAt: today
@@ -9705,7 +9724,7 @@ function renderExportPanel() {
 
     if (exportTextFormat === 'dossier') {
       const proj = getProject(activeProjectId);
-      const text = proj ? buildProjectDossier(proj, { isTaskDone: () => false }) : '';
+      const text = proj ? buildProjectDossier(proj, { isTaskDone: isTaskDoneHere }) : '';
 
       const acts = document.createElement('div');
       acts.className = 'export-actions';
@@ -10474,12 +10493,15 @@ function applyRemoteState(snapshot) {
   if (applyRemoteSunset(data.sunsetPeople))   changed = true;
   if (applyRemotePeople(data.people))         changed = true;
   if (applyRemoteCommitments(data.commitments)) changed = true;
+  // Read-only: team.html never writes prepro/dash, it just needs to know which
+  // tasks dash has ticked off so the dossier can tell finished from overdue.
+  if (data.dash && JSON.stringify(data.dash.completions || {}) !== JSON.stringify(dashCompletions)) {
+    dashCompletions = data.dash.completions || {};
+    changed = true;
+  }
   if (applyRemoteAdvisory(data.advisory))       changed = true;
 
   return changed;
-}
-
-function initFirebase() {  return changed;
 }
 
 function initFirebase() {

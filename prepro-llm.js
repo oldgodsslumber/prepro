@@ -48,12 +48,14 @@ var PP_LLM_DEFAULTS = {
 // or a fetch fails. Deliberately minimal: the file is the source of truth.
 var PP_LLM_REGISTRY = {
   defaults: { gemini: 'gemini-3.7-flash' },
-  chain: ['gemini-3.7-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash', 'gemma-4-31b-it'],
+  // gemini-2.5-flash is deliberately absent: it is grandfathered, so a key
+  // created after its retirement 404s on it. Verified live 2026-08-31.
+  chain: ['gemini-3.7-flash', 'gemini-3.5-flash-lite', 'gemma-4-31b-it'],
   retired: [],
   models: {
     'gemini-3.7-flash':      { status: 'live', label: 'Gemini 3.7 Flash',      family: 'gemini', caps: { jsonMode: 'honored', thinking: 'thinkingLevel' } },
     'gemini-3.5-flash-lite': { status: 'live', label: 'Gemini 3.5 Flash Lite', family: 'gemini', caps: { jsonMode: 'honored', thinking: 'thinkingLevel' } },
-    'gemini-2.5-flash':      { status: 'live', label: 'Gemini 2.5 Flash',      family: 'gemini', caps: { thinking: 'thinkingBudget' } },
+    'gemini-2.5-flash':      { status: 'grandfathered', label: 'Gemini 2.5 Flash', family: 'gemini', caps: { thinking: 'thinkingBudget' } },
     'gemma-4-31b-it':        { status: 'live', label: 'Gemma 4 31B',           family: 'gemma',  caps: { jsonMode: 'ignored', thinking: 'none' } }
   }
 };
@@ -185,6 +187,27 @@ function ppMarkExhausted(id) {
   ppSetUsage(u);
 }
 
+// A 404 is not a quota problem: the model does not exist for THIS key, and no
+// amount of waiting changes that. Recorded separately from the usage counts so
+// "the chain is spent" and "the chain is broken" stay distinguishable — they
+// need different messages, and only one of them resets at midnight.
+//
+// Without this, a model that 404s is never skipped: ppPickModel keeps handing
+// it back on every subsequent call, so one failure over to it bricks the
+// feature for the rest of the day while ppChainSpent() still reports false.
+function ppMarkUnusable(id) {
+  var u = ppUsageToday();
+  if (!u.dead) u.dead = {};
+  u.dead[id] = true;
+  ppSetUsage(u);
+}
+
+function ppModelUsable(id, usage) {
+  var u = usage || ppUsageToday();
+  if (u.dead && u.dead[id]) return false;
+  return (u.counts[id] || 0) < ppModelDailyLimit(id);
+}
+
 // Where in the chain we actually are. A model chosen explicitly outside the
 // chain is returned untouched — an explicit choice is not second-guessed.
 function ppPickModel(chosen) {
@@ -193,9 +216,24 @@ function ppPickModel(chosen) {
   var i = chain.indexOf(chosen);
   if (i < 0) return chosen;
   for (var j = i; j < chain.length; j++) {
-    if ((u.counts[chain[j]] || 0) < ppModelDailyLimit(chain[j])) return chain[j];
+    if (ppModelUsable(chain[j], u)) return chain[j];
   }
-  return null; // whole chain spent — callers must degrade, not error
+  return null; // whole chain unavailable — callers must degrade, not error
+}
+
+// The next usable model strictly AFTER this one, without judging the current
+// one as spent. Needed for the outage case: a model returning 503 is neither
+// out of quota nor gone, it is just down this minute, and the right move is to
+// try the next one rather than fail while a working model sits below it.
+function ppNextModel(after) {
+  var chain = PP_LLM_REGISTRY.chain || [];
+  var u = ppUsageToday();
+  var i = chain.indexOf(after);
+  if (i < 0) return null;
+  for (var j = i + 1; j < chain.length; j++) {
+    if (ppModelUsable(chain[j], u)) return chain[j];
+  }
+  return null;
 }
 
 // For the UI: how much of today's budget is gone, per chain model.
@@ -207,6 +245,23 @@ function ppUsageSummary() {
 }
 
 function ppChainSpent() { return ppPickModel(ppLlmSettings().model) === null; }
+
+// "Out of requests" and "every model is unreachable" both leave you without AI
+// but they are not the same problem, and telling someone to wait until midnight
+// when the real issue is a dead model in the chain sends them nowhere.
+function ppChainDeadMessage() {
+  var u = ppUsageToday();
+  var chain = PP_LLM_REGISTRY.chain || [];
+  var anyDead = chain.some(function (id) { return u.dead && u.dead[id]; });
+  var anySpent = chain.some(function (id) { return (u.counts[id] || 0) >= ppModelDailyLimit(id); });
+  if (anySpent && !anyDead) {
+    return "Today's free-tier budget is spent. It resets at midnight; everything else in prepro works as normal until then.";
+  }
+  if (anyDead && !anySpent) {
+    return 'None of the available models can be reached with this key. Check the model setting in Settings → AI. Everything else in prepro works as normal.';
+  }
+  return "No model is available right now — today's budget is spent or the models cannot be reached with this key. Everything else in prepro works as normal.";
+}
 
 // ── ERRORS ──
 // A 429 that says the free-tier limit is ZERO is not a rate limit at all — the
@@ -360,9 +415,7 @@ function ppCallLLM(opts) {
   }
 
   var model = ppPickModel(s.model);
-  if (!model) {
-    return Promise.reject(new Error("Today's free-tier budget is spent across every model in the chain. It resets at midnight; everything else in prepro works as normal until then."));
-  }
+  if (!model) return Promise.reject(new Error(ppChainDeadMessage()));
 
   var temperature = opts.temperature == null ? s.temperature : opts.temperature;
   var user = opts.expectJson ? (opts.user + '\n\n' + PP_JSON_REMINDER) : opts.user;
@@ -396,15 +449,46 @@ function ppCallLLM(opts) {
         var next = ppPickModel(model);
         if (next && next !== model) {
           model = next;
+          attempt = 0;   // a different model deserves its own retry budget
           return run();
         }
-        throw new Error("Today's free-tier budget is spent. It resets at midnight; everything else in prepro works as normal until then.");
+        throw new Error(ppChainDeadMessage());
       }
 
-      if (!ppIsTransient(err) || attempt >= PP_LLM_MAX_RETRIES) throw err;
-      var delay = PP_LLM_RETRY_DELAYS[attempt] || 4000;
-      attempt++;
-      return new Promise(function (r) { setTimeout(r, delay); }).then(run);
+      // 404: this model is gone for this key. Skip it for the rest of the day
+      // and move on. A registry can say "live" and still be wrong for a given
+      // key — gemini-2.5-flash is grandfathered, so a new key 404s on it.
+      if (err && err.status === 404) {
+        ppMarkUnusable(model);
+        var alt = ppPickModel(model);
+        if (alt && alt !== model) {
+          model = alt;
+          attempt = 0;
+          return run();
+        }
+        throw err;
+      }
+
+      if (ppIsTransient(err)) {
+        // Retry the same model first — most 5xx clear in seconds.
+        if (attempt < PP_LLM_MAX_RETRIES) {
+          var delay = PP_LLM_RETRY_DELAYS[attempt] || 4000;
+          attempt++;
+          return new Promise(function (r) { setTimeout(r, delay); }).then(run);
+        }
+        // Still down after retries. Fall down the chain rather than give up:
+        // the model is not spent and not gone, just unavailable this minute,
+        // and failing while a working model sits below it in the chain is the
+        // difference between a hiccup and the feature appearing broken. This is
+        // what made a 503 on the default model look permanent.
+        var down = ppNextModel(model);
+        if (down) {
+          model = down;
+          attempt = 0;
+          return run();
+        }
+      }
+      throw err;
     });
   }
   return run();

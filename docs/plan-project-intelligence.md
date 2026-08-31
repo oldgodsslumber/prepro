@@ -603,3 +603,80 @@ check against a week of real dropped balls before Phase 2 hardens the schema.
 Phases 1–5 need no API key and no Gemini decision. Phases 1–4 are what make the
 app stop guessing; 6–8 are what make it sustainable when you are too busy to
 type.
+
+---
+
+## Test pass, 2026-08-31 — build `20260831h`
+
+Two agents drove the shipped AI features against a real Gemini key and a
+four-project fixture (rich in-flight / bare / stale / completed), one on quality
+and real-use flows, one adversarial. **2 CRITICAL, 11 MAJOR, 14 MINOR.** Nearly
+every finding was glue code, not the model.
+
+**Both criticals were the same root cause: 429 was the only status that fell
+through the model chain.**
+
+- A 503 retried the same model twice and gave up. The default model
+  (`gemini-3.7-flash`) is currently 503-ing, so anyone setting up a fresh key
+  got a 48-second hang and "temporarily unavailable" — permanently — while a
+  working model sat one slot below in the chain.
+- A 404 threw immediately and marked nothing, so once `ppPickModel` landed on
+  `gemini-2.5-flash` (chain slot 3, `status: "live"` in the registry, but 404
+  for any key created after it was grandfathered) it returned that dead model on
+  every later call, while `ppChainSpent()` still reported `false`.
+
+Fixed by giving 404 and 5xx their own fall-through paths, adding a `dead` set to
+the usage record (semantically distinct from spent — only one of them resets at
+midnight), `ppNextModel()` for the outage case, and `ppChainDeadMessage()` so
+"out of requests" and "cannot reach anything" stop sharing wording. The registry
+now lists 2.5-flash as `grandfathered` and it is out of both chains.
+
+**The majors worth recording:**
+
+- `PP_ADVISORY_SCHEMA.required` omitted `proposed`, so the model simply left it
+  out — empty on 3 of 4 projects, silently disabling the accept-into-loops
+  payoff Phase 8 exists for. An empty array is a fine answer; a missing field is
+  not. Now required, and live runs return real proposals again.
+- `owner` and `direction` were written as independent fields on both AI accept
+  paths, producing "Ryan waiting on Ryan" — a loop invisible to its own owner's
+  list *and* to `patternOwedByMe`, because the Phase 4 scoping assumes the two
+  agree. `ppCoherentDirection()` now derives one from the other, the way the
+  manual add box always did.
+- `_pasteProposals` was a bare page-global cleared only on Add/Discard, so
+  switching project kept the review list on screen and filed those loops onto
+  the project now open. It is keyed by project id now.
+- Date validation was shape-only: `2026-13-45` passed the regex and produced a
+  commitment that `commitmentIsOverdue` called true, `commitmentOverdueDays`
+  called null, and `daysBetween` turned into NaN — an invisible loop, worse than
+  a rejected one. `ppValidIsoDate()` round-trips through `Date`.
+- The duplicate guard was exact-string-match, so a paraphrase or a trailing full
+  stop added a second loop for a thing already being chased. `ppSameLoop()` uses
+  a stopword-stripped key plus a prefix check.
+- `ppKnownNames` unioned every person record — the whole staff directory went to
+  Google on every paste. Scoped to the project's cast, which is also better at
+  the job.
+- The dossier never saw completions: `isTaskDone` defaulted to false and
+  team.html passed `() => false`, so "N tasks past scheduled date" meant "N past
+  tasks" and the ✓ marker was unreachable. team.html already subscribes to the
+  whole `prepro` root, so `data.dash` was there all along and simply never
+  captured. Now mirrored read-only into `dashCompletions`.
+- Advisory ran on completed projects and rated them at-risk, citing that
+  phantom overdue work. Gated in both `ppRunAdvisory` and the UI.
+
+**Minors fixed:** health clamped to its enum before it becomes a CSS class and
+reaches the shared node; control characters stripped in `cmClean` (a NUL in a
+name is invisible on screen but makes every name-keyed lookup miss); a 30KB
+paste cap; the dead duplicate `initFirebase` removed from team.html.
+
+**What held up under ~30 hostile payloads:** no `undefined` ever reached a
+record (the Firebase-wedge risk is clean), no prototype pollution, no XSS
+(`textContent`/`esc()` throughout), four prompt-injection attempts all resisted,
+the no-key gate airtight, the key never present in any error message, and the
+zero-quota-vs-ordinary 429 split behaving as documented. Date resolution from
+relative expressions was correct in all eight cases including weekdays.
+
+**Verification:** 39 new regression tests named for the bug each pins, plus all
+354 earlier tests — **393 across ten suites** — and a live end-to-end run
+confirming the 503 fall-through (`3.7:503 → 503 → 503 → 3.5-lite:200`), real
+advisory proposals, the completed-project refusal spending zero requests, and ✓
+markers in the dossier.

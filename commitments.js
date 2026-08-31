@@ -81,8 +81,13 @@ function genCommitmentId() {
 }
 
 function cmClean(v) {
-  var s = (v == null ? '' : String(v)).trim();
-  return s;
+  // Control characters are stripped, not just trimmed. A NUL inside a name is
+  // invisible on screen but makes normalizePersonKey miss, so the loop vanishes
+  // from every name-keyed query — and it syncs to the whole team that way.
+  return (v == null ? '' : String(v))
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 // Firebase strips nulls and empty strings, so a raw echo of our own write never
