@@ -115,7 +115,34 @@ Its output is always *proposed* and reviewed before it lands. That keeps the
 model out of the trust path — downstream, the nudge engine only ever reads
 clean structured data.
 
-### 5. No retrieval, no embeddings
+### 5. One Gemini key per person, free tier — decided 2026-08-30
+
+Each person pastes their own AI Studio key into Settings, held in localStorage.
+Same as storybible / vesta / storyboarder. Nobody is paying for this, so the
+free tier's per-key daily limits are the operating constraint, not a footnote.
+
+**No shared key in the repo, and no key written to `prepro/`.** This app is
+multi-user off a public Pages repo against a wildcard-readable Firebase node —
+a key there is a key published.
+
+Three consequences that are requirements, not nice-to-haves:
+
+- **The app must be fully functional with no key at all.** Everything through
+  Phase 5 is deterministic; phases 6–8 are strictly additive. A person without
+  a key sees no LLM affordances and loses nothing else. No dead buttons, no
+  errors, no nagging.
+- **Quota handling is load-bearing.** storybible2's client already tracks
+  per-day usage per model, marks a model exhausted, and falls down the chain
+  (`GEMINI_FALLBACK_CHAIN`, `getDailyUsage`, `markModelExhausted`,
+  `pickActiveGeminiModel`). Port that part intact — on a free tier it *will*
+  fire, routinely. When the whole chain is exhausted, say so plainly and fall
+  back to the deterministic nudges rather than surfacing an API error.
+- **The Phase 8 cache carries the team.** Since limits are per-key, one person
+  running a sweep populates `prepro/advisory` for everyone — including people
+  who never set up a key. That is the main reason the cache is shared rather
+  than per-person.
+
+### 6. No retrieval, no embeddings
 
 A project dossier is ~1–3k tokens. Send the whole thing. Even the cross-project
 question is answered by a thin one-line-per-project dossier, not a vector store.
@@ -290,25 +317,6 @@ is a runaway. So:
 
 ## Open decisions
 
-### Whose API key (needs a call before Phase 6)
-
-`prepro` is not like the other Gemini apps. They are single-user; this is
-multi-user, deployed from a public GitHub Pages repo, against a Firebase node
-that is wildcard-readable. **No shared key in the repo, and no key in
-`prepro/`.**
-
-- **(a) Per-person key in Settings**, localStorage — matches storybible /
-  vesta / storyboarder, zero new infrastructure, and free-tier limits are
-  per-key so it scales *better* across the team. Cost: everyone makes a key
-  once, and nudge quality depends on whether they bothered. The Phase 8 cache
-  softens this — one person with a key populates analysis everyone reads.
-- **(b) A proxy** — Cloud Function, or Apps Script (there is already an
-  `apps-script/` folder doing Pega ingest) holding one key server-side. Cleaner
-  and centrally controlled, but real infrastructure plus a rate-limiting
-  problem.
-
-**Recommendation: (a), trialled with two people. Build (b) only if it earns it.**
-
 ### Does `direction: 'theirs'` match reality?
 
 The whole commitment model leans on the ball's-court field. Worth a sanity
@@ -324,6 +332,10 @@ check against a week of real dropped balls before Phase 2 hardens the schema.
   Phase 3 does not land well, Phases 4–8 have nothing to reason over.
 - **`prepro/commitments` grows unbounded.** Add an archive/prune path for
   `done` + `dropped` older than ~90 days before it becomes a problem.
+- **Two-tier team.** With per-person free-tier keys, some people will have LLM
+  capture and some will not, and the ones who do will hit daily limits. Design
+  every LLM surface as an accelerator on a path that already works without it —
+  never the only way to enter a commitment.
 - **System-note noise.** `addSystemNote` already fires on project create; if
   commitments also write system notes, the notes tab becomes unreadable and
   `patternRecentNote` gets noisier. Keep commitments out of the note log.
