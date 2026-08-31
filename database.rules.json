@@ -1,0 +1,24 @@
+{
+  "rules": {
+    "prepro": {
+      ".read":  "auth != null && (auth.token.email == 'thatwalshguy@gmail.com' || root.child('approvedUsers').child(auth.uid).exists())",
+      ".write": "auth != null && (auth.token.email == 'thatwalshguy@gmail.com' || root.child('approvedUsers').child(auth.uid).exists())"
+    },
+
+    "pendingUsers": {
+      ".read": "auth != null && auth.token.email == 'thatwalshguy@gmail.com'",
+      "$uid": {
+        ".read":  "auth != null && (auth.uid == $uid || auth.token.email == 'thatwalshguy@gmail.com')",
+        ".write": "auth != null && (auth.uid == $uid || auth.token.email == 'thatwalshguy@gmail.com')"
+      }
+    },
+
+    "approvedUsers": {
+      ".read": "auth != null && (auth.token.email == 'thatwalshguy@gmail.com' || root.child('approvedUsers').child(auth.uid).exists())",
+      "$uid": {
+        ".read":  "auth != null && auth.uid == $uid",
+        ".write": "auth != null && auth.token.email == 'thatwalshguy@gmail.com'"
+      }
+    }
+  }
+}
