@@ -89,6 +89,13 @@ function ppKnownNames(proj) {
 // the point where the reply gets truncated.
 var PP_PASTE_MAX = 30000;
 
+// How much of the thread is KEPT once it has been read. Separate from the input
+// cap on purpose: a 30KB thread is fine to send once, but it is stored on the
+// project, and prepro/state is written whole by every page — twenty maxed
+// threads on one project would put well over half a megabyte into every save.
+// The summary is the record; this is the receipt behind it.
+var PP_SOURCE_KEEP = 6000;
+
 var PP_EXTRACT_SCHEMA = {
   type: 'object',
   properties: {
@@ -235,6 +242,17 @@ function ppOwnerMatches(raw, proj) {
     });
   });
 
+  // A single letter is an initial, not a name. "M" matching exactly one Marcus
+  // is not evidence it means Marcus — it equally means a Maya who is not on
+  // this project. Inferring from it produced a confident, pre-ticked loop
+  // against a person the text never named, so an initial always asks.
+  var initialOnly = want.length === 1 && want[0].length < 2;
+  if (initialOnly) {
+    return hits.length
+      ? { kind: 'ambiguous', candidates: hits }
+      : { kind: 'unknown', candidates: [] };
+  }
+
   if (hits.length === 1) return { kind: 'inferred', candidates: hits, resolved: hits[0] };
   if (hits.length > 1)  return { kind: 'ambiguous', candidates: hits };
   return { kind: 'unknown', candidates: [] };
@@ -257,7 +275,7 @@ function ppLoopKey(text) {
   return String(text || '')
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\b(the|a|an|to|for|of|on|in|with|from|please|can|you|we|i|our|my)\b/g, ' ')
+    .replace(/\b(the|an|to|for|of|on|in|with|from|please|can|you|we|our|my|by|at|as|is|it|be|or|if|so|up|do|and|but)\b/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -268,6 +286,20 @@ function ppSameLoop(a, b) {
   var ka = ppLoopKey(a), kb = ppLoopKey(b);
   if (!ka || !kb) return false;
   if (ka === kb) return true;
+
+  // The identifier veto has to run BEFORE the prefix shortcut, not after it.
+  // "Music licence cleared" is a prefix of "Music licence cleared for v2", so
+  // the shortcut returned a match and the v2 loop was swallowed by its own
+  // sibling without ever reaching the checks below.
+  var wordsOf = function (k) { return k.split(' ').filter(Boolean); };
+  var wa0 = wordsOf(ka), wb0 = wordsOf(kb);
+  var setA0 = {}, setB0 = {};
+  wa0.forEach(function (w) { setA0[w] = true; });
+  wb0.forEach(function (w) { setB0[w] = true; });
+  var isIdentifier = function (w) { return /\d/.test(w) || w.length <= 2; };
+  if (wa0.some(function (w) { return !setB0[w] && isIdentifier(w); }) ||
+      wb0.some(function (w) { return !setA0[w] && isIdentifier(w); })) return false;
+
   if (ka.indexOf(kb) === 0 || kb.indexOf(ka) === 0) return true;
 
   // Prefix matching only catches a rephrase that starts the same way. "Music
@@ -303,15 +335,25 @@ function ppSameLoop(a, b) {
   // visible row in a list the reviewer is already reading and unticks in one
   // click, whereas a false merge silently drops a real loop and nobody ever
   // learns it existed.
-  // A lower bar here than for the shared word above, and deliberately so: a
-  // shared word has to carry the subject matter to prove two loops are the
-  // same, but an exclusive word only has to be meaningful to prove they differ.
-  // "crew" is four letters and is the entire difference between booking a
-  // studio and booking a crew.
-  var differing = function (w) { return w.length >= 4; };
-  var aOnly = wa.some(function (w) { return differing(w) && !setB[w]; });
-  var bOnly = wb.some(function (w) { return differing(w) && !setA[w]; });
-  return !(aOnly && bOnly);
+  // Some tokens are identifiers, and one of them appearing on only ONE side is
+  // enough on its own: a digit anywhere ("version 1" / "version 2", "episode 3"
+  // / "episode 4") or a token of one or two characters ("cut A" / "cut B",
+  // "for Mon" / "for Tue"). A length threshold that ignored these merged nine
+  // of eleven realistic pairs, and a merged pair silently loses a loop that
+  // never reaches the review list at all.
+  var identifier = function (w) { return /\d/.test(w) || w.length <= 2; };
+  var exclusive = function (words, other) {
+    return words.filter(function (w) { return !other[w]; });
+  };
+  var aEx = exclusive(wa, setB);
+  var bEx = exclusive(wb, setA);
+  if (aEx.some(identifier) || bEx.some(identifier)) return false;
+
+  // Otherwise: merge only when one loop's words are a subset of the other's.
+  // Both sides carrying something the other lacks means they are about
+  // different things, and the safe reading of "different" is to keep both — a
+  // duplicate is a visible row the reviewer unticks, a false merge is invisible.
+  return !(aEx.length && bEx.length);
 }
 
 // `owner` and `direction` are not independent, and treating them as two free
@@ -363,8 +405,18 @@ function ppUnexpandOwner(owner, quote, proj) {
   var present = parts.filter(function (part) {
     return new RegExp('(^|[^a-z])' + part.toLowerCase().replace(/[^a-z0-9]/g, '') + '([^a-z]|$)', 'i').test(hay);
   });
-  if (!present.length) return o;                        // paraphrased; leave it
   if (present.length === parts.length) return o;        // all parts present
+
+  if (!present.length) {
+    // No part of the name is in the text. Usually a legitimate paraphrase —
+    // "she said she would send it" — but it is also how an initial reads: the
+    // thread says "M will pick it up" and the reply says "Marcus Delgado". If a
+    // bare initial matching this name is sitting in the quote, that is what the
+    // text actually gave us, so hand that back and let it be asked about.
+    var initial = parts.map(function (part) { return part.charAt(0); })
+      .filter(function (ch) { return ch && new RegExp('(^|[^A-Za-z])' + ch + '([^A-Za-z]|$)').test(q); })[0];
+    return initial || o;
+  }
 
   // Only some of the name is in the text. Fall back to what was written, so
   // ppOwnerMatches gets to decide whether that is ambiguous.
@@ -448,6 +500,15 @@ function ppNormalizeExtracted(raw, proj, opts) {
   return out;
 }
 
+// Keeps the head of a long thread and says plainly that it was cut, rather than
+// storing an unbounded blob in a node every page rewrites in full.
+function ppTrimSource(text) {
+  var s = String(text || '').trim();
+  if (s.length <= PP_SOURCE_KEEP) return s;
+  return s.slice(0, PP_SOURCE_KEEP).trim() +
+    '\n\n[… ' + (s.length - PP_SOURCE_KEEP) + ' more characters not kept — the summary above covers the whole thread]';
+}
+
 // The note types a thread may be filed as. Mirrors NOTE_TYPES in team.html
 // minus 'system', which is reserved for events the app generates itself.
 var PP_NOTE_TYPES = ['update', 'delay', 'direction', 'feedback', 'blocker', 'decision', 'team'];
@@ -488,7 +549,7 @@ function ppNormalizeThreadNote(raw, text) {
     summary: summary,
     from: from,
     fromGuessed: guessed,
-    sourceText: String(text || '').trim(),
+    sourceText: ppTrimSource(text),
     accept: !!summary   // nothing worth filing if it could not summarise it
   };
 }

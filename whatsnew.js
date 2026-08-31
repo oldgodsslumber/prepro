@@ -17,6 +17,29 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-08-31k',
+    title: 'More fixes from an adversarial pass',
+    dateLabel: 'Aug 31, 2026',
+    groups: [
+      {
+        area: 'Team · reading a thread',
+        items: [
+          { tag: 'fix', text: 'Two loops that differed only in a version number, an episode number, a day or a name could be treated as the same thing, and one of them was dropped before you ever saw it — “Approve version 1” and “Approve version 2” being the clearest case. Short and numbered differences now always count as a real difference.' },
+          { tag: 'fix', text: 'A single initial is no longer treated as a name. “M will pick it up” used to resolve confidently to whichever M is on the project and arrive ticked; it now asks, because an initial is not evidence.' },
+          { tag: 'fix', text: 'The check that catches an invented surname now also catches an invented surname over an initial, which was the exact case it kept missing.' }
+        ]
+      },
+      {
+        area: 'AI · reliability',
+        items: [
+          { tag: 'fix', text: 'Choosing a model that is not in the automatic fallback list left you stranded the moment it ran out of requests, even with working models available. It now falls back to those, which is what the note under the setting has always promised.' },
+          { tag: 'fix', text: 'A key with no free-tier allowance is recognised in more of the ways Google reports it. Previously only one phrasing was caught, so the other wordings burned through every model and then told you to wait for a midnight reset that would never help.' },
+          { tag: 'fix', text: 'Long pasted threads are no longer stored in full. The summary is the record, and enough of the original is kept to check it against — a handful of very long threads would otherwise have been carried in every save the app makes.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-08-31j',
     title: 'Fixes to reading a thread',
     dateLabel: 'Aug 31, 2026',

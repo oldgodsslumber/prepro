@@ -214,7 +214,18 @@ function ppPickModel(chosen) {
   var chain = PP_LLM_REGISTRY.chain || [];
   var u = ppUsageToday();
   var i = chain.indexOf(chosen);
-  if (i < 0) return chosen;
+  if (i < 0) {
+    // Most models in the Settings dropdown are not in the fall-through chain.
+    // An explicit choice is honoured while it works, but once it is spent or
+    // unreachable there is no reason to strand the person when usable models
+    // are sitting right there — and the hint under that dropdown promises
+    // exactly this behaviour.
+    if (ppModelUsable(chosen, u)) return chosen;
+    for (var k = 0; k < chain.length; k++) {
+      if (ppModelUsable(chain[k], u)) return chain[k];
+    }
+    return null;
+  }
   for (var j = i; j < chain.length; j++) {
     if (ppModelUsable(chain[j], u)) return chain[j];
   }
@@ -229,7 +240,14 @@ function ppNextModel(after) {
   var chain = PP_LLM_REGISTRY.chain || [];
   var u = ppUsageToday();
   var i = chain.indexOf(after);
-  if (i < 0) return null;
+  // An off-chain model that is down falls into the top of the chain rather than
+  // nowhere.
+  if (i < 0) {
+    for (var k = 0; k < chain.length; k++) {
+      if (chain[k] !== after && ppModelUsable(chain[k], u)) return chain[k];
+    }
+    return null;
+  }
   for (var j = i + 1; j < chain.length; j++) {
     if (ppModelUsable(chain[j], u)) return chain[j];
   }
@@ -244,6 +262,8 @@ function ppUsageSummary() {
   });
 }
 
+// True only when there is genuinely nothing left to call, including the
+// person's own off-chain choice.
 function ppChainSpent() { return ppPickModel(ppLlmSettings().model) === null; }
 
 // "Out of requests" and "every model is unreachable" both leave you without AI
@@ -272,9 +292,17 @@ function ppChainDeadMessage() {
 // at midnight" forever, hiding the one message that says how to fix it.
 function ppIsZeroQuota(status, errText) {
   if (status !== 429) return false;
-  var msg = '';
-  try { msg = (JSON.parse(errText).error || {}).message || ''; } catch (_) { msg = String(errText || ''); }
-  return /limit:\s*0/i.test(msg) && /free_tier/i.test(msg);
+  // Search the WHOLE payload, not just error.message. Google states the quota
+  // in error.details as often as in the message, and spells the tier
+  // "free_tier", "FreeTier" and "free tier" in different responses. Matching
+  // one wording meant a permanently ineligible key was read as today's rate
+  // limit: every model burned, then a promise that it resets at midnight, which
+  // it never does.
+  var hay = String(errText || '');
+  try { hay = JSON.stringify(JSON.parse(errText)); } catch (_) {}
+  var zero = /limit:?\s*0\b/i.test(hay) || /"?quotaValue"?\s*:\s*"?0"?/i.test(hay);
+  var freeTier = /free[_\s-]?tier/i.test(hay);
+  return zero && freeTier;
 }
 
 function ppGeminiError(status, errText, model) {
