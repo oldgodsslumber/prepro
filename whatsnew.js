@@ -17,6 +17,22 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-08-31b',
+    title: 'Open loops — the thing the app could never keep track of',
+    dateLabel: 'Aug 31, 2026',
+    groups: [
+      {
+        area: 'Under the hood',
+        items: [
+          { tag: 'new', text: 'A project can now hold open loops: something owed, by someone, ideally by a date — and, crucially, a note of whose court the ball is in. Until now the app could only describe scheduled work, which is why nothing could ever remind you that you had been waiting on somebody since Tuesday.' },
+          { tag: 'new', text: 'Subtasks become open loops. A subtask used to be text and a tick stored against a task id, with no owner, no date and no project, and it vanished silently whenever the task it hung off was deleted in Team. As an open loop it gains all of that, and there is now a way to see which ones had been orphaned.' },
+          { tag: 'new', text: 'Dash → Settings → Data offers the move when you have subtasks to migrate. It shows exactly what will happen first, leaves your existing subtasks untouched as a fallback, and running it twice does not duplicate anything.' },
+          { tag: 'fix', text: 'Open loops live in their own store rather than alongside the projects, so ticking one off no longer rewrites every project at once — two people working at the same time cannot overwrite each other the way they could.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-08-31',
     title: 'The dashboard can finally read the brief',
     dateLabel: 'Aug 31, 2026',

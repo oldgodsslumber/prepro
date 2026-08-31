@@ -225,7 +225,37 @@ Do not add a second "what does done look like" field — decide whether
 intent) or whether it should be dropped in favour of the goal fields now that
 they are reachable.
 
-### Phase 2 — The commitment data layer
+### Phase 2 — The commitment data layer — SHIPPED 2026-08-31, build `20260831b`
+
+- **`commitments.js`** — classic script, 40 globals, no collisions with any page
+  (checked mechanically). Store, `prepro/commitments` sync, the full state
+  machine, queries, prune and orphan detection, and the subtask migration
+  planner. Written **one key at a time**: `set(ref(db, 'prepro/commitments/<id>'))`.
+  A per-key `set()` does update()'s job and `set(path, null)` does remove()'s,
+  which matters because `auth.js` exposes only `set/get/onValue` on `window._fb`.
+- All three pages subscribe and repaint on genuine remote change; echoes of our
+  own writes compare equal after normalisation and are ignored.
+- **Migration** lives in dash Settings → Data, previewed, idempotent by
+  `(parentTaskId, text)`, leaving `dashData.subtasks` untouched as a fallback.
+
+**Two decisions taken while building:**
+
+- **`healthLine` and `openBlocker` were dropped, not built.** `healthLine` is a
+  second field answering "what does done look like" — that is `tangibleGoal1`,
+  now that Phase 1 made it writable. `openBlocker` duplicates a commitment in
+  the `waiting` state. Only `cadenceDays` survives onto the project, because
+  nothing else can express it.
+- **The migration resolver does not use `buildTaskLookup()`.** That map carries
+  no project id and filters through `isActiveProject`, so every subtask on a
+  completed or on-hold project would have been reported as an orphan and
+  silently dropped. `subtaskParentIndex()` walks all projects instead.
+
+*Verified:* 57 unit tests on the module (state machine clock semantics,
+overdue, sort, stale detection, echo comparison, prune dry-run, idempotent
+migration) plus 13 integration tests on the dash resolver, including the
+completed-project case above.
+
+### Phase 2 — original scope, for reference
 
 - New classic script **`commitments.js`**: the store, Firebase sync against
   `prepro/commitments`, per-key `update()` writes, and the state machine

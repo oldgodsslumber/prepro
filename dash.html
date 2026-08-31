@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260831a';
+window.PREPRO_BUILD = '20260831b';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,13 +26,16 @@ window.PREPRO_BUILD = '20260831a';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260831a"></script>
+<script type="module" src="./auth.js?v=20260831b"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260831a"></script>
+<script src="./whatsnew.js?v=20260831b"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and ops.html. -->
-<script src="./people.js?v=20260831a"></script>
+<script src="./people.js?v=20260831b"></script>
+<!-- Shared commitments module (open loops / subtasks). Classic script, same
+     contract as people.js: its globals must exist before the page script runs. -->
+<script src="./commitments.js?v=20260831b"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -76,6 +79,13 @@ window._fbReady.then(({ db, ref, onValue }) => {
     const data = snapshot.val();
     if (data) { window._fbPeopleEmails = data; if (window._dashReloadPeopleEmails) window._dashReloadPeopleEmails(data); }
   }, err => console.error('dash peopleEmails firebase error:', err));
+
+  // Open loops. Its own node rather than part of prepro/state, because state is
+  // written whole and commitments are ticked one at a time — see commitments.js.
+  onValue(ref(db, 'prepro/commitments'), snapshot => {
+    window._fbCommitments = snapshot.val() || {};
+    if (window._dashReloadCommitments) window._dashReloadCommitments(window._fbCommitments);
+  }, err => console.error('dash commitments firebase error:', err));
 });
 </script>
 
@@ -908,6 +918,103 @@ function renderDataSettings(c) {
   hint.className = 'settings-hint';
   hint.textContent = 'Export downloads a JSON backup of every project, name history, saved emails, and your dashboard data \u2014 ticked tasks, subtasks, statuses and next steps. Import merges projects by ID (overwrites duplicates) and adds new names, emails and dashboard entries without overwriting what is already here.';
   c.appendChild(hint);
+
+  renderSubtaskMigration(c);
+}
+
+// \u2500\u2500 SUBTASK \u2192 COMMITMENT MIGRATION \u2500\u2500
+// Explicit, previewed, and re-runnable, mirroring the people-record migration
+// in team.html. A silent bulk write into a node the whole team reads is not
+// something to spring on anyone, and the preview is also the only way to see
+// how many subtasks have been orphaned by a deleted parent task.
+function renderSubtaskMigration(c) {
+  const subs = (dashData && dashData.subtasks) || {};
+  const remaining = Object.keys(subs).reduce((n, k) => n + (Array.isArray(subs[k]) ? subs[k].filter(s => s && String(s.text || '').trim()).length : 0), 0);
+  if (!remaining) return;
+
+  const title = document.createElement('div');
+  title.className = 'settings-section-title';
+  title.textContent = 'Subtasks \u2192 Open Loops';
+  c.appendChild(title);
+
+  // Rebuild the parent index rather than trusting a cached one — projects may
+  // have changed since it was last built.
+  subtaskParentIndex(true);
+  const plan = planSubtaskMigration(subs, resolveSubtaskParent);
+
+  const summary = document.createElement('div');
+  summary.className = 'settings-hint';
+  const bits = [`${plan.move.length} subtask${plan.move.length === 1 ? '' : 's'} can move`];
+  if (plan.alreadyDone) bits.push(`${plan.alreadyDone} already ticked off`);
+  if (plan.orphans.length) bits.push(`${plan.orphans.length} whose task no longer exists (these are skipped)`);
+  summary.textContent = bits.join(' \u00b7 ') + '.';
+  c.appendChild(summary);
+
+  const why = document.createElement('div');
+  why.className = 'settings-hint';
+  why.textContent = 'Subtasks today are just text and a tick, stored against a task id. As open loops they gain an owner, a due date, and a note of whose court the ball is in \u2014 which is what lets the dashboard chase them. Your existing subtasks stay where they are as a fallback; nothing is deleted.';
+  c.appendChild(why);
+
+  const actions = document.createElement('div');
+  actions.className = 'data-actions';
+  const go = document.createElement('button');
+  go.className = 'settings-btn primary';
+  go.textContent = `\u2192 Move ${plan.move.length} to open loops`;
+  go.disabled = !plan.move.length;
+  go.addEventListener('click', () => {
+    if (!confirm(`Move ${plan.move.length} subtask${plan.move.length === 1 ? '' : 's'} into open loops?\n\nYour subtasks are left in place, so this can be undone by ignoring the result. Running it twice will not duplicate anything.`)) return;
+    // Recompute against current state rather than the plan built at render
+    // time — a teammate may have edited a project while this panel sat open.
+    subtaskParentIndex(true);
+    const fresh = planSubtaskMigration((dashData && dashData.subtasks) || {}, resolveSubtaskParent);
+    const res = runSubtaskMigration(fresh, { createdBy: selectedPerson || '' });
+    alert(`Moved ${res.created}.` +
+          (res.skipped ? `\n${res.skipped} already existed and were left alone.` : '') +
+          (res.orphans ? `\n${res.orphans} skipped \u2014 their task no longer exists.` : ''));
+    renderSettingsContent();
+    renderAll();
+  });
+  actions.appendChild(go);
+  c.appendChild(actions);
+
+  if (plan.orphans.length) {
+    const orph = document.createElement('div');
+    orph.className = 'settings-hint';
+    orph.textContent = 'Orphaned: ' + plan.orphans.slice(0, 6).map(o => '\u201c' + o.text + '\u201d').join(', ') +
+      (plan.orphans.length > 6 ? ` and ${plan.orphans.length - 6} more` : '') +
+      '. These were attached to tasks that have since been deleted in Team.';
+    c.appendChild(orph);
+  }
+}
+
+// Resolves a subtask's parent task to the project it belongs to. Returns null
+// when the task has been deleted, which is exactly the orphaning that made
+// subtasks unreliable in the first place.
+//
+// Deliberately NOT buildTaskLookup(): that map carries {task, projectName} with
+// no project id, and it filters to isActiveProject, so every subtask sitting on
+// a completed or on-hold project would be reported as an orphan and silently
+// dropped. Migration has to see every project, finished ones included.
+let _subtaskParentIndex = null;
+function subtaskParentIndex(rebuild) {
+  if (_subtaskParentIndex && !rebuild) return _subtaskParentIndex;
+  const map = new Map(); // taskId -> {projectId, projectName, taskName, person}
+  (state.projects || []).forEach(proj => {
+    (proj.tasks || []).forEach(t => {
+      if (!t || !t.id) return;
+      map.set(t.id, {
+        projectId: proj.id,
+        projectName: proj.name || '',
+        taskName: typeof taskDisplayName === 'function' ? taskDisplayName(t) : (t.taskName || t.role || ''),
+        person: t.person || ''
+      });
+    });
+  });
+  _subtaskParentIndex = map;
+  return map;
+}
+function resolveSubtaskParent(taskId) {
+  return subtaskParentIndex().get(taskId) || null;
 }
 
 function doExportData() {
@@ -1400,6 +1507,10 @@ window._dashReloadSunsetPeople = function(data) {
 window._dashReloadPeople = function(data) {
   if (applyRemotePeople(data) && document.readyState !== 'loading') renderAll();
 };
+window._dashReloadCommitments = function(data) {
+  if (applyRemoteCommitments(data) && document.readyState !== 'loading') renderAll();
+};
+if (window._fbCommitments) window._dashReloadCommitments(window._fbCommitments);
 if (window._fbNameHistory) window._dashReloadNameHistory(window._fbNameHistory);
 if (window._fbPeopleEmails) window._dashReloadPeopleEmails(window._fbPeopleEmails);
 if (window._fbSunsetPeople) window._dashReloadSunsetPeople(window._fbSunsetPeople);
