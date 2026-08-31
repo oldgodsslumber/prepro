@@ -17,6 +17,23 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-08-31f',
+    title: 'Optional AI — bring your own key, or don’t',
+    dateLabel: 'Aug 31, 2026',
+    groups: [
+      {
+        area: 'Team · Settings → AI',
+        items: [
+          { tag: 'new', text: 'A new AI tab in Settings where you can paste your own Google Gemini key. Nothing in prepro needs it: every nudge, every open loop and the whole dossier are worked out on your own machine with no model involved. A key only unlocks turning pasted text — an email thread, meeting notes — into open loops you review before they land. That part arrives next.' },
+          { tag: 'new', text: 'Everyone brings their own key rather than sharing one. Free-tier limits are counted per key, so separate keys actually go further across a team than a shared one would — and a shared key in a public repo would be a published key.' },
+          { tag: 'new', text: 'Your key is stored in your browser only. It never goes into the shared database, never into the repo, and nobody else on the team can see it.' },
+          { tag: 'new', text: 'Test connection does a real round trip and tells you in plain words what happened. If a key has no free-tier quota at all — usually because it came from a project with billing switched on — it says exactly that, and how to make one that works.' },
+          { tag: 'new', text: 'Settings shows how much of today’s free allowance you have used. When a model runs out, prepro moves to the next one by itself; when they are all spent it says so and carries on working normally, because nothing depends on it.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-08-31e',
     title: 'The dossier — a whole project on one page',
     dateLabel: 'Aug 31, 2026',

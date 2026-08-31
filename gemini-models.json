@@ -1,0 +1,143 @@
+{
+  "generated": "2026-08-22T00:00:00Z",
+  "generatedBy": "hand-seeded from the 2026-08-21 audit; re-run index.html to replace",
+  "apiVersion": "v1beta",
+  "_note": "caps are recorded ONLY where the behaviour was actually observed against the live API. An absent cap means untested, not false — consumers must fall back to their own heuristic rather than assume.",
+  "defaults": {
+    "gemini": "gemini-3.7-flash",
+    "gemma": "gemma-4-31b-it"
+  },
+  "chain": [
+    "gemini-3.7-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-2.5-flash",
+    "gemma-4-31b-it",
+    "gemma-4-26b-a4b-it"
+  ],
+  "retired": [
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-3-pro-preview",
+    "gemini-pro",
+    "gemma-3-12b-it",
+    "gemma-3-27b-it",
+    "gemma-4-e2b-it",
+    "gemma-4-e4b-it"
+  ],
+  "grandfathered": [
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-pro"
+  ],
+  "models": {
+    "gemini-3.7-flash": {
+      "status": "live",
+      "label": "Gemini 3.7 Flash",
+      "family": "gemini",
+      "inputTokenLimit": 1048576,
+      "outputTokenLimit": 65536,
+      "caps": {
+        "jsonMode": "honored",
+        "thinking": "thinkingLevel",
+        "grounding": true
+      },
+      "lastVerified": "2026-08-21"
+    },
+    "gemini-3.6-flash": {
+      "status": "live",
+      "label": "Gemini 3.6 Flash",
+      "family": "gemini",
+      "inputTokenLimit": 1048576,
+      "outputTokenLimit": 65536,
+      "caps": {},
+      "lastVerified": "2026-08-21"
+    },
+    "gemini-3.5-flash": {
+      "status": "live",
+      "label": "Gemini 3.5 Flash",
+      "family": "gemini",
+      "inputTokenLimit": 1048576,
+      "outputTokenLimit": 65536,
+      "caps": {},
+      "lastVerified": "2026-08-21"
+    },
+    "gemini-3.5-flash-lite": {
+      "status": "live",
+      "label": "Gemini 3.5 Flash Lite",
+      "family": "gemini",
+      "caps": {
+        "jsonMode": "honored",
+        "thinking": "thinkingLevel",
+        "grounding": true
+      },
+      "lastVerified": "2026-08-21"
+    },
+    "gemini-3.1-flash-lite": {
+      "status": "live",
+      "label": "Gemini 3.1 Flash Lite",
+      "family": "gemini",
+      "caps": {},
+      "lastVerified": "2026-08-21"
+    },
+    "gemini-3.1-flash-lite-preview": {
+      "status": "live",
+      "label": "Gemini 3.1 Flash Lite Preview",
+      "family": "gemini",
+      "inputTokenLimit": 1048576,
+      "outputTokenLimit": 65536,
+      "caps": {},
+      "lastVerified": "2026-08-21"
+    },
+    "gemini-3.1-pro-preview": {
+      "status": "live",
+      "label": "Gemini 3.1 Pro Preview",
+      "family": "gemini",
+      "caps": {},
+      "lastVerified": "2026-08-21"
+    },
+    "gemini-3-flash-preview": {
+      "status": "live",
+      "label": "Gemini 3 Flash Preview",
+      "family": "gemini",
+      "caps": {},
+      "lastVerified": "2026-08-21"
+    },
+    "gemini-flash-latest": {
+      "status": "live",
+      "label": "Gemini Flash Latest",
+      "family": "gemini",
+      "inputTokenLimit": 1048576,
+      "outputTokenLimit": 65536,
+      "caps": {},
+      "lastVerified": "2026-08-21"
+    },
+    "gemini-2.5-flash": {
+      "status": "live",
+      "label": "Gemini 2.5 Flash",
+      "family": "gemini",
+      "inputTokenLimit": 1048576,
+      "outputTokenLimit": 65536,
+      "caps": {},
+      "lastVerified": "2026-08-21"
+    },
+    "gemma-4-31b-it": {
+      "status": "live",
+      "label": "Gemma 4 31B",
+      "family": "gemma",
+      "caps": {
+        "jsonMode": "ignored",
+        "thinking": "none",
+        "jsonReliability": 1.0
+      },
+      "lastVerified": "2026-08-21"
+    },
+    "gemma-4-26b-a4b-it": {
+      "status": "live",
+      "label": "Gemma 4 26B-A4B",
+      "family": "gemma",
+      "caps": {},
+      "lastVerified": "2026-08-21"
+    }
+  }
+}

@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260831e';
+window.PREPRO_BUILD = '20260831f';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,21 +29,24 @@ window.PREPRO_BUILD = '20260831e';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260831e"></script>
+<script type="module" src="./auth.js?v=20260831f"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260831e"></script>
+<script src="./whatsnew.js?v=20260831f"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20260831e"></script>
+<script src="./people.js?v=20260831f"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20260831e"></script>
+<script src="./commitments.js?v=20260831f"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20260831e"></script>
+<script src="./dossier.js?v=20260831f"></script>
+<!-- Gemini client. Optional: every person brings their own key and the app is
+     fully usable without one. Classic script, loaded after dossier.js. -->
+<script src="./prepro-llm.js?v=20260831f"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260831e"></script>
+<script src="./xlsx.full.min.js?v=20260831f"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -785,6 +788,14 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 .pi-edit::placeholder { color: var(--dim); opacity: .7; }
 textarea.pi-edit { resize: vertical; min-height: 46px; white-space: pre-wrap; }
 .pi-hint { font-size: 10px; color: var(--dim); padding: 4px 2px 8px; line-height: 1.4; }
+/* AI settings tab */
+.ai-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.ai-label { font-size: 12px; color: var(--dim); font-weight: 600; flex: 0 0 100px; }
+.ai-input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; color: var(--text); padding: 6px 8px; font: inherit; font-size: 12px; outline: none; }
+.ai-input:focus { border-color: var(--accent); }
+.ai-usage { border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; margin: 4px 0 8px; }
+.ai-usage-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--dim); padding: 3px 0; }
+.ai-spent { color: var(--danger); }
 .export-fmt { display: flex; gap: 4px; padding: 8px 2px 4px; }
 .export-fmt-btn { font-size: 11px; font-weight: 600; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 5px; padding: 4px 10px; }
 .export-fmt-btn:hover { color: var(--text); border-color: var(--accent); }
@@ -1210,6 +1221,7 @@ textarea.pi-edit { resize: vertical; min-height: 46px; white-space: pre-wrap; }
         <div class="settings-tab active" data-settings-tab="data">Data</div>
         <div class="settings-tab" data-settings-tab="people">People</div>
         <div class="settings-tab" data-settings-tab="merge">Merge</div>
+        <div class="settings-tab" data-settings-tab="ai">AI</div>
       </div>
       <div class="settings-content" id="settingsContent"></div>
     </div>
@@ -2001,6 +2013,7 @@ function renderSettingsContent() {
   if (settingsActiveTab === 'data') renderDataSettings(c);
   else if (settingsActiveTab === 'people') renderPeopleSettings(c);
   else if (settingsActiveTab === 'merge') renderMergeSettings(c);
+  else if (settingsActiveTab === 'ai') renderAiSettings(c);
 }
 
 // Absorb each beta project's schedules, notes, and role assignees into alpha,
@@ -2258,6 +2271,157 @@ function detectDuplicateGroups() {
   return [...clusters.values()]
     .filter(g => g.length >= 2)
     .map(g => g.slice().sort((a, b) => projectMergeScore(b) - projectMergeScore(a)));
+}
+
+// ── AI SETTINGS ──
+// Everybody brings their own key. prepro is multi-user off a public repo
+// against a wildcard-readable Firebase node, so a shared key here would be a
+// published key — and the free tier is per-key anyway, which means separate
+// keys actually scale better across a team than one shared one would.
+function renderAiSettings(c) {
+  const s = ppLlmSettings();
+
+  const title = document.createElement('div');
+  title.className = 'settings-section-title';
+  title.textContent = 'Gemini (optional)';
+  c.appendChild(title);
+
+  const intro = document.createElement('div');
+  intro.className = 'settings-hint';
+  intro.textContent = 'Nothing in prepro needs this. Every nudge, every open loop and the whole dossier are worked out on your machine with no model involved. A key only adds the ability to turn pasted text — an email thread, meeting notes — into open loops you review before they land.';
+  c.appendChild(intro);
+
+  const keyRow = document.createElement('div');
+  keyRow.className = 'ai-row';
+  const keyLabel = document.createElement('label');
+  keyLabel.className = 'ai-label';
+  keyLabel.textContent = 'Your API key';
+  keyRow.appendChild(keyLabel);
+  const key = document.createElement('input');
+  key.type = 'password';
+  key.className = 'ai-input';
+  key.placeholder = 'AIza…';
+  key.value = s.apiKey || '';
+  key.autocomplete = 'off';
+  key.addEventListener('change', () => { ppLlmSave({ apiKey: key.value.trim() }); renderSettingsContent(); });
+  keyRow.appendChild(key);
+  c.appendChild(keyRow);
+
+  const keyHint = document.createElement('div');
+  keyHint.className = 'settings-hint';
+  keyHint.innerHTML = 'Make one at <a href="https://aistudio.google.com/app/api-keys" target="_blank" rel="noopener">aistudio.google.com/app/api-keys</a> — choose “Create API key in new project” so it lands on the free tier. It is stored in this browser only: never in the shared database, never in the repo, never visible to anyone else on the team.';
+  c.appendChild(keyHint);
+
+  const modelRow = document.createElement('div');
+  modelRow.className = 'ai-row';
+  const modelLabel = document.createElement('label');
+  modelLabel.className = 'ai-label';
+  modelLabel.textContent = 'Model';
+  modelRow.appendChild(modelLabel);
+  const sel = document.createElement('select');
+  sel.className = 'ai-input';
+  ppLiveModels().forEach(id => {
+    const o = document.createElement('option');
+    o.value = id;
+    o.textContent = ppModelLabel(id) + (id === s.model ? '' : '');
+    o.selected = id === s.model;
+    sel.appendChild(o);
+  });
+  sel.addEventListener('change', () => { ppLlmSave({ model: sel.value }); renderSettingsContent(); });
+  modelRow.appendChild(sel);
+  c.appendChild(modelRow);
+
+  const chainHint = document.createElement('div');
+  chainHint.className = 'settings-hint';
+  chainHint.textContent = 'When a model runs out of free requests for the day, prepro falls through to the next one on its own. You do not need to manage this.';
+  c.appendChild(chainHint);
+
+  // ── Today's budget ──
+  const uTitle = document.createElement('div');
+  uTitle.className = 'settings-section-title';
+  uTitle.textContent = "Today's free-tier use";
+  c.appendChild(uTitle);
+
+  const usage = document.createElement('div');
+  usage.className = 'ai-usage';
+  ppUsageSummary().forEach(row => {
+    const r = document.createElement('div');
+    r.className = 'ai-usage-row';
+    const n = document.createElement('span');
+    n.textContent = row.label;
+    const v = document.createElement('span');
+    v.textContent = row.used + ' / ' + row.limit;
+    if (row.used >= row.limit) v.className = 'ai-spent';
+    r.appendChild(n); r.appendChild(v);
+    usage.appendChild(r);
+  });
+  c.appendChild(usage);
+
+  if (ppChainSpent()) {
+    const spent = document.createElement('div');
+    spent.className = 'settings-hint ai-spent';
+    spent.textContent = "Today's budget is spent across every model. It resets at midnight — everything else in prepro carries on working as normal.";
+    c.appendChild(spent);
+  }
+
+  // ── Test ──
+  const actions = document.createElement('div');
+  actions.className = 'data-actions';
+  const test = document.createElement('button');
+  test.className = 'settings-btn primary';
+  test.textContent = 'Test connection';
+  test.disabled = !ppLlmConfigured();
+  const result = document.createElement('div');
+  result.className = 'settings-hint';
+
+  test.addEventListener('click', () => {
+    test.disabled = true;
+    test.textContent = 'Testing…';
+    result.textContent = '';
+    result.classList.remove('ai-spent');
+    // Deliberately a real round trip through the JSON path: it proves the key,
+    // the model and the structured-output contract together, which is what
+    // actually has to work later.
+    ppTestConnection().then(r => {
+      result.textContent = r.ok
+        ? '✓ Working — answered as ' + ppModelLabel(r.model) + '.'
+        : '✓ Reached the model, but it did not answer in the expected shape. Try another model.';
+      test.textContent = 'Test connection';
+      test.disabled = false;
+      renderAiUsageOnly(usage);
+    }).catch(err => {
+      result.textContent = (err && err.message) || String(err);
+      result.classList.add('ai-spent');
+      test.textContent = 'Test connection';
+      test.disabled = false;
+      renderAiUsageOnly(usage);
+    });
+  });
+  actions.appendChild(test);
+  c.appendChild(actions);
+  c.appendChild(result);
+
+  if (!ppLlmConfigured()) {
+    const off = document.createElement('div');
+    off.className = 'settings-hint';
+    off.textContent = 'No key set, so no AI features appear anywhere in the app. That is a supported way to use prepro, not a broken state.';
+    c.appendChild(off);
+  }
+}
+
+// Refreshes just the counters after a test, so the panel does not blink.
+function renderAiUsageOnly(container) {
+  if (!container) return;
+  container.innerHTML = '';
+  ppUsageSummary().forEach(row => {
+    const r = document.createElement('div');
+    r.className = 'ai-usage-row';
+    const n = document.createElement('span'); n.textContent = row.label;
+    const v = document.createElement('span'); v.textContent = row.used + ' / ' + row.limit;
+    if (row.used >= row.limit) v.className = 'ai-spent';
+    r.appendChild(n); r.appendChild(v);
+    container.appendChild(r);
+  });
 }
 
 function renderMergeSettings(c) {

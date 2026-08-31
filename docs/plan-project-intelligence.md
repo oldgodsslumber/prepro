@@ -425,7 +425,40 @@ Add `dossierThin(proj)` — one line per project — for cross-project calls lat
 *Acceptance:* a live project renders as a dossier a person could brief
 themselves from.
 
-### Phase 6 — `prepro-llm.js`
+### Phase 6 — `prepro-llm.js` — SHIPPED 2026-08-31, build `20260831f`
+
+Ported, not rewritten. storybible2's retry/backoff, per-attempt timeouts, abort
+signals, daily usage counter, fall-through chain, `parseJsonLoose` and the
+JSON-repair second pass all came across. Converted to a classic script.
+
+- **`responseSchema` grafted** from storyboarder's `providers.js` — sent only to
+  models the registry says honour it.
+- **`gemini-models.json`** — the registry copied into the repo so it is
+  fetchable same-origin, with a baked-in fallback if the fetch fails. The two
+  silent-failure facts are now **data, not regexes**: `caps.jsonMode`
+  (`honored` / `ignored`) and `caps.thinking` (`thinkingLevel` /
+  `thinkingBudget` / `none`). Refreshing the registry updates the behaviour.
+  An absent cap falls back to the family heuristic, because assuming a Gemma
+  honours JSON mode is the failure that raises no error at all.
+- **Settings → AI tab** in team.html: key, model, today's usage per chain
+  model, and a Test connection that goes through the real JSON path so it
+  proves key + model + structured-output contract together.
+- `ppLlmConfigured()` is the gate every future caller must check.
+
+**Bug caught by testing, worth recording:** a 429 saying the free-tier limit is
+**zero** is not a rate limit — the key is permanently ineligible (billing on the
+project, or not made in AI Studio). The ported logic treated it as transient,
+which burned every model in the chain and then reported "budget spent, resets at
+midnight" *forever*, hiding the one error message that contains a fix. Such
+errors are now marked `permanent` and surface untouched. Tests pin both halves:
+a zero-quota key must not burn the chain, an ordinary 429 must.
+
+*Verified:* 63 client tests against a stubbed fetch — capability lookups, the
+gate, chain fall-through, loose JSON parsing (fences, preambles, braces inside
+strings, escaped quotes), request shaping for Gemini vs Gemma vs 2.5, and every
+error path. 294 total across eight suites.
+
+### Phase 6 — original scope, for reference
 
 Port, do not rewrite. `d:\claudecode\storybible2\js\llm.js` is the mature
 client: fallback chain, per-day usage tracking with exhaustion marking, retry
