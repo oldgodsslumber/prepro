@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260828e';
+window.PREPRO_BUILD = '20260831a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,13 +26,13 @@ window.PREPRO_BUILD = '20260828e';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260828e"></script>
+<script type="module" src="./auth.js?v=20260831a"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260828e"></script>
+<script src="./whatsnew.js?v=20260831a"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and ops.html. -->
-<script src="./people.js?v=20260828e"></script>
+<script src="./people.js?v=20260831a"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -2088,6 +2088,46 @@ function fmtDayShort(dateStr, today) {
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+// The brief half of a project — what it is for, as opposed to when it happens.
+// Everything here is imported from Pega or typed in team.html's Info tab, and
+// until now nothing outside team.html read any of it: the whole dashboard
+// reasoned purely from dates, which is why its nudges could only ever talk
+// about calendar adjacency.
+//
+// `goals` are the producer-typed ones and are the only fields that state what
+// done looks like; the rest come off the ticket and describe who it is for.
+function projectBrief(proj) {
+  if (!proj) return null;
+  const clean = v => {
+    const s = (v == null ? '' : String(v)).trim();
+    return s ? s : null;
+  };
+  const goals = [clean(proj.tangibleGoal1), clean(proj.tangibleGoal2)].filter(Boolean);
+  const brief = {
+    goals,
+    synopsis:          clean(proj.synopsis),
+    targetAudience:    clean(proj.targetAudience),
+    audienceDescription: clean(proj.audienceDescription),
+    scopeLevel:        clean(proj.scopeLevel),
+    videoType:         clean(proj.videoType),
+    internalExternal:  clean(proj.internalExternal),
+    completionIssues:  clean(proj.completionIssues),
+  };
+  brief.isEmpty = !Object.keys(brief).some(k => k !== 'isEmpty' && k !== 'goals' && brief[k]) && !goals.length;
+  return brief;
+}
+
+// First sentence of a goal, for use inside a one-line nudge. Long goals get cut
+// on a word boundary so the nudge stays readable at panel width.
+function briefGoalShort(goal, max) {
+  const limit = max || 60;
+  const first = String(goal).split(/(?<=[.!?])\s/)[0].trim() || String(goal).trim();
+  if (first.length <= limit) return first;
+  const cut = first.slice(0, limit);
+  const sp = cut.lastIndexOf(' ');
+  return (sp > 20 ? cut.slice(0, sp) : cut).replace(/[,;:]$/, '') + '…';
+}
+
 function buildTaskContext(task, personName, dateStr, proj) {
   const today = dateStr;
   const isForPerson = t => t.person === personName
@@ -2122,7 +2162,18 @@ function buildTaskContext(task, personName, dateStr, proj) {
 
   const pastIncomplete = past.filter(t => isForPerson(t) && !isTaskDone(t.id) && !t.isDueDate).length;
 
-  return { prev, next, nextReview, nextShoot, nextKeyDate, personPTO, recentNotes, lastTouched, pastIncomplete };
+  const brief = projectBrief(proj);
+
+  // Scope changes get a wider window than `recentNotes` (14 days rather than 7).
+  // A change in direction keeps mattering long after it stops being news — it is
+  // the thing most likely to have quietly invalidated the stated goal.
+  const scopeChange = (proj.notes || []).filter(n => {
+    if (!n || !n.date || n.type !== 'direction') return false;
+    const d = daysBetween(n.date, today);
+    return d !== null && d >= 0 && d <= 14;
+  }).sort((a, b) => b.date.localeCompare(a.date))[0] || null;
+
+  return { prev, next, nextReview, nextShoot, nextKeyDate, personPTO, recentNotes, lastTouched, pastIncomplete, brief, scopeChange };
 }
 
 function findHeavyReviewer(reviewTask) {
@@ -2156,12 +2207,30 @@ function patternShootApproaching(task, personName, dateStr, proj, ctx) {
   return `${shootType} ${day} — has the shotlist and call sheet gone out to the crew?`;
 }
 
+// A scope change lands, and the goal the project was signed off against is still
+// sitting there unedited. Nothing else in the app can notice this, because the
+// goal and the note live in different halves of the project and nothing ever
+// read the first one.
+function patternGoalDrift(task, personName, dateStr, proj, ctx) {
+  if (!ctx.scopeChange) return null;
+  if (!ctx.brief || !ctx.brief.goals.length) return null;
+  const daysAgo = daysBetween(ctx.scopeChange.date, dateStr);
+  const when = daysAgo === 0 ? 'today' : daysAgo === 1 ? 'yesterday' : `${daysAgo} days ago`;
+  const goal = briefGoalShort(ctx.brief.goals[0]);
+  return `🔀 Direction changed ${when}, but the brief still says “${goal}” — does the goal need updating?`;
+}
+
 function patternKeyDateApproaching(task, personName, dateStr, proj, ctx) {
   if (!ctx.nextKeyDate) return null;
   if (daysBetween(dateStr, ctx.nextKeyDate.date) > 3) return null;
   const type = ctx.nextKeyDate.milestoneType;
   const label = type === 'due-date' ? 'Project due' : milestoneLabel(type);
   const day = fmtDayShort(ctx.nextKeyDate.date, dateStr);
+  // With a stated goal we can ask the useful version of this question. Without
+  // one we fall back to the generic phrasing, which is all this could ever ask
+  // before the brief was readable.
+  const goal = ctx.brief && ctx.brief.goals.length ? briefGoalShort(ctx.brief.goals[0]) : null;
+  if (goal) return `${label} lands ${day} — does today's work get you to “${goal}”?`;
   return `${label} lands ${day} — is today's work on the critical path?`;
 }
 
@@ -2227,6 +2296,11 @@ function getTaskSuggestion(task, personName, dateStr) {
     patternKeyDateApproaching,
     patternReviewApproaching,
     patternHandoffToNext,
+    // Must sit above patternRecentNote: that one also matches `direction` notes,
+    // and being earlier in the chain it would otherwise always win and answer
+    // the vaguer question ("does today's task still fit?") when we can now ask
+    // the specific one.
+    patternGoalDrift,
     patternRecentNote,
     patternDrought,
     patternStalledCluster,

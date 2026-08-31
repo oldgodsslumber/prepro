@@ -34,12 +34,28 @@ Three concrete gaps, all verified in the source:
    be assigned, cannot be nudged, and they silently orphan when the parent task
    is deleted in `team.html`.
 
-3. **The imported brief is unread.** `buildProjectFromRow` already writes
-   `synopsis`, `tangibleGoal1`, `tangibleGoal2`, `targetAudience`, `videoType`,
-   `scopeLevel`, `budget`, `internalExternal`, `audienceDescription`,
-   `completionIssues`, `region` onto every imported project. Grep count for any
-   of those in `dash.html` and `ops.html`: **zero**. We are already carrying a
-   project brief that no nudge has ever looked at.
+3. **The brief is unread — and half of it was unwritable.** Corrected
+   2026-08-31 while building Phase 1; the first draft of this plan got it
+   partly wrong.
+
+   Two separate problems, not one:
+
+   - `synopsis`, `targetAudience`, `audienceDescription`, `scopeLevel`,
+     `videoType`, `internalExternal`, `region`, `caseStatus`, `createDate` *are*
+     populated from Pega and *are* displayed in team.html's Info tab — but grep
+     count in `dash.html` and `ops.html` is **zero**. Carried, shown, never
+     reasoned over.
+   - `tangibleGoal1`, `tangibleGoal2`, `budget`, `function`, `completionIssues`,
+     `additionalNotes` were **never populated by anything**. There is no column
+     for them in `XL_COLUMN_MAP`, `buildProjectFromRow` hard-codes them to
+     `null`, and no screen offered a way to type one. They existed in the
+     project schema and in `computeMergeFieldPlan`'s conflict list, and were
+     permanently empty. The Info tab hid them because a read-only row with no
+     value renders as nothing.
+
+   This matters because **"Tangible Goal" is the only field in the app that
+   states what done looks like**, and it was unreachable. The original plan
+   assumed requesters were filling it in.
 
 ---
 
@@ -167,21 +183,47 @@ them and the app is still better than it was.
   redeclaration SyntaxError that kills the whole page.
 - Commit and push to `testing`.
 
-### Phase 1 — Read the brief we already import
+### Phase 1 — Read the brief — SHIPPED 2026-08-31, build `20260831a`
 
-**No schema change. No LLM. Highest value per hour in the plan.**
+**No schema change. No LLM.**
 
-- Surface the Pega fields in the `team.html` Info tab (stored today, several
-  never shown).
-- Feed them to `buildTaskContext` in `dash.html` so patterns can reference
-  `tangibleGoal1/2` — literally "what does done look like," already filled in
-  by the requester.
-- New pattern `patternGoalDrift`: on a project whose brief names a tangible
-  goal, when a `direction` (scope change) note has landed since the brief,
-  surface both together.
+Scope changed once the code was read (see gap 3 above): the goal fields could
+not be "surfaced," because nothing had ever been able to write one. So Phase 1
+had to give them an entry point before anything could read them.
 
-*Acceptance:* opening a Pega-imported project shows its synopsis and goals; at
-least one nudge quotes a brief field.
+- **`team.html`** — a new **Brief** section on the Info tab making `function`,
+  `budget`, `tangibleGoal1`, `tangibleGoal2`, `completionIssues` and
+  `additionalNotes` editable in place. Commit on blur, not per keystroke, since
+  `saveState()` takes an undo snapshot and pushes the whole state to Firebase.
+  Empty values are written as `null`, never `undefined`. Unlike the read-only
+  ticket rows these stay visible when empty, or there would be no way to fill
+  them.
+- **`dash.html`** — `projectBrief(proj)` and `briefGoalShort(goal, max)`;
+  `buildTaskContext` now returns `brief` and `scopeChange` (a `direction` note
+  within 14 days — a wider window than `recentNotes`' 7, because a change of
+  direction keeps mattering after it stops being news).
+- **`patternGoalDrift`** — fires when a scope change has landed and the brief
+  still states the original goal. Placed **above** `patternRecentNote` in the
+  chain: that one also matches `direction` notes and, being earlier, would
+  otherwise always win and ask the vaguer question.
+- **`patternKeyDateApproaching`** now names the goal where one exists
+  ("does today's work get you to X?") and keeps the old generic wording where
+  none does.
+
+*Verified:* 20 unit tests over the extracted functions — truncation on word
+boundaries, whitespace-only goals, goal 2 without goal 1, missing `ctx.brief`,
+day-count phrasing, and the no-goal fallback path.
+
+**Known limitation:** the goal fields are producer-typed, so Phase 1's value is
+gated on someone filling them in. Watch whether that actually happens — it is
+the same capture-fatigue risk that makes Phase 3 the go/no-go gate, arriving
+two phases early. If nobody fills them in, that is a real signal about Phase 3.
+
+**Consequence for Phase 2:** `healthLine` as designed overlaps `tangibleGoal1`.
+Do not add a second "what does done look like" field — decide whether
+`healthLine` means something genuinely different (current state vs original
+intent) or whether it should be dropped in favour of the goal fields now that
+they are reachable.
 
 ### Phase 2 — The commitment data layer
 

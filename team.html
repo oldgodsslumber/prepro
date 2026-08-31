@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260828e';
+window.PREPRO_BUILD = '20260831a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,15 +29,15 @@ window.PREPRO_BUILD = '20260828e';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260828e"></script>
+<script type="module" src="./auth.js?v=20260831a"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260828e"></script>
+<script src="./whatsnew.js?v=20260831a"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20260828e"></script>
+<script src="./people.js?v=20260831a"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260828e"></script>
+<script src="./xlsx.full.min.js?v=20260831a"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -771,6 +771,14 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 .project-info .notes-compose { padding: 10px 2px; }
 .project-info .notes-feed { flex: 0 0 auto; overflow: visible; }
 .pi-value a:hover { text-decoration: underline; }
+/* Editable brief fields. These are the only project fields with no Pega column
+   behind them — the producer types them — so unlike the read-only ticket rows
+   above they stay visible when empty, or there would be no way to fill them. */
+.pi-edit { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; color: var(--text); padding: 4px 6px; font: inherit; font-size: 12px; outline: none; }
+.pi-edit:focus { border-color: var(--accent); }
+.pi-edit::placeholder { color: var(--dim); opacity: .7; }
+textarea.pi-edit { resize: vertical; min-height: 46px; white-space: pre-wrap; }
+.pi-hint { font-size: 10px; color: var(--dim); padding: 4px 2px 8px; line-height: 1.4; }
 .pi-divider { height: 1px; background: var(--border); margin: 12px 0 2px; }
 .pi-empty { color: var(--dim); font-style: italic; padding: 14px 2px; font-size: 12px; }
 
@@ -8675,6 +8683,78 @@ function renderProjectInfo() {
     grid.appendChild(e);
   }
   wrap.appendChild(grid);
+
+  // ── Brief ──
+  // These six fields have lived on the project object (and in the merge field
+  // plan) since the beginning but nothing has ever been able to write them:
+  // there is no Pega column for any of them in XL_COLUMN_MAP, so the import
+  // sets them to null and no UI offered a way to type one. They stayed
+  // permanently empty, which is why the Info tab never showed them.
+  //
+  // They matter now because "Tangible Goal" is the only place in the whole app
+  // that answers *what does done look like* — the question the nudge engine
+  // needs an answer to before it can say anything better than "is today's work
+  // on the critical path?". So they become editable here.
+  const t15 = document.createElement('div');
+  t15.className = 'pi-section-title';
+  t15.textContent = 'Brief';
+  wrap.appendChild(t15);
+
+  const briefGrid = document.createElement('div');
+  briefGrid.className = 'pi-grid';
+
+  const BRIEF_FIELDS = [
+    ['function',          'Function',          'text',     'e.g. Marketing, Sales Enablement'],
+    ['budget',            'Budget',            'text',     'e.g. $12k, internal only'],
+    ['tangibleGoal1',     'Tangible Goal 1',   'textarea', 'What does done look like?'],
+    ['tangibleGoal2',     'Tangible Goal 2',   'textarea', 'A second measurable outcome, if there is one'],
+    ['completionIssues',  'Completion Issues', 'textarea', 'Anything known to stand in the way'],
+    ['additionalNotes',   'Additional Notes',  'textarea', 'Context that does not belong in the running notes'],
+  ];
+
+  BRIEF_FIELDS.forEach(([key, label, kind, placeholder]) => {
+    const row = document.createElement('div');
+    row.className = 'pi-row';
+    const l = document.createElement('div');
+    l.className = 'pi-label';
+    l.textContent = label;
+    const value = document.createElement('div');
+    value.className = 'pi-value';
+
+    const input = document.createElement(kind === 'textarea' ? 'textarea' : 'input');
+    input.className = 'pi-edit';
+    if (kind !== 'textarea') input.type = 'text';
+    input.placeholder = placeholder;
+    input.value = proj[key] == null ? '' : String(proj[key]);
+
+    // Commit on blur rather than on every keystroke: saveState() records an
+    // undo snapshot and pushes the whole state to Firebase, so per-character
+    // saving would flood both. Enter commits too on single-line fields.
+    const commit = () => {
+      const v = input.value.trim();
+      // Never assign undefined to synced state — a single undefined makes the
+      // Firebase set() throw and silently kills every later save.
+      const next = v === '' ? null : v;
+      if ((proj[key] == null ? null : proj[key]) === next) return;
+      proj[key] = next;
+      saveState();
+    };
+    input.addEventListener('blur', commit);
+    if (kind !== 'textarea') {
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } });
+    }
+
+    value.appendChild(input);
+    row.appendChild(l);
+    row.appendChild(value);
+    briefGrid.appendChild(row);
+  });
+  wrap.appendChild(briefGrid);
+
+  const hint = document.createElement('div');
+  hint.className = 'pi-hint';
+  hint.textContent = 'The dashboard reads these. A tangible goal lets a nudge ask whether today’s work still serves it, instead of guessing from the calendar.';
+  wrap.appendChild(hint);
 
   // ── Notes ── (folded in from the old standalone Notes tab, so the ticket data
   // and the running commentary on it read as one page instead of two)

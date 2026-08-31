@@ -17,6 +17,28 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-08-31',
+    title: 'The dashboard can finally read the brief',
+    dateLabel: 'Aug 31, 2026',
+    groups: [
+      {
+        area: 'Team · Project Info',
+        items: [
+          { tag: 'new', text: 'A new Brief section on the Info tab, with Function, Budget, Tangible Goal 1 and 2, Completion Issues and Additional Notes. These six fields have existed on every project since the beginning, but no Pega column fills them and no screen ever offered a way to type one, so they have sat permanently empty. You can now edit them in place — they save when you click away.' },
+          { tag: 'new', text: 'Unlike the ticket rows above them, the brief fields stay visible when empty, because otherwise there would be nowhere to fill them in.' }
+        ]
+      },
+      {
+        area: 'Dash · Nudges',
+        items: [
+          { tag: 'new', text: 'Nudges can now read the project brief, not just its calendar. Until now every suggestion was worked out purely from what sat next to what on the timeline — the dashboard had never once looked at what a project was actually for.' },
+          { tag: 'new', text: 'A new nudge notices when someone logs a change in direction while the brief still states the original goal, and asks whether the goal needs updating. Nothing could spot this before: the goal and the note live in different halves of the project and one of them was unreadable.' },
+          { tag: 'fix', text: 'The milestone nudge now names the tangible goal where a project has one — “does today’s work get you to X?” instead of the generic “is today’s work on the critical path?”. Projects without a goal keep the old wording.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-08-28',
     title: 'Company holidays on the PNG export',
     dateLabel: 'Aug 28, 2026',
