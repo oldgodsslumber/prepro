@@ -101,13 +101,25 @@ var PP_EXTRACT_SCHEMA = {
           owner:     { type: 'string', description: 'Person who owes it. Empty string if genuinely unclear.' },
           direction: { type: 'string', enum: ['mine', 'theirs'], description: '"theirs" when somebody else owes it to us.' },
           due:       { type: 'string', description: 'YYYY-MM-DD, or empty string if no date was stated.' },
-          quote:     { type: 'string', description: 'The sentence from the text this came from.' }
+          quote:     { type: 'string', description: 'The sentence from the text this came from.' },
+          uncertain: { type: 'string', description: 'If something here could not be worked out from the text, one short question asking the reader. Empty string when everything was clear.' }
         },
         required: ['text', 'direction']
       }
+    },
+    note: {
+      type: 'object',
+      description: 'The thread itself, as a project note.',
+      properties: {
+        type:    { type: 'string', enum: ['update', 'delay', 'direction', 'feedback', 'blocker', 'decision', 'team'],
+                   description: 'Which kind of project note this thread amounts to.' },
+        summary: { type: 'string', description: 'What the thread says, in two or three sentences, for someone who did not read it.' },
+        from:    { type: 'string', description: 'Who the thread is from, if identifiable. Empty string otherwise.' }
+      },
+      required: ['type', 'summary']
     }
   },
-  required: ['commitments']
+  required: ['commitments', 'note']
 };
 
 var PP_EXTRACT_SYSTEM = [
@@ -121,8 +133,21 @@ var PP_EXTRACT_SYSTEM = [
   '- direction: "mine" when our side owes it, "theirs" when we are waiting on somebody else.',
   '- due: only when a date is actually stated or clearly implied ("by Friday"). Resolve relative dates against the stated today. Otherwise empty string.',
   '- quote: the sentence you took it from, verbatim, so a human can check you.',
+  '- uncertain: leave empty when the text was clear. When it was not, ask one short question instead of guessing — "who is \'we\' here?", "which Thursday?", "is this ours or theirs?". Do not use it to hedge on something the text plainly states.',
   '- Skip anything already listed as an existing open loop.',
-  '- Pleasantries, FYIs and things already done are not open loops. Returning an empty array is a correct answer.'
+  '- Pleasantries, FYIs and things already done are not open loops. Returning an empty array is a correct answer.',
+  '',
+  'You also file the thread itself as a project note:',
+  '- note.summary: two or three sentences saying what happened, for a producer who did not read the thread. Not a list of the actions — those are the loops. Say what changed, what was decided, what the state of things now is.',
+  '- note.type: the kind of note this amounts to.',
+  '    blocker   — something is stopping progress',
+  '    delay     — something is behind schedule',
+  '    direction — scope, creative or strategy has shifted',
+  '    feedback  — a stakeholder is reacting to the work',
+  '    decision  — something was settled',
+  '    team      — staffing or availability',
+  '    update    — general progress, and the right answer when none of the others clearly fit',
+  '- note.from: who the thread is from, if the text makes it obvious. Empty string if not.'
 ].join('\n');
 
 // Context, not the whole dossier: extraction needs the cast list and what is
@@ -167,19 +192,58 @@ function ppBuildExtractPrompt(proj, text) {
 // only in a roster, and a loop filed against "Walsh, Ryan" would never match
 // the nudges' lookups for "Ryan Walsh". So fall back to matching the project's
 // own cast list on the same normalised key.
-function ppResolveOwner(owner, proj) {
-  if (!owner) return '';
+// Which known people could this name mean?
+//
+// The interesting answer is "more than one". A thread saying "Liz will send it"
+// on a project with a Liz Chen and a Liz Moreau is not a name we can resolve,
+// and quietly picking one files the loop against the wrong person — where it
+// still looks perfectly fine on screen, and never reaches whoever actually owes
+// the thing. That is worth one question at review time.
+//
+// Deliberately deterministic: no model involved, no request spent. The roster
+// is right here.
+function ppOwnerMatches(raw, proj) {
+  var name = String(raw || '').trim();
+  if (!name) return { kind: 'none', candidates: [] };
+
+  var known = ppKnownNames(proj);
+  var key = function (v) {
+    return typeof normalizePersonKey === 'function'
+      ? normalizePersonKey(v)
+      : String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  };
+
+  // A full-name match, alias-aware, is decided — nothing to ask.
+  var exact = known.filter(function (n) { return key(n) === key(name); });
+  if (exact.length === 1) return { kind: 'exact', candidates: exact, resolved: exact[0] };
   if (typeof resolvePersonName === 'function') {
-    var resolved = resolvePersonName(owner);
-    if (resolved) return resolved;
-  }
-  if (typeof normalizePersonKey === 'function') {
-    var key = normalizePersonKey(owner);
-    if (key) {
-      var match = ppKnownNames(proj).find(function (n) { return normalizePersonKey(n) === key; });
-      if (match) return match;
+    var viaRecord = resolvePersonName(name);
+    if (viaRecord && known.indexOf(viaRecord) >= 0) {
+      return { kind: 'exact', candidates: [viaRecord], resolved: viaRecord };
     }
   }
+
+  // A partial — usually a first name, sometimes a surname. Match on whole word
+  // parts so "Liz" finds "Liz Chen" but "Lizard Ltd" does not.
+  var want = name.toLowerCase().split(/\s+/).filter(Boolean);
+  var hits = known.filter(function (n) {
+    var parts = n.toLowerCase().split(/\s+/).filter(Boolean);
+    return want.every(function (w) {
+      return parts.some(function (part) { return part === w || part.indexOf(w) === 0; });
+    });
+  });
+
+  if (hits.length === 1) return { kind: 'inferred', candidates: hits, resolved: hits[0] };
+  if (hits.length > 1)  return { kind: 'ambiguous', candidates: hits };
+  return { kind: 'unknown', candidates: [] };
+}
+
+function ppResolveOwner(owner, proj) {
+  if (!owner) return '';
+  var m = ppOwnerMatches(owner, proj);
+  // An ambiguous name is left exactly as written. Resolving it to a coin-flip
+  // would hide the question the reviewer needs to answer.
+  if (m.kind === 'exact' || m.kind === 'inferred') return m.resolved;
   return owner;
 }
 
@@ -214,15 +278,25 @@ function ppSameLoop(a, b) {
 // assumes the two agree. The manual add box has always derived one from the
 // other; the AI paths must too.
 //
-// Rules: naming nobody cannot be a wait. Naming yourself cannot be a wait.
-// Anything else stands as the model called it.
+// `direction` is not an independent fact — it is a reading of `owner` from the
+// viewer's seat. `owner` is who owes the thing; if that is anybody other than
+// you, then by definition you are waiting on them. So it is derived, not
+// trusted, exactly as the manual add box has always done it.
+//
+// The model still reports a direction, and it is still worth asking for: it
+// makes the model commit to a reading of the sentence, which improves the owner
+// it picks. It just does not get the last word. Left to it, "Marcus will send a
+// revised brief tomorrow" came back as owner Marcus / direction mine — a loop
+// Ryan owed to himself, which no nudge would ever chase.
 function ppCoherentDirection(owner, direction, me) {
   var o = String(owner || '').trim();
   if (!o) return 'mine';                                   // nobody to wait on
-  if (me && typeof normalizePersonKey === 'function' &&
-      normalizePersonKey(o) === normalizePersonKey(me)) return 'mine';
-  if (me && o === me) return 'mine';
-  return direction === 'theirs' ? 'theirs' : 'mine';
+  if (me) {
+    if (typeof normalizePersonKey === 'function') {
+      if (normalizePersonKey(o) === normalizePersonKey(me)) return 'mine';
+    } else if (o === me) return 'mine';
+  }
+  return 'theirs';
 }
 
 // Resolves and sanitises whatever came back. The model's output never reaches
@@ -254,24 +328,70 @@ function ppNormalizeExtracted(raw, proj, opts) {
     var due = ppValidIsoDate(item.due);
 
     var direction = ppCoherentDirection(owner, item.direction, me);
+
+    // Two kinds of "we are not sure", surfaced the same way. The first we work
+    // out ourselves from the roster; the second only the model can know.
+    var match = ppOwnerMatches(owner, proj);
+    var ask = String(item.uncertain || '').trim();
+    if (match.kind === 'ambiguous') {
+      ask = 'Which ' + owner + '?';
+    } else if (!ask && owner && match.kind === 'unknown' && direction === 'theirs') {
+      // Waiting on somebody nobody on the project has heard of is worth a look:
+      // it is usually a first name we cannot place, or an external contact.
+      ask = 'Nobody on this project is called "' + owner + '" — is that right?';
+    }
+
     out.push({
       text: text,
       owner: owner,
       direction: direction,
       due: due,
       quote: String(item.quote || '').trim(),
-      accept: true   // pre-ticked; the reviewer unticks what is wrong
+      uncertain: ask,
+      ownerOptions: match.kind === 'ambiguous' ? match.candidates : [],
+      // A row we are unsure about is NOT pre-ticked. Everything else is: the
+      // reviewer confirms the guess rather than re-entering it.
+      accept: !ask
     });
   });
   return out;
 }
 
+// The note types a thread may be filed as. Mirrors NOTE_TYPES in team.html
+// minus 'system', which is reserved for events the app generates itself.
+var PP_NOTE_TYPES = ['update', 'delay', 'direction', 'feedback', 'blocker', 'decision', 'team'];
+
+// The thread as a note. Type matters beyond bookkeeping: a thread filed as
+// 'blocker' or 'direction' is one patternOpenBlocker and patternGoalDrift can
+// see, so classifying it correctly is what connects a pasted email to the nudge
+// engine.
+function ppNormalizeThreadNote(raw, text) {
+  var n = (raw && raw.note) || {};
+  var type = PP_NOTE_TYPES.indexOf(n.type) >= 0 ? n.type : 'update';
+  // Validate against the page's own list where it exists, so the two cannot
+  // drift into a type team.html has no emoji or label for.
+  if (typeof NOTE_TYPES !== 'undefined' && Array.isArray(NOTE_TYPES)) {
+    var known = NOTE_TYPES.some(function (t) { return t.key === type && t.key !== 'system'; });
+    if (!known) type = 'update';
+  }
+  var summary = typeof n.summary === 'string' ? n.summary.trim() : '';
+  return {
+    type: type,
+    summary: summary,
+    from: typeof n.from === 'string' ? n.from.trim() : '',
+    sourceText: String(text || '').trim(),
+    accept: !!summary   // nothing worth filing if it could not summarise it
+  };
+}
+
 // Returns proposals. Writes nothing.
-function ppExtractCommitments(proj, text, opts) {
+function ppReadThread(proj, text, opts) {
   opts = opts || {};
   if (!ppLlmConfigured()) return Promise.reject(new Error('No Gemini key set.'));
   var body = String(text || '').trim();
-  if (!body) return Promise.resolve([]);
+  // Same shape as a real result, always. Returning a bare array here made an
+  // empty paste throw on `result.commitments` at every call site.
+  if (!body) return Promise.resolve({ commitments: [], note: null });
   // A 200KB paste is ~50k tokens against a daily budget of about twenty
   // requests, and the reply then reliably dies on MAX_TOKENS — a charged
   // request that can never succeed. Refuse before spending it.
@@ -288,8 +408,16 @@ function ppExtractCommitments(proj, text, opts) {
     temperature: 0,
     signal: opts.signal
   }).then(function (raw) {
-    return ppNormalizeExtracted(raw, proj, { me: opts.me });
+    return {
+      commitments: ppNormalizeExtracted(raw, proj, { me: opts.me }),
+      note: ppNormalizeThreadNote(raw, body)
+    };
   });
+}
+
+// Back-compat: the loops alone, for callers that do not want the note half.
+function ppExtractCommitmentsOnly(proj, text, opts) {
+  return ppReadThread(proj, text, opts).then(function (r) { return r.commitments; });
 }
 
 // ── 2. ADVISORY ──

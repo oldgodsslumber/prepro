@@ -680,3 +680,61 @@ relative expressions was correct in all eight cases including weekdays.
 confirming the 503 fall-through (`3.7:503 → 503 → 503 → 3.5-lite:200`), real
 advisory proposals, the completed-project refusal spending zero requests, and ✓
 markers in the dossier.
+
+---
+
+## Reading a thread keeps the thread — build `20260831i`
+
+Extraction pulled the loops out of a pasted thread and threw the thread away, so
+an accepted loop had no `sourceId` and no trace of where it came from — unlike a
+note-promoted one. Now a paste produces both halves in the **same request**: the
+loops, and the thread as a project note with a model-written summary and a
+model-chosen type.
+
+**The type is load-bearing, not decoration.** A thread filed as `blocker` or
+`direction` is one `patternOpenBlocker` and `patternGoalDrift` can act on, and
+loops from a paste now carry `source: 'note', sourceId: <noteId>` — so a pasted
+email reaches the nudge engine exactly as a hand-written note does. Live runs
+classified a stuck-legal thread as `blocker`, a settled-scope thread as
+`decision`, and a repositioning thread as `direction`.
+
+**Stored in the note log, shown only in Plan.** The notes array is the project's
+event history — the dossier, the ops standup and three nudge patterns all read
+it — so threads must live there or none of the above works. But the Notes *tab*
+stays what the team typed by hand: threads are filtered out of that feed and
+rendered in a "Threads read" section in the Plan tab instead, each with its
+original text one click away and the loops it produced listed beneath it.
+
+### Asking back, without a second request
+
+Storybible2 follows extraction with a separate gap-analysis call and a 5–12
+question wizard. That is right for a writer building a story bible and wrong
+here: it doubles the request cost against a ~20/day budget, and a wizard after
+every paste is precisely the capture fatigue Phase 3 was gated on. The idea
+underneath it is sound though — the model already knows what it is unsure about,
+and prepro was discarding that.
+
+So the questions are asked **inline, in the review list already on screen**, from
+two sources and no extra call:
+
+- **Deterministic.** `ppOwnerMatches()` resolves a name against the project's
+  cast. One match on a first name is filled in silently ("Priya" → "Priya Nair").
+  Two — a Liz Chen and a Liz Moreau — is not a name that can be resolved, and
+  quietly picking one files the loop against the wrong person, where it looks
+  perfectly correct on screen and never reaches whoever actually owes it. That
+  row gets a picker and cannot be ticked until it is answered.
+- **Model-reported.** An `uncertain` field on each proposal carries one short
+  question where the wording genuinely would not resolve — *"who is 'we' here?"*
+  — shown against the field it concerns.
+
+Anything uncertain arrives **unticked**; everything else stays ticked, so the
+ordinary case is still one click. `ppResolveOwner` deliberately does not resolve
+an ambiguous name, because resolving it would hide the question.
+
+*Verified:* 34 ambiguity tests and 22 thread-note tests, plus the full suite —
+**449 across twelve suites** — and live runs showing "Which Liz?" and "who is
+'you' here?" surfacing together from a single request.
+
+**Bug found while testing:** `ppReadThread('')` returned a bare array rather than
+`{commitments, note}`, so an empty paste would have thrown on
+`result.commitments` at every call site.

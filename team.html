@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260831h';
+window.PREPRO_BUILD = '20260831i';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,27 +29,27 @@ window.PREPRO_BUILD = '20260831h';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260831h"></script>
+<script type="module" src="./auth.js?v=20260831i"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260831h"></script>
+<script src="./whatsnew.js?v=20260831i"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20260831h"></script>
+<script src="./people.js?v=20260831i"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20260831h"></script>
+<script src="./commitments.js?v=20260831i"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20260831h"></script>
+<script src="./dossier.js?v=20260831i"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20260831h"></script>
+<script src="./prepro-llm.js?v=20260831i"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20260831h"></script>
+<script src="./prepro-ai.js?v=20260831i"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260831h"></script>
+<script src="./xlsx.full.min.js?v=20260831i"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -801,6 +801,21 @@ textarea.pi-edit { resize: vertical; min-height: 46px; white-space: pre-wrap; }
 .ai-prop-input { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); padding: 2px 5px; font: inherit; font-size: 10px; outline: none; flex: 0 1 110px; min-width: 0; }
 .ai-prop-date { width: 122px; color-scheme: dark; }
 .ai-prop-quote { font-size: 10px; color: var(--dim); font-style: italic; margin-top: 3px; line-height: 1.4; border-left: 2px solid var(--border); padding-left: 6px; }
+.ai-prop-ask { font-size: 10px; color: #e0a33a; margin-top: 3px; line-height: 1.4; }
+.ai-prop-pick { border-color: #e0a33a; }
+.ai-prop-blocked { background: rgba(224,163,58,.06); border-radius: 5px; }
+.thread-card { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; margin: 6px 0; background: var(--card); }
+.thread-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.thread-type { font-size: 10px; font-weight: 700; color: var(--text); }
+.thread-meta { font-size: 10px; color: var(--dim); }
+.thread-summary { font-size: 12px; color: var(--text); line-height: 1.45; margin-top: 4px; word-break: break-word; }
+.thread-loops { margin-top: 6px; border-left: 2px solid var(--border); padding-left: 8px; }
+.thread-loop { font-size: 11px; color: var(--dim); line-height: 1.5; }
+.thread-loop-done { text-decoration: line-through; opacity: .7; }
+.thread-acts { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 5px; }
+.note-source-toggle { font-size: 10px; color: var(--dim); background: none; border: none; padding: 4px 0 0; cursor: pointer; }
+.note-source-toggle:hover { color: var(--accent); }
+.note-source { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; line-height: 1.5; color: var(--dim); background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 7px 9px; margin-top: 4px; white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow: auto; }
 .ai-health { display: flex; align-items: flex-start; gap: 7px; font-size: 12px; color: var(--text); line-height: 1.45; padding: 8px 2px; }
 .ai-health-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; background: var(--dim); }
 .ai-health-on-track .ai-health-dot { background: #4cba6a; }
@@ -8669,13 +8684,19 @@ function renderNotesTab(container) {
   feed.className = 'notes-feed';
   feed.id = 'notesFeed';
 
-  if (!proj.notes.length) {
+  if (!proj.notes.filter(n => n.sourceKind !== 'thread').length) {
     feed.innerHTML = '<div class="notes-empty">No notes yet. Add one above.</div>';
   } else {
     // Newest first, sorted by the note's own timestamp (not add-order) so a
     // backdated note lands at its correct chronological spot. ISO date + HH:MM
     // are lexicographically ordered, so a string compare is correct.
+    // Threads filed from a paste are deliberately absent here. They live in the
+    // project's note log so the nudge engine, the dossier and the ops standup
+    // can all see them — that log is the project's event history, not this
+    // tab's private storage — but the Notes tab stays what the team typed by
+    // hand. Threads are read and edited in the Plan tab.
     [...proj.notes]
+      .filter(n => n.sourceKind !== 'thread')
       .sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')))
       .forEach(note => {
       const card = document.createElement('div');
@@ -8693,6 +8714,7 @@ function renderNotesTab(container) {
       body.innerHTML = '<div class="note-type">' + (typeLabel ? typeLabel.label : note.type) + '</div>'
         + '<div class="note-text">' + escHtml(note.body) + '</div>'
         + '<div class="note-meta">' + escHtml(note.person) + ' · ' + note.date + (note.time ? ' ' + note.time : '') + '</div>';
+
       card.appendChild(body);
 
       // Edit + delete buttons (not for system notes)
@@ -9237,7 +9259,101 @@ function renderPlanPanel(content) {
   group('Waiting on others', waiting);
   group('Mine', mine);
   group('Recently closed', closed, { closed: true });
+  renderThreads(content, proj, refresh);
   renderPlanAi(content, proj, me, refresh);
+}
+
+// Threads filed from a paste. Rendered here rather than in the Notes tab, and
+// unconditionally — these are project history, so they stay readable whether or
+// not the person looking at them has an API key of their own.
+function renderThreads(content, proj, refresh) {
+  const threads = (proj.notes || [])
+    .filter(n => n && n.sourceKind === 'thread')
+    .sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')));
+  if (!threads.length) return;
+
+  const title = document.createElement('div');
+  title.className = 'plan-group-title';
+  title.textContent = 'Threads read · ' + threads.length;
+  content.appendChild(title);
+
+  threads.forEach(note => {
+    const card = document.createElement('div');
+    card.className = 'thread-card';
+
+    const head = document.createElement('div');
+    head.className = 'thread-head';
+    const nt = NOTE_TYPES.find(t => t.key === note.type);
+    const chip = document.createElement('span');
+    chip.className = 'thread-type';
+    chip.textContent = (nt ? nt.emoji + ' ' + nt.label : note.type);
+    head.appendChild(chip);
+    const meta = document.createElement('span');
+    meta.className = 'thread-meta';
+    meta.textContent = note.person + ' · ' + note.date + (note.time ? ' ' + note.time : '');
+    head.appendChild(meta);
+    card.appendChild(head);
+
+    const body = document.createElement('div');
+    body.className = 'thread-summary';
+    body.textContent = note.body;
+    card.appendChild(body);
+
+    // What this thread actually produced. A thread that yielded nothing is
+    // still worth keeping, but seeing the loops next to their source is the
+    // point of filing it in the first place.
+    const born = (typeof commitmentsForProject === 'function'
+      ? commitmentsForProject(proj.id) : []).filter(c => c.sourceId === note.id);
+    if (born.length) {
+      const list = document.createElement('div');
+      list.className = 'thread-loops';
+      born.forEach(c => {
+        const row = document.createElement('div');
+        row.className = 'thread-loop';
+        const state = c.state === 'done' ? '✓' : c.state === 'waiting' ? '⏳' : c.state === 'dropped' ? '—' : '○';
+        row.textContent = state + ' ' + c.text + (c.waitingOn ? ' · ' + c.waitingOn : '');
+        if (c.state === 'done' || c.state === 'dropped') row.classList.add('thread-loop-done');
+        list.appendChild(row);
+      });
+      card.appendChild(list);
+    }
+
+    const acts = document.createElement('div');
+    acts.className = 'thread-acts';
+
+    const toggle = document.createElement('button');
+    toggle.className = 'note-source-toggle';
+    toggle.textContent = '▸ original thread';
+    const raw = document.createElement('pre');
+    raw.className = 'note-source';
+    raw.textContent = note.sourceText || '(the original text was not kept)';
+    raw.style.display = 'none';
+    toggle.addEventListener('click', () => {
+      const open = raw.style.display !== 'none';
+      raw.style.display = open ? 'none' : 'block';
+      toggle.textContent = (open ? '▸' : '▾') + ' original thread';
+    });
+    acts.appendChild(toggle);
+
+    const del = document.createElement('button');
+    del.className = 'plan-act';
+    del.textContent = '✕';
+    del.title = 'Delete this thread';
+    del.addEventListener('click', () => {
+      const warn = born.length
+        ? 'Delete this thread?\n\n' + born.length + ' open loop' + (born.length === 1 ? '' : 's') +
+          ' came from it. They stay, but lose the link back to where they came from.'
+        : 'Delete this thread?';
+      if (!confirm(warn)) return;
+      deleteNote(proj.id, note.id);
+      refresh();
+    });
+    acts.appendChild(del);
+
+    card.appendChild(acts);
+    card.appendChild(raw);
+    content.appendChild(card);
+  });
 }
 
 // ── AI SECTIONS ──
@@ -9259,6 +9375,9 @@ let _pasteProposals = null;
 function pasteProposalsFor(projectId) {
   return (_pasteProposals && _pasteProposals.projectId === projectId) ? _pasteProposals.list : null;
 }
+function pasteNoteFor(projectId) {
+  return (_pasteProposals && _pasteProposals.projectId === projectId) ? (_pasteProposals.note || null) : null;
+}
 let _pasteBusy = false;
 
 function renderPasteBox(content, proj, me, refresh) {
@@ -9277,11 +9396,11 @@ function renderPasteBox(content, proj, me, refresh) {
   bar.className = 'export-actions';
   const go = document.createElement('button');
   go.className = 'settings-btn primary';
-  go.textContent = _pasteBusy ? 'Reading…' : 'Find open loops';
+  go.textContent = _pasteBusy ? 'Reading…' : 'Read it';
   go.disabled = _pasteBusy;
   const status = document.createElement('span');
   status.className = 'export-note';
-  status.textContent = 'Nothing is saved until you tick it.';
+  status.textContent = 'Files the thread as a note, and pulls out anything owed. Nothing is saved until you tick it.';
 
   go.addEventListener('click', () => {
     const text = ta.value.trim();
@@ -9290,13 +9409,15 @@ function renderPasteBox(content, proj, me, refresh) {
     go.disabled = true;
     go.textContent = 'Reading…';
     status.textContent = 'Asking Gemini…';
-    ppExtractCommitments(proj, text, { me: me })
-      .then(list => {
+    ppReadThread(proj, text, { me: me })
+      .then(result => {
         _pasteBusy = false;
-        _pasteProposals = { projectId: proj.id, list: list };
-        if (!list.length) {
-          status.textContent = 'Nothing found that looks like an open loop.';
-          go.disabled = false; go.textContent = 'Find open loops';
+        _pasteProposals = { projectId: proj.id, list: result.commitments, note: result.note };
+        // A thread with no actions in it is still worth filing — "legal are
+        // still stuck" is a note even though nobody owes anything new.
+        if (!result.commitments.length && !(result.note && result.note.summary)) {
+          status.textContent = 'Nothing found in that — no open loops and nothing worth noting.';
+          go.disabled = false; go.textContent = 'Read it';
           return;
         }
         refresh();
@@ -9314,26 +9435,108 @@ function renderPasteBox(content, proj, me, refresh) {
   content.appendChild(bar);
 
   const proposals = pasteProposalsFor(proj.id);
-  if (!proposals || !proposals.length) return;
+  const threadNote = pasteNoteFor(proj.id);
+  if ((!proposals || !proposals.length) && !threadNote) return;
+
+  // ── The thread itself, as a note ──
+  // Pasting used to read a thread, pull the loops out and throw the thread
+  // away — so an accepted loop had no trace of where it came from, unlike one
+  // promoted from a note. Filing the thread fixes both halves: the source
+  // survives on the project, and the loops point back at it.
+  if (threadNote) {
+    const nTitle = document.createElement('div');
+    nTitle.className = 'plan-group-title';
+    nTitle.textContent = 'The thread, as a note';
+    content.appendChild(nTitle);
+
+    const nRow = document.createElement('div');
+    nRow.className = 'plan-row';
+
+    const nCb = document.createElement('input');
+    nCb.type = 'checkbox';
+    nCb.className = 'ai-prop-check';
+    nCb.checked = threadNote.accept !== false;
+    nCb.addEventListener('change', () => { threadNote.accept = nCb.checked; });
+    nRow.appendChild(nCb);
+
+    const nMain = document.createElement('div');
+    nMain.className = 'plan-main';
+
+    const nMeta = document.createElement('div');
+    nMeta.className = 'ai-prop-meta';
+    // The type is editable because it is load-bearing, not decorative: a thread
+    // filed as 'blocker' or 'direction' is one the nudge engine can act on.
+    const nSel = document.createElement('select');
+    nSel.className = 'ai-prop-input';
+    NOTE_TYPES.filter(t => t.key !== 'system').forEach(t => {
+      const o = document.createElement('option');
+      o.value = t.key;
+      o.textContent = t.emoji + ' ' + t.label;
+      o.selected = t.key === threadNote.type;
+      nSel.appendChild(o);
+    });
+    nSel.addEventListener('change', () => { threadNote.type = nSel.value; });
+    nMeta.appendChild(nSel);
+    if (threadNote.from) {
+      const f = document.createElement('span');
+      f.className = 'note-promo-hint';
+      f.textContent = 'from ' + threadNote.from;
+      nMeta.appendChild(f);
+    }
+    nMain.appendChild(nMeta);
+
+    const nBody = document.createElement('textarea');
+    nBody.className = 'ai-paste';
+    nBody.style.minHeight = '54px';
+    nBody.value = threadNote.summary;
+    nBody.addEventListener('change', () => { threadNote.summary = nBody.value.trim(); });
+    nMain.appendChild(nBody);
+
+    const nHint = document.createElement('div');
+    nHint.className = 'note-promo-hint';
+    nHint.textContent = 'The full thread is kept with the note — this summary is what shows in the feed.';
+    nMain.appendChild(nHint);
+
+    nRow.appendChild(nMain);
+    content.appendChild(nRow);
+  }
+
+  if (!proposals || !proposals.length) {
+    const none = document.createElement('div');
+    none.className = 'plan-empty';
+    none.textContent = 'No open loops in that thread.';
+    content.appendChild(none);
+  }
 
   // ── Review list ──
   // Same shape as the Excel import review: proposed rows, editable, ticked in
   // or out, nothing written until confirmed.
-  const rTitle = document.createElement('div');
-  rTitle.className = 'plan-group-title';
-  rTitle.textContent = 'Proposed · ' + proposals.length + ' — untick anything wrong';
-  content.appendChild(rTitle);
+  if (proposals && proposals.length) {
+    const rTitle = document.createElement('div');
+    rTitle.className = 'plan-group-title';
+    const needing = proposals.filter(x => (x.ownerOptions && x.ownerOptions.length > 1 && !x.ownerResolved) || x.uncertain).length;
+    rTitle.textContent = 'Open loops · ' + proposals.length +
+      (needing ? ' — ' + needing + ' need' + (needing === 1 ? 's' : '') + ' a decision' : ' — untick anything wrong');
+    content.appendChild(rTitle);
+  }
 
-  proposals.forEach((p, i) => {
+  (proposals || []).forEach((p, i) => {
     const row = document.createElement('div');
     row.className = 'plan-row';
 
     const cb = document.createElement('input');
     cb.type = 'checkbox';
-    cb.checked = p.accept !== false;
+    // A row whose ambiguity is unresolved cannot be ticked at all. Everything
+    // else arrives ticked — the reviewer confirms a guess rather than re-typing
+    // it — but a coin-flip owner is not a guess worth defaulting to yes.
+    const blocked = !!(p.ownerOptions && p.ownerOptions.length > 1 && !p.ownerResolved);
+    cb.disabled = blocked;
+    cb.checked = !blocked && p.accept !== false;
     cb.className = 'ai-prop-check';
+    cb.title = blocked ? 'Say which person this is first' : '';
     cb.addEventListener('change', () => { p.accept = cb.checked; });
     row.appendChild(cb);
+    if (blocked) row.classList.add('ai-prop-blocked');
 
     const main = document.createElement('div');
     main.className = 'plan-main';
@@ -9348,14 +9551,51 @@ function renderPasteBox(content, proj, me, refresh) {
     const meta = document.createElement('div');
     meta.className = 'ai-prop-meta';
 
-    const own = document.createElement('input');
-    own.type = 'text';
-    own.className = 'ai-prop-input';
-    own.placeholder = 'Owner';
-    own.value = p.owner || '';
-    own.setAttribute('list', 'planPeople');
-    own.addEventListener('change', () => { p.owner = own.value.trim(); });
-    meta.appendChild(own);
+    // Two Lizzes on the project and a thread that just says "Liz" is not a name
+    // we can resolve, and picking one silently files the loop against the wrong
+    // person — where it looks perfectly fine and never reaches whoever actually
+    // owes it. So it becomes a choice rather than a guess.
+    if (p.ownerOptions && p.ownerOptions.length > 1) {
+      const pick = document.createElement('select');
+      pick.className = 'ai-prop-input ai-prop-pick';
+      const blank = document.createElement('option');
+      blank.value = '';
+      blank.textContent = 'Which ' + p.owner + '?';
+      pick.appendChild(blank);
+      p.ownerOptions.forEach(name => {
+        const o = document.createElement('option');
+        o.value = name;
+        o.textContent = name;
+        pick.appendChild(o);
+      });
+      const asWritten = document.createElement('option');
+      asWritten.value = '__keep_as_written__';
+      asWritten.textContent = 'Neither — keep "' + p.owner + '"';
+      pick.appendChild(asWritten);
+      // Nothing chosen yet, so the row stays unticked until it is.
+      pick.value = '';
+      pick.addEventListener('change', () => {
+        if (pick.value === '__keep_as_written__') {
+          p.ownerResolved = true;
+        } else if (pick.value) {
+          p.owner = pick.value;
+          p.ownerResolved = true;
+        } else {
+          p.ownerResolved = false;
+        }
+        refresh();
+      });
+      meta.appendChild(pick);
+    } else {
+      const own = document.createElement('input');
+      own.type = 'text';
+      own.className = 'ai-prop-input';
+      own.placeholder = 'Owner';
+      own.value = p.owner || '';
+      own.setAttribute('list', 'planPeople');
+      own.addEventListener('change', () => { p.owner = own.value.trim(); });
+      meta.appendChild(own);
+    }
 
     const dir = document.createElement('select');
     dir.className = 'ai-prop-input';
@@ -9375,6 +9615,16 @@ function renderPasteBox(content, proj, me, refresh) {
     meta.appendChild(due);
     main.appendChild(meta);
 
+    // What it could not work out. Shown at the point of the field it is about,
+    // rather than as a wizard afterwards — the reviewer is already reading this
+    // row, and a question they answer here costs them nothing extra.
+    if (p.uncertain && !p.ownerResolved) {
+      const q = document.createElement('div');
+      q.className = 'ai-prop-ask';
+      q.textContent = '⚠ ' + p.uncertain;
+      main.appendChild(q);
+    }
+
     // The receipt. A proposal you cannot trace back to a sentence is one you
     // should not accept, so the sentence is always on screen.
     if (p.quote) {
@@ -9393,8 +9643,27 @@ function renderPasteBox(content, proj, me, refresh) {
   add.className = 'settings-btn primary';
   add.textContent = 'Add ticked';
   add.addEventListener('click', () => {
-    const picked = proposals.filter(p => p.accept !== false && p.text);
+    const picked = (proposals || []).filter(p => p.accept !== false && p.text);
     const today = cmTodayStr();
+
+    // File the thread first so the loops can point at it — the same
+    // source/sourceId link a note-promoted loop gets, which is what lets
+    // patternOpenBlocker tell a live blocker from a stale one.
+    let noteId = '';
+    if (threadNote && threadNote.accept !== false && threadNote.summary) {
+      const author = threadNote.from || me || 'Team';
+      const note = addNote(activeProjectId, threadNote.type, threadNote.summary, author);
+      if (note) {
+        noteId = note.id;
+        // The thread verbatim, kept but not rendered in the feed: a 40-line
+        // email chain would drown both the notes list and the dossier, and the
+        // summary is what a reader actually wants. Available behind a toggle.
+        note.sourceText = threadNote.sourceText || '';
+        note.sourceKind = 'thread';
+        saveState();
+      }
+    }
+
     picked.forEach(p => {
       // ppCoherentDirection refuses a wait with nobody to wait on, and a wait
       // on yourself. Same rule the manual add box has always applied.
@@ -9409,7 +9678,10 @@ function renderPasteBox(content, proj, me, refresh) {
         waitingOn: theirs ? p.owner : '',
         waitingSince: theirs ? today : null,
         due: p.due || null,
-        source: 'llm',
+        // Filed against the note when we made one, so the loop has a traceable
+        // origin like every other kind does.
+        source: noteId ? 'note' : 'llm',
+        sourceId: noteId || null,
         createdBy: me,
         createdAt: today
       });

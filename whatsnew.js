@@ -17,6 +17,31 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-08-31i',
+    title: 'Reading a thread keeps the thread',
+    dateLabel: 'Aug 31, 2026',
+    groups: [
+      {
+        area: 'Team · Plan tab',
+        items: [
+          { tag: 'new', text: 'Reading a thread now files the thread itself, not just the things owed in it. You get a short summary of what it says, sorted into the right kind of note — blocker, feedback, change of direction, decision — and the full original is kept underneath, one click away.' },
+          { tag: 'new', text: 'Filed threads live in a Threads read section in the Plan tab, alongside the open loops that came out of them, so you can see what a thread actually produced. The Notes tab stays exactly as it was: what your team wrote by hand.' },
+          { tag: 'new', text: 'Loops created from a thread point back at it, the same way a loop left from a note does — so “the blocker raised six days ago is still open” works on a pasted email too.' },
+          { tag: 'new', text: 'A thread with nothing owed in it is still worth filing. “Confirming we settled on the shorter version” produces no loops and a decision note, where before it produced nothing at all.' }
+        ]
+      },
+      {
+        area: 'Team · reviewing what it found',
+        items: [
+          { tag: 'new', text: 'It now asks when it genuinely cannot tell, instead of guessing. Two people called Liz on the project and a thread that just says “Liz will send it” gets you a “Which Liz?” picker rather than a coin flip — a wrong owner produces a loop that looks fine and never reaches the person who owes it.' },
+          { tag: 'new', text: 'It also flags what it could not work out from the wording itself — “who is ‘we’ here?”, “which Thursday?” — right next to the field in question.' },
+          { tag: 'new', text: 'Anything it is unsure about arrives unticked, and a row waiting on a name choice cannot be ticked until you make it. Everything it is confident about still arrives ticked, so the normal case is still one click.' },
+          { tag: 'fix', text: 'A first name that matches exactly one person on the project is filled in silently — “Priya” becomes “Priya Nair” — so the questions stay rare enough to be worth reading.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-08-31h',
     title: 'Fixes from a proper test pass',
     dateLabel: 'Aug 31, 2026',
