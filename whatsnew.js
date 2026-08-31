@@ -17,6 +17,37 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-08-31c',
+    title: 'Capture: leave an open loop where the thought already is',
+    dateLabel: 'Aug 31, 2026',
+    groups: [
+      {
+        area: 'Team · Notes',
+        items: [
+          { tag: 'new', text: 'The note composer now has two optional fields — who it is on, and by when. Fill either and the note leaves behind an open loop that can actually be chased. Naming somebody other than yourself records that you are waiting on them, and starts the clock from the note’s date.' },
+          { tag: 'new', text: 'The loop keeps a link back to the note it came from, so the one-line version stays readable while the full note stays on the project.' }
+        ]
+      },
+      {
+        area: 'Team · Plan tab',
+        items: [
+          { tag: 'new', text: 'A new Plan tab (📌) in the tools rail, sitting beside Info because that is where notes are written. It lists every open loop on the project, split into what you are waiting on other people for and what is on you, with recently closed ones underneath.' },
+          { tag: 'new', text: 'Add a loop directly with a line of text, optionally a person and a date. Click any loop to edit it, tick it off, hand it to somebody, or drop it — dropped loops stay on the project rather than vanishing.' },
+          { tag: 'new', text: 'Loops waiting five days or more turn amber, and overdue ones go red with the number of days late, so a list you have stopped reading still tells you where to look.' },
+          { tag: 'new', text: 'You can also set how often a project is meant to be touched — weekly, fortnightly, monthly. Nothing acts on it yet; the nudges that use it come next.' }
+        ]
+      },
+      {
+        area: 'Dash · Nudges',
+        items: [
+          { tag: 'new', text: 'Nudges now come with three replies: Handled, Later, and Waiting on… Handled dismisses that specific suggestion for a month, Later brings it back in three days, and both are per-suggestion, so silencing one does not silence the others on the same task.' },
+          { tag: 'new', text: 'Waiting on… opens a small form right under the nudge and records a real open loop, pre-filled from the task so the usual case is a name and a keypress. Answering the question is what files the answer — nothing has to be written down twice.' },
+          { tag: 'fix', text: 'Open loops are now included in backups, and restoring one adds anything missing without overwriting what is already there.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-08-31b',
     title: 'Open loops — the thing the app could never keep track of',
     dateLabel: 'Aug 31, 2026',

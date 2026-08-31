@@ -273,7 +273,47 @@ completed-project case above.
 editing different commitments do not clobber each other; existing subtasks
 appear as commitments after migration and the old checklist still renders.
 
-### Phase 3 — Capture surfaces (the go/no-go gate)
+### Phase 3 — Capture surfaces — SHIPPED 2026-08-31, build `20260831c`
+
+All three funnels built as specified, plus one gap found while building.
+
+- **Note promotion.** Two optional fields in the compose box — owner (datalist
+  of every known person, departed excluded) and due date. `addNote` now returns
+  the note so the commitment can carry `sourceId`. `promoteNoteToCommitment`
+  infers the rest: naming somebody other than yourself means `direction:
+  'theirs'`, `state: 'waiting'`, clock started at the note's date. That
+  inference is what keeps capture at two fields instead of four.
+- **Structured nudge replies.** `getTaskSuggestion` now returns
+  `{text, pattern, key, task, project, ctx}` rather than a bare string, so a
+  dismissal can be scoped to one pattern on one task. Handled = 30 days, Later
+  = 3, both in `dashData.nudgeSnooze`. **Waiting on…** opens an inline form
+  (not a `prompt()` — it needs the person datalist) and writes a real
+  commitment, pre-seeded from the task by `defaultWaitText`, then snoozes the
+  question it just answered.
+- **Plan tab** (📌) in the tools rail: cadence selector, add row, and the loops
+  split into waiting / mine / recently closed. Amber past 5 days waiting, red
+  and day-counted when overdue.
+
+**Gap found and closed:** commitments were in no backup at all. `prepro/state`
+and `prepro/dash` are exported by all three pages, but the new node was not, so
+the only copy of every commitment was whatever Firebase happened to hold. All
+three exports now carry `prepro_commitments` (payload `version: 4`) and all
+three imports merge it through one shared `mergeCommitmentsFromBackup` —
+additive by id, so restoring an old backup can never undo newer work.
+
+**Deliberately not `getAllPeople()`** for the waiting-on datalist: it filters
+through `hasDashboard`, which excludes exactly the stakeholders, clients and
+vendors most likely to be sitting on something. `dashPeopleNames()` reads the
+person records instead.
+
+*Verified:* 25 new tests (backup merge idempotence and normalisation, promotion
+direction/clock inference, snooze expiry and per-pattern scoping, later-expiry-
+wins merge) plus all 90 earlier tests re-run green against the changed files.
+
+**Still true:** this is the go/no-go gate. The capture paths exist now; whether
+they get used is the thing to watch before Phase 4 leans on them.
+
+### Phase 3 — original scope, for reference
 
 Everything above dies if entering data is work. Three funnels, no new habits:
 

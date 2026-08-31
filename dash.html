@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260831b';
+window.PREPRO_BUILD = '20260831c';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,16 +26,16 @@ window.PREPRO_BUILD = '20260831b';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260831b"></script>
+<script type="module" src="./auth.js?v=20260831c"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260831b"></script>
+<script src="./whatsnew.js?v=20260831c"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and ops.html. -->
-<script src="./people.js?v=20260831b"></script>
+<script src="./people.js?v=20260831c"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20260831b"></script>
+<script src="./commitments.js?v=20260831c"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -216,6 +216,16 @@ a.today-card-project:hover { color: var(--accent); }
 .today-task-row.completed .task-name { text-decoration: line-through; }
 .task-suggestion { font-size: 11px; color: var(--accent); background: rgba(108,99,255,.08); border-left: 2px solid var(--accent); padding: 6px 10px 6px 8px; margin: 2px 0 4px 26px; border-radius: 0 6px 6px 0; line-height: 1.55; }
 .task-suggestion .ts-icon { margin-right: 4px; }
+.task-suggestion .ts-line { line-height: 1.55; }
+.ts-acts { display: flex; gap: 4px; margin-top: 5px; flex-wrap: wrap; }
+.ts-act { font-size: 10px; font-weight: 600; color: var(--dim); background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; line-height: 1.4; cursor: pointer; }
+.ts-act:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
+.ts-act:disabled { opacity: .45; cursor: default; }
+.ts-act-go { color: #fff; background: var(--accent); border-color: var(--accent); }
+.ts-wait { display: flex; gap: 4px; margin-top: 5px; flex-wrap: wrap; align-items: center; }
+.ts-wait-input { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); padding: 3px 6px; font: inherit; font-size: 11px; outline: none; flex: 0 1 140px; min-width: 0; }
+.ts-wait-input:focus { border-color: var(--accent); }
+.ts-wait-what { flex: 1 1 170px; }
 .task-check { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--dim); background: none; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; color: transparent; transition: all .15s; padding: 0; }
 .task-check:hover { border-color: var(--accent); }
 .task-check.checked { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -748,6 +758,7 @@ function loadDashData() {
   if (!dashData.subtasks) dashData.subtasks = {};
   if (!dashData.status) dashData.status = {};
   if (!dashData.nextSteps) dashData.nextSteps = {};
+  if (!dashData.nudgeSnooze) dashData.nudgeSnooze = {};
 }
 
 // ── NAME HISTORY & PEOPLE EMAILS (synced via Firebase) ──
@@ -1019,7 +1030,7 @@ function resolveSubtaskParent(taskId) {
 
 function doExportData() {
   const payload = {
-    version: 3,
+    version: 4,
     exported: new Date().toISOString(),
     prepro_data: JSON.stringify(state),
     prepro_name_history: JSON.stringify(nameHistory),
@@ -1027,7 +1038,10 @@ function doExportData() {
     // The dashboard overlay: completions, subtasks, statuses and next steps.
     // It lives outside `state` and so was absent from backups entirely — the
     // one copy was whatever Firebase and this browser happened to be holding.
-    dash_data: JSON.stringify(dashData)
+    dash_data: JSON.stringify(dashData),
+    // Open loops. A separate Firebase node, so without this line the one copy
+    // of every commitment is whatever Firebase happens to be holding.
+    prepro_commitments: JSON.stringify(commitments)
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url  = URL.createObjectURL(blob);
@@ -1080,6 +1094,16 @@ function mergeDashData(incoming) {
     });
   });
 
+  // Snoozed nudges. The later expiry wins, so restoring a backup can only ever
+  // re-silence something you had already dismissed — never resurrect a nudge
+  // you have since dealt with.
+  if (!dashData.nudgeSnooze) dashData.nudgeSnooze = {};
+  Object.entries(incoming.nudgeSnooze || {}).forEach(([key, until]) => {
+    if (!until) return;
+    const mine = dashData.nudgeSnooze[key];
+    if (!mine || String(until).localeCompare(mine) > 0) dashData.nudgeSnooze[key] = until;
+  });
+
   saveDashData();
 }
 
@@ -1124,6 +1148,10 @@ function handleImportFile(file) {
 
       if (rawDash) {
         try { mergeDashData(JSON.parse(rawDash)); } catch(_) {}
+      }
+
+      if (payload.prepro_commitments) {
+        try { mergeCommitmentsFromBackup(payload.prepro_commitments); } catch(_) {}
       }
 
       renderAll();
@@ -1330,6 +1358,7 @@ window._dashReloadDashData = function(data) {
     if (!dashData.subtasks) dashData.subtasks = {};
     if (!dashData.status) dashData.status = {};
     if (!dashData.nextSteps) dashData.nextSteps = {};
+    if (!dashData.nudgeSnooze) dashData.nudgeSnooze = {};
   }
   renderAll();
 };
@@ -2401,6 +2430,8 @@ function getTaskSuggestion(task, personName, dateStr) {
 
   const ctx = buildTaskContext(task, personName, dateStr, proj);
 
+  // Patterns are named so a dismissal can be scoped to *this* nudge on *this*
+  // task, rather than silencing every nudge the task might ever raise.
   const patterns = [
     patternPTOHandoff,
     patternShootApproaching,
@@ -2418,9 +2449,163 @@ function getTaskSuggestion(task, personName, dateStr) {
   ];
   for (const p of patterns) {
     const text = p(task, personName, dateStr, proj, ctx);
-    if (text) return text;
+    if (!text) continue;
+    const key = nudgeKey(task.id, p.name);
+    if (isNudgeSnoozed(key, dateStr)) continue; // dismissed — try the next pattern
+    return { text: text, pattern: p.name, key: key, task: task, project: proj, ctx: ctx };
   }
   return null;
+}
+
+// Renders a nudge with something to do about it.
+//
+// A nudge used to be a sentence you read and then had to act on somewhere else,
+// which is the same reason notes never became anything: the thought and the
+// place to record it were in different rooms. These three buttons put the reply
+// where the question is — and "Waiting on" is the one that matters, because it
+// files a real open loop the dashboard can chase later.
+function buildNudgeRow(sug, task) {
+  const wrap = document.createElement('div');
+  wrap.className = 'task-suggestion';
+
+  const line = document.createElement('div');
+  line.className = 'ts-line';
+  line.innerHTML = `<span class="ts-icon">💡</span>${esc(sug.text)}`;
+  wrap.appendChild(line);
+
+  const acts = document.createElement('div');
+  acts.className = 'ts-acts';
+  const mk = (label, title, fn) => {
+    const b = document.createElement('button');
+    b.className = 'ts-act';
+    b.textContent = label;
+    b.title = title;
+    b.addEventListener('click', fn);
+    acts.appendChild(b);
+    return b;
+  };
+
+  mk('✓ Handled', 'Dismiss this suggestion', () => snoozeNudge(sug.key, 30, selectedDate));
+  mk('⏱ Later', 'Ask me again in a few days', () => snoozeNudge(sug.key, 3, selectedDate));
+
+  const waitBtn = mk('⏳ Waiting on…', 'Record that someone owes you this', () => {
+    if (wrap.querySelector('.ts-wait')) return;
+    waitBtn.disabled = true;
+    wrap.appendChild(buildWaitCapture(sug, task, wrap));
+  });
+
+  wrap.appendChild(acts);
+  return wrap;
+}
+
+// The inline capture form. Deliberately not a prompt() — this is the primary
+// path into the commitment store from the dashboard, and it needs the person
+// datalist to resolve names against the real roster.
+function buildWaitCapture(sug, task, wrap) {
+  const box = document.createElement('div');
+  box.className = 'ts-wait';
+
+  const who = document.createElement('input');
+  who.type = 'text';
+  who.className = 'ts-wait-input';
+  who.placeholder = 'Waiting on whom?';
+  who.setAttribute('list', 'dashWaitPeople');
+
+  const dl = document.createElement('datalist');
+  dl.id = 'dashWaitPeople';
+  dashPeopleNames().forEach(name => {
+    const o = document.createElement('option');
+    o.value = name;
+    dl.appendChild(o);
+  });
+
+  const what = document.createElement('input');
+  what.type = 'text';
+  what.className = 'ts-wait-input ts-wait-what';
+  what.placeholder = 'For what?';
+  what.value = defaultWaitText(sug, task);
+
+  const save = document.createElement('button');
+  save.className = 'ts-act ts-act-go';
+  save.textContent = 'Save';
+
+  const commit = () => {
+    const name = who.value.trim();
+    const text = what.value.trim();
+    if (!name || !text) { (name ? what : who).focus(); return; }
+    createCommitment({
+      projectId:    task.projectId,
+      text:         text,
+      owner:        name,
+      direction:    'theirs',
+      state:        'waiting',
+      waitingOn:    name,
+      waitingSince: selectedDate,
+      source:       'nudge',
+      sourceId:     sug.pattern,
+      parentTaskId: task.id,
+      createdBy:    selectedPerson || '',
+      createdAt:    selectedDate
+    });
+    // The question has been answered, so stop asking it.
+    snoozeNudge(sug.key, 30, selectedDate);
+  };
+  save.addEventListener('click', commit);
+  [who, what].forEach(el => el.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    if (e.key === 'Escape') { e.preventDefault(); renderAll(); }
+  }));
+
+  box.appendChild(who);
+  box.appendChild(dl);
+  box.appendChild(what);
+  box.appendChild(save);
+  setTimeout(() => who.focus(), 0);
+  return box;
+}
+
+// Everyone we could be waiting on — deliberately wider than getAllPeople(),
+// which filters to people with dashboards and so leaves out exactly the
+// stakeholders, clients and vendors most likely to be sitting on something.
+function dashPeopleNames() {
+  const set = new Set();
+  Object.keys(typeof peopleRecords === 'object' && peopleRecords ? peopleRecords : {}).forEach(n => {
+    if (typeof personGoneEntirely === 'function' && personGoneEntirely(n)) return;
+    set.add(n);
+  });
+  (state.projects || []).forEach(p => {
+    Object.values(p.roster || {}).forEach(list => (list || []).forEach(n => n && set.add(n)));
+  });
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+// Seeds the "for what?" field from the task, so the common case is one name and
+// a keypress rather than a sentence typed from scratch.
+function defaultWaitText(sug, task) {
+  const base = taskDisplayName(task) || 'this';
+  if (sug.pattern === 'patternReviewApproaching') return 'Feedback on ' + base;
+  if (sug.pattern === 'patternGoalDrift')         return 'Confirmation of the new goal';
+  if (sug.pattern === 'patternHandoffToNext')     return 'Handover on ' + base;
+  if (sug.pattern === 'patternOpenBlocker')       return 'Unblocking ' + base;
+  return 'Response on ' + base;
+}
+
+// ── NUDGE DISMISSAL ──
+// A nudge you have already dealt with has to be able to go away, or the panel
+// trains you to skim past it. Snoozes live in prepro/dash beside completions —
+// they are personal reactions to a suggestion, not project facts.
+function nudgeKey(taskId, patternName) { return taskId + '|' + patternName; }
+
+function isNudgeSnoozed(key, dateStr) {
+  const until = (dashData.nudgeSnooze || {})[key];
+  return !!until && until > (dateStr || todayStr());
+}
+
+function snoozeNudge(key, days, dateStr) {
+  if (!dashData.nudgeSnooze) dashData.nudgeSnooze = {};
+  dashData.nudgeSnooze[key] = addDays(dateStr || todayStr(), days);
+  saveDashData();
+  renderAll();
 }
 
 function renderTodaySection() {
@@ -2526,12 +2711,7 @@ function renderTodaySection() {
 
       // Sequence-aware suggestion — one per task, question-framed
       const suggestion = getTaskSuggestion(task, selectedPerson, selectedDate);
-      if (suggestion) {
-        const sugRow = document.createElement('div');
-        sugRow.className = 'task-suggestion';
-        sugRow.innerHTML = `<span class="ts-icon">💡</span>${esc(suggestion)}`;
-        block.appendChild(sugRow);
-      }
+      if (suggestion) block.appendChild(buildNudgeRow(suggestion, task));
 
       // Subtasks area
       const subArea = document.createElement('div');

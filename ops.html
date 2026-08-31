@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260831b';
+window.PREPRO_BUILD = '20260831c';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,16 +26,16 @@ window.PREPRO_BUILD = '20260831b';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260831b"></script>
+<script type="module" src="./auth.js?v=20260831c"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260831b"></script>
+<script src="./whatsnew.js?v=20260831c"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20260831b"></script>
+<script src="./people.js?v=20260831c"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20260831b"></script>
+<script src="./commitments.js?v=20260831c"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -1095,11 +1095,14 @@ function renderDataSettings(c) {
 
 function doExportData() {
   const payload = {
-    version: 2,
+    version: 4,
     exported: new Date().toISOString(),
     prepro_data: JSON.stringify(state),
     prepro_name_history: JSON.stringify(nameHistory),
-    prepro_people_emails: JSON.stringify(peopleEmails)
+    prepro_people_emails: JSON.stringify(peopleEmails),
+    // Open loops. A separate Firebase node, so without this line the one copy
+    // of every commitment is whatever Firebase happens to be holding.
+    prepro_commitments: JSON.stringify(commitments)
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url  = URL.createObjectURL(blob);
@@ -1148,8 +1151,13 @@ function handleImportFile(file) {
         } catch(_) {}
       }
 
+      if (payload.prepro_commitments) {
+        try { mergeCommitmentsFromBackup(payload.prepro_commitments); } catch(_) {}
+      }
+
       opsRerender();
       renderSettingsContent();
+
       alert('Import complete — ' + incoming.projects.length + ' project(s) merged successfully.');
     } catch(err) {
       alert('Failed to read file: ' + err.message);

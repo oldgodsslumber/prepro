@@ -359,6 +359,31 @@ function orphanedCommitments(projectIds) {
   return allCommitments().filter(function (c) { return !c.projectId || !live[c.projectId]; });
 }
 
+// ── BACKUP RESTORE ──
+// Merges commitments out of a backup payload. Additive by id: an id already
+// here is left alone, so restoring an old backup can never undo work done
+// since. Shared by all three pages' import paths so they cannot drift — which
+// is the exact bug people.js was created to end.
+function mergeCommitmentsFromBackup(raw) {
+  var incoming;
+  try {
+    incoming = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  } catch (_) { return 0; }
+  if (!incoming || typeof incoming !== 'object') return 0;
+
+  var added = 0;
+  Object.keys(incoming).forEach(function (id) {
+    if (commitments[id]) return;
+    var c = normalizeCommitment(incoming[id]);
+    c.id = c.id || id;
+    if (!c.text) return;
+    commitments[id] = c;
+    _writeCommitment(id);
+    added++;
+  });
+  return added;
+}
+
 // ── SUBTASK MIGRATION ──
 // `subtasks` is dashData.subtasks: taskId -> [{id, text, done}].
 // `resolve` is supplied by the page (only dash.html can walk its own lookup)
