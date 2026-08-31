@@ -17,6 +17,24 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-08-31j',
+    title: 'Fixes to reading a thread',
+    dateLabel: 'Aug 31, 2026',
+    groups: [
+      {
+        area: 'Team · Plan tab',
+        items: [
+          { tag: 'fix', text: 'Answering “Which Liz?” threw the loop away. Choosing a person marked the question answered but left the row unticked, so saving skipped it — the one thing the feature exists to ask you was also the thing that lost your work. Picking a name now accepts the row.' },
+          { tag: 'fix', text: 'It could quietly answer its own question. Given a thread saying only “Liz” it would sometimes reply with a full name that appears nowhere in the text, so no question was asked and the loop was filed against a coin-flip person. A name is now checked against the thread itself, and anything the text does not actually say is put back to you.' },
+          { tag: 'fix', text: 'On a thread nobody signed, it would name a plausible sender from the project and file the note under them — crediting a colleague with something they never wrote. The sender is now an editable field, is flagged when it is a guess, and a guessed name is never used as the author.' },
+          { tag: 'fix', text: 'A thread on a project with no open loops was invisible: the Plan tab stopped before reaching it and the Notes tab filters threads out, so it could not be read or deleted even though it still fed the dossier and the project review.' },
+          { tag: 'fix', text: '“I owe Marcus the estimate” was being filed as waiting on Marcus, the exact opposite of what it says. Where the text turns on an “I” whose owner cannot be known, it now asks instead of guessing.' },
+          { tag: 'fix', text: 'Reworded duplicates of a loop you are already chasing are caught more often — though two loops that differ in a real way are still kept apart, because a wrongly merged pair silently loses one and a duplicate is just a row you untick.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-08-31i',
     title: 'Reading a thread keeps the thread',
     dateLabel: 'Aug 31, 2026',

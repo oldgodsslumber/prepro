@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260831i';
+window.PREPRO_BUILD = '20260831j';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,27 +29,27 @@ window.PREPRO_BUILD = '20260831i';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260831i"></script>
+<script type="module" src="./auth.js?v=20260831j"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260831i"></script>
+<script src="./whatsnew.js?v=20260831j"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20260831i"></script>
+<script src="./people.js?v=20260831j"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20260831i"></script>
+<script src="./commitments.js?v=20260831j"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20260831i"></script>
+<script src="./dossier.js?v=20260831j"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20260831i"></script>
+<script src="./prepro-llm.js?v=20260831j"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20260831i"></script>
+<script src="./prepro-ai.js?v=20260831j"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260831i"></script>
+<script src="./xlsx.full.min.js?v=20260831j"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -9243,6 +9243,10 @@ function renderPlanPanel(content) {
     e.className = 'plan-empty';
     e.textContent = 'No open loops on this project yet. Add one above, or leave one from the Notes tab when you log a blocker — the dashboard chases whatever lands here.';
     content.appendChild(e);
+    // Threads too: a thread that produced no loops is still filed, still feeds
+    // the dossier and the advisory, and was previously unreachable — this
+    // branch returned before rendering them, and the Notes tab filters them out.
+    renderThreads(content, proj, refresh);
     renderPlanAi(content, proj, me, refresh);
     return;
   }
@@ -9477,11 +9481,27 @@ function renderPasteBox(content, proj, me, refresh) {
     });
     nSel.addEventListener('change', () => { threadNote.type = nSel.value; });
     nMeta.appendChild(nSel);
-    if (threadNote.from) {
-      const f = document.createElement('span');
-      f.className = 'note-promo-hint';
-      f.textContent = 'from ' + threadNote.from;
-      nMeta.appendChild(f);
+    // Who the thread is from becomes the note's author, and on an unsigned
+    // thread the model will guess a plausible name from the project's cast. It
+    // was the one field in this panel with no control on it, so a wrong guess
+    // was unfixable and got attributed to a real colleague.
+    const fromWrap = document.createElement('span');
+    fromWrap.className = 'note-promo-hint';
+    fromWrap.textContent = 'from';
+    nMeta.appendChild(fromWrap);
+    const fromIn = document.createElement('input');
+    fromIn.type = 'text';
+    fromIn.className = 'ai-prop-input';
+    fromIn.placeholder = me || 'who sent it';
+    fromIn.value = threadNote.from || '';
+    fromIn.setAttribute('list', 'planPeople');
+    fromIn.addEventListener('change', () => { threadNote.from = fromIn.value.trim(); });
+    nMeta.appendChild(fromIn);
+    if (threadNote.fromGuessed) {
+      const warn = document.createElement('span');
+      warn.className = 'ai-prop-ask';
+      warn.textContent = '⚠ no sender named in the thread — check this';
+      nMeta.appendChild(warn);
     }
     nMain.appendChild(nMeta);
 
@@ -9577,11 +9597,17 @@ function renderPasteBox(content, proj, me, refresh) {
       pick.addEventListener('change', () => {
         if (pick.value === '__keep_as_written__') {
           p.ownerResolved = true;
+          p.accept = true;
         } else if (pick.value) {
           p.owner = pick.value;
           p.ownerResolved = true;
+          // Answering the question IS accepting the row. Leaving accept alone
+          // meant the row re-rendered unticked and Save skipped it — the one
+          // interaction this whole feature exists for lost the loop.
+          p.accept = true;
         } else {
           p.ownerResolved = false;
+          p.accept = false;
         }
         refresh();
       });
@@ -9651,7 +9677,10 @@ function renderPasteBox(content, proj, me, refresh) {
     // patternOpenBlocker tell a live blocker from a stale one.
     let noteId = '';
     if (threadNote && threadNote.accept !== false && threadNote.summary) {
-      const author = threadNote.from || me || 'Team';
+      // A guessed sender is not an author. If the thread never named anybody,
+      // the note is filed under whoever pasted it — attributing it to a real
+      // colleague who did not write it is worse than a slightly vague author.
+      const author = (threadNote.from && !threadNote.fromGuessed) ? threadNote.from : (me || 'Team');
       const note = addNote(activeProjectId, threadNote.type, threadNote.summary, author);
       if (note) {
         noteId = note.id;

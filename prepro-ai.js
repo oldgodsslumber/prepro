@@ -129,7 +129,9 @@ var PP_EXTRACT_SYSTEM = [
   '- Only extract what the text actually says. Never infer a task that would be sensible but is not stated.',
   '- One loop per distinct action. Do not merge two actions into one line.',
   '- text: a short imperative line, under about 12 words. No names in it — the owner field carries that.',
-  '- owner: copy a name EXACTLY as it appears in the known-people list when it plainly refers to that person. If the text names somebody not on that list, use the name as written. If genuinely unclear, use an empty string.',
+  '- owner: WHO MUST DO THE THING. Not who asked for it, not who is waiting for it, not who benefits. "I owe Marcus the estimate" means the owner is the speaker, not Marcus.',
+  '- Write the owner with exactly as much of the name as the text itself gives. If it says "Liz", write "Liz" — do NOT complete it to a full name from the known-people list, even when only one person there could match. The list is for spelling and for telling people apart, never for filling in what the text left out.',
+  '- Use the known-people spelling only when the text already gives the whole name. Somebody not on the list: use the name as written. Genuinely unclear: empty string.',
   '- direction: "mine" when our side owes it, "theirs" when we are waiting on somebody else.',
   '- due: only when a date is actually stated or clearly implied ("by Friday"). Resolve relative dates against the stated today. Otherwise empty string.',
   '- quote: the sentence you took it from, verbatim, so a human can check you.',
@@ -266,10 +268,50 @@ function ppSameLoop(a, b) {
   var ka = ppLoopKey(a), kb = ppLoopKey(b);
   if (!ka || !kb) return false;
   if (ka === kb) return true;
-  if (ka.length > 12 && kb.length > 12) {
-    if (ka.indexOf(kb) === 0 || kb.indexOf(ka) === 0) return true;
-  }
-  return false;
+  if (ka.indexOf(kb) === 0 || kb.indexOf(ka) === 0) return true;
+
+  // Prefix matching only catches a rephrase that starts the same way. "Music
+  // licence cleared" and "Chase Legal for the music licence" are the same loop
+  // and share no prefix at all, so compare the words themselves.
+  //
+  // Two conditions, because overlap alone is not enough. "Send the cut to
+  // Marcus" and "Send the cut to Dana" share two words out of three and are
+  // emphatically NOT the same loop — merging them would silently drop one,
+  // which is worse than showing a duplicate the reviewer can untick. So a match
+  // also needs a shared word with some substance in it: short words are the
+  // verbs and glue that any two loops have in common, while the long ones are
+  // the subject matter.
+  var wa = ka.split(' ').filter(Boolean);
+  var wb = kb.split(' ').filter(Boolean);
+  if (wa.length < 2 || wb.length < 2) return false;
+
+  var setA = {}, setB = {};
+  wa.forEach(function (w) { setA[w] = true; });
+  wb.forEach(function (w) { setB[w] = true; });
+  var sharedWords = wa.filter(function (w) { return setB[w]; });
+  if (sharedWords.length < Math.ceil(Math.min(wa.length, wb.length) * 0.6)) return false;
+  if (!sharedWords.some(function (w) { return w.length >= 5; })) return false;
+
+  // Last veto, and the one that decides the hard cases. If each side has a
+  // substantial word the other does not, they are about different things:
+  // "book the studio for Tuesday" and "book the crew for Tuesday" overlap
+  // heavily and share a long word, but studio and crew are the whole point.
+  //
+  // This deliberately lets some genuine rephrases through as duplicates —
+  // "music licence cleared" versus "chase Legal for the music licence" trips it
+  // on cleared/chase. That is the right way round to be wrong: a duplicate is a
+  // visible row in a list the reviewer is already reading and unticks in one
+  // click, whereas a false merge silently drops a real loop and nobody ever
+  // learns it existed.
+  // A lower bar here than for the shared word above, and deliberately so: a
+  // shared word has to carry the subject matter to prove two loops are the
+  // same, but an exclusive word only has to be meaningful to prove they differ.
+  // "crew" is four letters and is the entire difference between booking a
+  // studio and booking a crew.
+  var differing = function (w) { return w.length >= 4; };
+  var aOnly = wa.some(function (w) { return differing(w) && !setB[w]; });
+  var bOnly = wb.some(function (w) { return differing(w) && !setA[w]; });
+  return !(aOnly && bOnly);
 }
 
 // `owner` and `direction` are not independent, and treating them as two free
@@ -299,6 +341,36 @@ function ppCoherentDirection(owner, direction, me) {
   return 'theirs';
 }
 
+// Did the model complete a name the text left partial?
+//
+// The prompt now forbids it, but a prompt is a request. When the reply says
+// "Liz Chen" and the sentence it came from only ever says "Liz", the surname
+// was supplied by the model, not the writer — and that turns a question we
+// should be asking into a confident wrong answer. Checking the quote is the
+// deterministic backstop: it does not matter why the model expanded, only that
+// the source text does not support it.
+function ppUnexpandOwner(owner, quote, proj) {
+  var o = String(owner || '').trim();
+  var q = String(quote || '').trim();
+  if (!o || !q) return o;
+  var parts = o.split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return o;                       // already partial
+
+  var hay = q.toLowerCase();
+  if (hay.indexOf(o.toLowerCase()) >= 0) return o;      // text really says it
+
+  // Which parts of the name does the text actually contain?
+  var present = parts.filter(function (part) {
+    return new RegExp('(^|[^a-z])' + part.toLowerCase().replace(/[^a-z0-9]/g, '') + '([^a-z]|$)', 'i').test(hay);
+  });
+  if (!present.length) return o;                        // paraphrased; leave it
+  if (present.length === parts.length) return o;        // all parts present
+
+  // Only some of the name is in the text. Fall back to what was written, so
+  // ppOwnerMatches gets to decide whether that is ambiguous.
+  return present.join(' ');
+}
+
 // Resolves and sanitises whatever came back. The model's output never reaches
 // the store directly, so this exists to make the review list trustworthy —
 // dates that are not dates, owners that are not people, empty rows.
@@ -324,7 +396,8 @@ function ppNormalizeExtracted(raw, proj, opts) {
     if (existing.some(function (e) { return ppSameLoop(e, text); })) return;
     if (out.some(function (o) { return ppSameLoop(o.text, text); })) return; // dupes within one reply
 
-    var owner = ppResolveOwner(String(item.owner || '').trim(), proj);
+    var quote = String(item.quote || '').trim();
+    var owner = ppResolveOwner(ppUnexpandOwner(String(item.owner || '').trim(), quote, proj), proj);
     var due = ppValidIsoDate(item.due);
 
     var direction = ppCoherentDirection(owner, item.direction, me);
@@ -333,6 +406,24 @@ function ppNormalizeExtracted(raw, proj, opts) {
     // out ourselves from the roster; the second only the model can know.
     var match = ppOwnerMatches(owner, proj);
     var ask = String(item.uncertain || '').trim();
+
+    // "Marcus — I owe you the runtime estimate" names Marcus, but the person
+    // who owes it is whoever wrote the line. The prompt says so explicitly and
+    // the model still files it against the addressee, which produces exactly
+    // the inversion the direction rules were meant to prevent: a loop the
+    // speaker owes, recorded as a wait ON the speaker's recipient.
+    //
+    // Whose "I" it is cannot be known from the sentence alone, so this asks
+    // rather than guessing — the same contract as every other uncertainty here.
+    if (owner && /\b(?:i|i'll|i will|i owe|i can|i should|let me)\b/i.test(quote) &&
+        !/\byou(?:'ll| will)?\s+(?:owe|send|get|do|need)\b/i.test(quote)) {
+      var meKey = me && typeof normalizePersonKey === 'function' ? normalizePersonKey(me) : '';
+      var ownerKey = typeof normalizePersonKey === 'function' ? normalizePersonKey(owner) : '';
+      if (!meKey || meKey !== ownerKey) {
+        ask = ask || ('The text says "I" — is this you, or ' + owner + '?');
+      }
+    }
+
     if (match.kind === 'ambiguous') {
       ask = 'Which ' + owner + '?';
     } else if (!ask && owner && match.kind === 'unknown' && direction === 'theirs') {
@@ -346,7 +437,7 @@ function ppNormalizeExtracted(raw, proj, opts) {
       owner: owner,
       direction: direction,
       due: due,
-      quote: String(item.quote || '').trim(),
+      quote: quote,
       uncertain: ask,
       ownerOptions: match.kind === 'ambiguous' ? match.candidates : [],
       // A row we are unsure about is NOT pre-ticked. Everything else is: the
@@ -375,10 +466,28 @@ function ppNormalizeThreadNote(raw, text) {
     if (!known) type = 'update';
   }
   var summary = typeof n.summary === 'string' ? n.summary.trim() : '';
+  var from = typeof n.from === 'string' ? n.from.trim() : '';
+
+  // Is that sender actually in the thread, or did the model supply a plausible
+  // name from the project's cast? On an unsigned chat it will happily name
+  // somebody, and that name becomes the note's author — a real colleague
+  // credited with something they never wrote. Checking the text is the only
+  // reliable way to tell, and a guess should be marked as one rather than
+  // silently trusted.
+  var guessed = false;
+  if (from) {
+    var hay = String(text || '').toLowerCase();
+    var parts = from.toLowerCase().split(/\s+/).filter(Boolean);
+    guessed = !parts.some(function (part) {
+      return part.length > 2 && hay.indexOf(part) >= 0;
+    });
+  }
+
   return {
     type: type,
     summary: summary,
-    from: typeof n.from === 'string' ? n.from.trim() : '',
+    from: from,
+    fromGuessed: guessed,
     sourceText: String(text || '').trim(),
     accept: !!summary   // nothing worth filing if it could not summarise it
   };
