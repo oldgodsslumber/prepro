@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260831k';
+window.PREPRO_BUILD = '20260903a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,25 +26,25 @@ window.PREPRO_BUILD = '20260831k';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260831k"></script>
+<script type="module" src="./auth.js?v=20260903a"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260831k"></script>
+<script src="./whatsnew.js?v=20260903a"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20260831k"></script>
+<script src="./people.js?v=20260903a"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20260831k"></script>
+<script src="./commitments.js?v=20260903a"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20260831k"></script>
+<script src="./dossier.js?v=20260903a"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20260831k"></script>
+<script src="./prepro-llm.js?v=20260903a"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20260831k"></script>
+<script src="./prepro-ai.js?v=20260903a"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -495,7 +495,6 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 
 /* Person rows */
 .tl-person-row { display: flex; border-bottom: 1px solid var(--border); }
-.tl-person-row.dimmed { opacity: .18; pointer-events: none; }
 
 .tl-row-name { flex-shrink: 0; width: 130px; position: sticky; left: 0; z-index: 10; background: var(--card); border-right: 1px solid var(--border); display: flex; align-items: center; gap: 7px; padding: 0 6px 0 10px; font-size: 11px; font-weight: 600; color: var(--text); word-break: break-word; }
 .tl-row-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
@@ -1579,7 +1578,11 @@ function movePerson(person, dir) {
   const current = getTimelinePeople();
   const idx = current.indexOf(person);
   if (idx < 0) return;
-  const newIdx = idx + dir;
+  // Step over anyone switched off in the team filter: their rows aren't drawn,
+  // so swapping with one would look like the button did nothing. The saved
+  // order still holds the full list, so hidden people keep their places.
+  let newIdx = idx + dir;
+  while (newIdx >= 0 && newIdx < current.length && hiddenPeople.has(current[newIdx])) newIdx += dir;
   if (newIdx < 0 || newIdx >= current.length) return;
   current.splice(idx, 1);
   current.splice(newIdx, 0, person);
@@ -2313,7 +2316,16 @@ function renderTimeline() {
     return;
   }
 
-  people.forEach(person => {
+  // Someone switched off in the team filter leaves the Gantt entirely rather
+  // than sitting there greyed out — a dimmed row still costs vertical space and
+  // still has to be read past to find the people you actually asked for.
+  const visiblePeople = people.filter(p => !hiddenPeople.has(p));
+  if (!visiblePeople.length) {
+    rows.innerHTML = '<div style="padding:20px;color:var(--dim);font-size:12px">All team members are hidden. Turn people back on in the filter bar below.</div>';
+    return;
+  }
+
+  visiblePeople.forEach(person => {
     const entries       = allEntries.filter(e => e.person === person);
     const ptoEntries    = ptoAll.filter(e => e.person === person);
     const studioEntries = studioAll.filter(e => e.person === person);
@@ -2329,7 +2341,7 @@ function renderTimeline() {
     const trackH   = TL_PAD * 2 + numLanes * TL_LANE_H;
 
     const row = document.createElement('div');
-    row.className = 'tl-person-row' + (hiddenPeople.has(person) ? ' dimmed' : '');
+    row.className = 'tl-person-row';
 
     const nameCell = document.createElement('div');
     nameCell.className = 'tl-row-name';
