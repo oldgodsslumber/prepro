@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260903a';
+window.PREPRO_BUILD = '20260908a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,27 +29,27 @@ window.PREPRO_BUILD = '20260903a';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260903a"></script>
+<script type="module" src="./auth.js?v=20260908a"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260903a"></script>
+<script src="./whatsnew.js?v=20260908a"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20260903a"></script>
+<script src="./people.js?v=20260908a"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20260903a"></script>
+<script src="./commitments.js?v=20260908a"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20260903a"></script>
+<script src="./dossier.js?v=20260908a"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20260903a"></script>
+<script src="./prepro-llm.js?v=20260908a"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20260903a"></script>
+<script src="./prepro-ai.js?v=20260908a"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260903a"></script>
+<script src="./xlsx.full.min.js?v=20260908a"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -735,9 +735,14 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 .export-opt:hover { color: var(--text); }
 .export-opt input[type=checkbox] { accent-color: var(--accent); cursor: pointer; width: 12px; height: 12px; }
 .export-note    { font-size: 10px; color: var(--dim); }
+.export-target { display: flex; gap: 4px; align-items: center; }
+.export-target-label { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .04em; margin-right: 2px; }
 .export-text    { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 8px 10px; color: var(--text); font-family: 'Open Sans', system-ui, sans-serif; font-variant-numeric: tabular-nums; font-size: 11px; overflow-y: auto; white-space: pre; resize: none; outline: none; min-height: 0; cursor: text; user-select: text; }
 .export-text pre { margin: 0; font-family: inherit; font-size: inherit; white-space: pre-wrap; }
 .export-text strong { font-weight: 700; }
+.export-text ul { margin: 2px 0 6px; padding-left: 20px; }
+.export-text li, .export-text div, .export-text p { white-space: normal; }
+.export-text b { font-weight: 700; }
 .export-table-wrap { flex: 1; overflow: auto; border: 1px solid var(--border); border-radius: 5px; min-height: 0; }
 .export-table   { width: 100%; border-collapse: collapse; font-size: 11px; }
 .export-table th { background: var(--card); padding: 5px 10px; text-align: left; font-weight: 600; color: var(--dim); border-bottom: 1px solid var(--border); position: sticky; top: 0; white-space: nowrap; }
@@ -1642,6 +1647,20 @@ let exportTabActive  = localStorage.getItem('prepro_export_tab') || 'projectinfo
 // Which document the Text tab renders: the schedule, or the whole-project
 // dossier. Persisted like the active tab is.
 let exportTextFormat = localStorage.getItem('prepro_export_text_format') || 'schedule';
+// Where that document is going. Orthogonal to the format above: the format
+// picks WHICH document, this picks WHAT SURVIVES on arrival. Outlook and Word
+// run every paste through Word's HTML engine, which honours tables; Webex
+// sanitises down to a small semantic tag set with no table primitive at all,
+// so the very same markup lands there as an unstructured run of text. 'plain'
+// withholds text/html entirely — the only way to force a receiver off the
+// rich flavour when its sanitiser does something we did not predict.
+let exportCopyTarget = localStorage.getItem('prepro_export_copy_target') || 'outlook';
+const COPY_TARGETS = [
+  ['outlook', 'Outlook', 'Pastes as rich text into Outlook, Word and PowerPoint.'],
+  ['webex',   'Webex',   'Bold and bullets survive Webex — column alignment does not, so dates run inline.'],
+  ['plain',   'Plain',   'No formatting at all, for anywhere the rich paste misbehaves.']
+];
+if (!COPY_TARGETS.some(t => t[0] === exportCopyTarget)) exportCopyTarget = 'outlook';
 // 'notes' is no longer its own tab — the feed lives inside Project Info. Anyone
 // whose localStorage still points at it falls through to projectinfo below.
 const TAB_TITLES = { projectinfo: 'Project Info & Notes', roster: 'Role Assignees', plan: 'Plan & Open Loops', text: 'Text Export', table: 'Table / Excel', png: 'PNG Export', 'invites-web': 'Meeting Invites', cea: 'CEA' };
@@ -7681,43 +7700,22 @@ function escHtml(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-// Returns { html, plain } — html pastes bold into Word/PPT; plain uses ** for Slack/Notion.
-function buildHTMLExport() {
-  if (!activeProjectId) return { html: '<em>(No project selected)</em>', plain: '(No project selected)' };
+// ── EXPORT MODEL ──
+// One row per scheduled thing, with every export option already resolved. The
+// renderers below turn these into markup and read nothing else, so supporting
+// a new paste destination means writing a renderer and touching nothing here.
+function buildExportRows() {
+  if (!activeProjectId) return [];
   const proj = getProject(activeProjectId);
-  if (!proj) return { html: '', plain: '' };
+  if (!proj) return [];
   const dueTasks = exportOptDueDate
     ? [...proj.tasks].filter(t => t.isDueDate && (exportOptPTO || !isTimeOffTask(t))).sort((a, b) => a.date.localeCompare(b.date))
     : [];
   const sorted = [...proj.tasks].filter(t => !t.isDueDate).sort((a, b) => a.date.localeCompare(b.date));
-  if (!sorted.length && !dueTasks.length) return { html: '<em>(No tasks scheduled)</em>', plain: '(No tasks scheduled)' };
-
   const allForDates = [...sorted, ...dueTasks].sort((a, b) => a.date.localeCompare(b.date));
-  const rawDates = allForDates.map(t => fmtDateRange(t));
-  const sep = '  \u2014  ';
 
-  // Plain-text (Slack/Notion) side: best-effort space-padding for alignment.
-  // Only reliable in a monospace reader, but harmless elsewhere.
-  const maxLen   = exportOptAlign && rawDates.length ? Math.max(...rawDates.map(s => s.length)) : 0;
-  const fmtPlain = raw => `**${raw}**${' '.repeat(Math.max(0, maxLen - raw.length))}`;
-  const plainIndent = ' '.repeat(exportOptAlign ? maxLen + sep.length : 4);
-
-  // HTML side is a table, NOT a <pre>. Outlook/Word (and PowerPoint) run every
-  // paste through Word's HTML engine, which ignores `ch` units and inline-block,
-  // so the old <pre>+inline-block-span layout wrapped each header onto two rows
-  // and its line-height:1.7 read as double-spacing. A borderless table gives
-  // Outlook a real column to align the (nowrap) date against, and keeping each
-  // task's invitees inside the same cell \u2014 one <div> per name at line-height 1.2
-  // \u2014 keeps them single-spaced directly under their chip-type header.
-  const NAME_STYLE = "font-weight:bold;font-size:13px";       // chip/type name: larger + bold
-  const DATE_STYLE = "font-weight:bold;font-size:13px;white-space:nowrap";
-  const rowsHtml = [], pLines = [];
-
-  allForDates.forEach((t, i) => {
-    const raw   = rawDates[i];
+  return allForDates.map(t => {
     const label = t.reviewLabel || 'Review';
-
-    // Resolve the header text and the list of people for this task.
     let headText = '';
     let people   = [];
     if (t.isDueDate) {
@@ -7729,19 +7727,43 @@ function buildHTMLExport() {
       headText = t.taskName || roleVerb(t.role) || '(untitled)';
       if (exportOptAttendees) people = taskPeople(t);
     }
+    return { dateRaw: fmtDateRange(t), headText, people };
+  });
+}
 
-    // Plain text (unchanged shape: bold date, then · invitee lines).
+const EXPORT_SEP = '  —  ';
+
+// Person label shared by every renderer so the role suffix cannot drift.
+function exportPersonLabel(p) {
+  return (p.person || '') + (exportOptRoles ? ' (' + (p.role || '') + ')' : '');
+}
+
+// ── OUTLOOK / WORD ──
+// HTML side is a table, NOT a <pre>. Outlook/Word (and PowerPoint) run every
+// paste through Word's HTML engine, which ignores `ch` units and inline-block,
+// so the old <pre>+inline-block-span layout wrapped each header onto two rows
+// and its line-height:1.7 read as double-spacing. A borderless table gives
+// Outlook a real column to align the (nowrap) date against, and keeping each
+// task's invitees inside the same cell — one <div> per name at line-height 1.2
+// — keeps them single-spaced directly under their chip-type header.
+function renderExportOutlook(rows) {
+  const NAME_STYLE = "font-weight:bold;font-size:13px";       // chip/type name: larger + bold
+  const DATE_STYLE = "font-weight:bold;font-size:13px;white-space:nowrap";
+  const sep = EXPORT_SEP;
+
+  // Plain-text (Slack/Notion) side: best-effort space-padding for alignment.
+  // Only reliable in a monospace reader, but harmless elsewhere.
+  const maxLen   = exportOptAlign && rows.length ? Math.max(...rows.map(r => r.dateRaw.length)) : 0;
+  const fmtPlain = raw => `**${raw}**${' '.repeat(Math.max(0, maxLen - raw.length))}`;
+  const plainIndent = ' '.repeat(exportOptAlign ? maxLen + sep.length : 4);
+  const rowsHtml = [], pLines = [];
+
+  rows.forEach(({ dateRaw: raw, headText, people }) => {
     pLines.push(`${fmtPlain(raw)}${sep}${headText}`);
-    people.forEach(p => {
-      const role = exportOptRoles ? ` (${p.role})` : '';
-      pLines.push(`${plainIndent}· ${p.person || ''}${role}`);
-    });
+    people.forEach(p => pLines.push(`${plainIndent}· ${exportPersonLabel(p)}`));
 
-    // HTML: one table row per task; invitees single-spaced inside the cell.
-    const attHtml = people.map(p => {
-      const role = exportOptRoles ? ` (${escHtml(p.role)})` : '';
-      return `<div style="margin:0;line-height:1.2">· ${escHtml(p.person || '')}${role}</div>`;
-    }).join('');
+    const attHtml = people.map(p =>
+      `<div style="margin:0;line-height:1.2">· ${escHtml(exportPersonLabel(p))}</div>`).join('');
     const nameHtml = `<div style="margin:0;line-height:1.3"><span style="${NAME_STYLE}">${escHtml(headText)}</span></div>`;
     if (exportOptAlign) {
       rowsHtml.push(
@@ -7759,6 +7781,102 @@ function buildHTMLExport() {
 
   const html = `<table cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-family:'Open Sans',system-ui,sans-serif;font-variant-numeric:tabular-nums;font-size:12px;line-height:1.2">${rowsHtml.join('')}</table>`;
   return { html, plain: pLines.join('\n') };
+}
+
+// ── WEBEX ──
+// Everything the Outlook renderer relies on is exactly what Webex throws away:
+// it has no table, and it drops inline font styling. So this emits only tags
+// its sanitiser keeps — <div>, <b>, <ul>, <li> — and gives up the date column,
+// running the date inline instead. Only the date is bold: with the two-column
+// gap gone, bolding both halves (as the Outlook table does) reads as a wall of
+// heavy text, and in a chat river the date is the thing people scan for.
+//
+// The plain flavour drops the ** markers and the padding too. Webex renders
+// neither — the asterisks paste literally and the padding is meaningless in a
+// proportional font.
+function renderExportWebex(rows) {
+  const sep = ' — ';
+  const blocks = [], pLines = [];
+  rows.forEach(({ dateRaw, headText, people }) => {
+    pLines.push(dateRaw + sep + headText);
+    let list = '';
+    if (people.length) {
+      list = '<ul>' + people.map(p => `<li>${escHtml(exportPersonLabel(p))}</li>`).join('') + '</ul>';
+      people.forEach(p => pLines.push('  · ' + exportPersonLabel(p)));
+    }
+    blocks.push(`<div><b>${escHtml(dateRaw)}</b>${escHtml(sep)}${escHtml(headText)}</div>` + list);
+  });
+  return { html: blocks.join(''), plain: pLines.join('\n') };
+}
+
+// ── PLAIN ──
+// html:null is the signal to withhold text/html from the clipboard entirely.
+// Without that a rich-capable receiver takes the HTML flavour no matter what
+// the plain one says, which is why "just paste as text" is not a thing the
+// pasting app can be asked for from this side.
+function renderExportPlain(rows) {
+  const sep = ' — ';
+  const pLines = [];
+  rows.forEach(({ dateRaw, headText, people }) => {
+    pLines.push(dateRaw + sep + headText);
+    people.forEach(p => pLines.push('  · ' + exportPersonLabel(p)));
+  });
+  return { html: null, plain: pLines.join('\n') };
+}
+
+// Returns { html, plain } for the chosen destination. html === null means
+// plain-only; every consumer has to handle it.
+function buildHTMLExport(target) {
+  target = target || exportCopyTarget;
+  if (!activeProjectId) return { html: '<em>(No project selected)</em>', plain: '(No project selected)' };
+  if (!getProject(activeProjectId)) return { html: '', plain: '' };
+  const rows = buildExportRows();
+  if (!rows.length) return { html: '<em>(No tasks scheduled)</em>', plain: '(No tasks scheduled)' };
+  if (target === 'webex') return renderExportWebex(rows);
+  if (target === 'plain') return renderExportPlain(rows);
+  return renderExportOutlook(rows);
+}
+
+// ── DOSSIER → HTML ──
+// Renders the dossier's plain text as rich markup for Outlook and Webex.
+//
+// This PARSES the text rather than restructuring dossier.js, deliberately.
+// That file is documented as pure and presentation-free, and it is the
+// reference document an LLM layer is meant to read — teaching it about paste
+// targets would be exactly the wrong dependency. Its output is strictly
+// regular (an ALL-CAPS section header at column 0, body lines indented two
+// spaces), so parsing it is both small and stable.
+//
+// Only tags Webex keeps are emitted, which Outlook is also happy with; the
+// aligned monospace original is still what the Plain target copies.
+function dossierToHTML(text) {
+  const out = [];
+  let inList = false;
+  const closeList = () => { if (inList) { out.push('</ul>'); inList = false; } };
+
+  String(text || '').split('\n').forEach(line => {
+    if (!line.trim()) { closeList(); return; }
+    if (line[0] === '─') { closeList(); return; }   // the rule under the title
+    if (line[0] !== ' ') {
+      // Header row. "PROJECT  Some Name" splits into label + value; anything
+      // else (the status summary line) is bolded whole.
+      closeList();
+      const m = line.match(/^([A-Z][A-Z0-9 ()·]*?)\s{2,}(.+)$/);
+      out.push(m
+        ? `<div><b>${escHtml(m[1])}</b> ${escHtml(m[2])}</div>`
+        : `<div><b>${escHtml(line)}</b></div>`);
+      return;
+    }
+    if (!inList) { out.push('<ul>'); inList = true; }
+    const body = line.trim();
+    // The run of spaces that produced a column is meaningless in a
+    // proportional font, so it becomes the label/value boundary instead.
+    const c = body.match(/^(\S.{0,24}?)\s{2,}(.+)$/);
+    out.push('<li>' + (c ? `<b>${escHtml(c[1])}</b> ${escHtml(c[2])}` : escHtml(body)) + '</li>');
+  });
+
+  closeList();
+  return out.join('');
 }
 
 function buildTSV() {
@@ -10029,68 +10147,122 @@ function renderExportPanel() {
     });
     content.appendChild(fmtBar);
 
+    // ── Destination switch ──
+    // Deliberately a separate control from the format bar above, not more
+    // buttons on it: they answer independent questions (which document, and
+    // where it is going), and folding them together would mean a button per
+    // combination. Changing it re-renders the whole panel, because the options
+    // row and the preview both depend on it.
+    const mkTargetBar = () => {
+      const wrap = document.createElement('div');
+      wrap.className = 'export-target';
+      const lbl = document.createElement('span');
+      lbl.className = 'export-target-label';
+      lbl.textContent = 'Copy for';
+      wrap.appendChild(lbl);
+      COPY_TARGETS.forEach(([key, label, note]) => {
+        const b = document.createElement('button');
+        b.className = 'export-fmt-btn' + (exportCopyTarget === key ? ' active' : '');
+        b.textContent = label;
+        b.title = note;
+        b.addEventListener('click', () => {
+          exportCopyTarget = key;
+          try { localStorage.setItem('prepro_export_copy_target', key); } catch (_) {}
+          renderExportPanel();
+        });
+        wrap.appendChild(b);
+      });
+      return wrap;
+    };
+    const targetNote = () => (COPY_TARGETS.find(t => t[0] === exportCopyTarget) || COPY_TARGETS[0])[2];
+
     if (exportTextFormat === 'dossier') {
       const proj = getProject(activeProjectId);
       const text = proj ? buildProjectDossier(proj, { isTaskDone: isTaskDoneHere }) : '';
+      // Plain keeps the aligned monospace document as written; the rich targets
+      // get it as headings and lists, since its column alignment survives only
+      // in a monospace reader anyway.
+      const getContent = () => ({
+        html:  exportCopyTarget === 'plain' ? null : dossierToHTML(text),
+        plain: text
+      });
 
       const acts = document.createElement('div');
       acts.className = 'export-actions';
-      const copy = document.createElement('button');
-      copy.className = 'settings-btn primary';
-      copy.textContent = 'Copy';
-      copy.addEventListener('click', () => {
-        const done = () => { copy.textContent = 'Copied'; setTimeout(() => { copy.textContent = 'Copy'; }, 1200); };
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done));
-        } else fallbackCopy(text, done);
-      });
-      acts.appendChild(copy);
+      acts.appendChild(mkTargetBar());
+      acts.appendChild(mkRichCopyBtn('Copy', getContent));
       const n = document.createElement('span');
       n.className = 'export-note';
-      n.textContent = 'Plain text — everything known about this project on one page.';
+      n.textContent = exportCopyTarget === 'plain'
+        ? 'Plain text — everything known about this project on one page.'
+        : targetNote();
       acts.appendChild(n);
       content.appendChild(acts);
 
-      const pre = document.createElement('pre');
-      pre.className = 'export-dossier';
-      pre.textContent = text;
-      content.appendChild(pre);
+      if (exportCopyTarget === 'plain') {
+        const pre = document.createElement('pre');
+        pre.className = 'export-dossier';
+        pre.textContent = text;
+        content.appendChild(pre);
+      } else {
+        const box = document.createElement('div');
+        box.className = 'export-text';
+        box.innerHTML = getContent().html;
+        content.appendChild(box);
+      }
       return;
     }
 
     // ── Format options ──
     const opts = document.createElement('div');
     opts.className = 'export-opts';
-    const mkOpt = (lbl, checked, onChange) => {
+    const mkOpt = (lbl, checked, onChange, disabledWhy) => {
       const el = document.createElement('label');
       el.className = 'export-opt';
       const cb = document.createElement('input');
       cb.type = 'checkbox'; cb.checked = checked;
+      if (disabledWhy) {
+        cb.disabled = true;
+        el.style.opacity = '.45';
+        el.style.cursor = 'not-allowed';
+        el.title = disabledWhy;
+      }
       cb.addEventListener('change', () => { onChange(cb.checked); refresh(); });
       el.appendChild(cb);
       el.appendChild(document.createTextNode(lbl));
       opts.appendChild(el);
     };
     mkOpt('Include roles',    exportOptRoles,      v => { exportOptRoles      = v; });
-    mkOpt('Align tasks',      exportOptAlign,      v => { exportOptAlign      = v; });
+    // Alignment is a table-column trick. Outside Outlook there is no column to
+    // align against, and leaving the box live there makes the tab look broken.
+    mkOpt('Align tasks',      exportOptAlign,      v => { exportOptAlign      = v; },
+      exportCopyTarget === 'outlook' ? null
+        : 'Date-column alignment only applies to the Outlook copy — this destination has no columns.');
     mkOpt('Show due date',    exportOptDueDate,    v => { exportOptDueDate    = v; });
     mkOpt('Show PTO & holidays', exportOptPTO,     v => { exportOptPTO        = v; });
     mkOpt('Show attendees',   exportOptAttendees,  v => { exportOptAttendees  = v; });
 
     const actions = document.createElement('div');
     actions.className = 'export-actions';
-    // Rich copy button: writes text/html (Word/PPT) + text/plain (**) simultaneously
+    actions.appendChild(mkTargetBar());
+    // Rich copy button: writes text/html + text/plain simultaneously, or plain
+    // alone when the destination is Plain.
     actions.appendChild(mkRichCopyBtn('Copy', () => buildHTMLExport()));
     const note = document.createElement('span');
     note.className = 'export-note';
-    note.textContent = 'Pastes as rich text in Word & PowerPoint';
+    note.textContent = targetNote();
     actions.appendChild(note);
 
     const preview = document.createElement('div');
     preview.className = 'export-text';
-    preview.innerHTML = buildHTMLExport().html;
 
-    function refresh() { preview.innerHTML = buildHTMLExport().html; }
+    // The preview shows the SELECTED destination, not the Outlook markup —
+    // otherwise it would promise a layout that the paste cannot deliver.
+    function refresh() {
+      const { html, plain } = buildHTMLExport();
+      preview.innerHTML = html === null ? '<pre>' + escHtml(plain) + '</pre>' : html;
+    }
+    refresh();
 
     content.appendChild(opts);
     content.appendChild(actions);
@@ -10308,7 +10480,8 @@ function mkCopyBtn(label, text) {
   return btn;
 }
 
-// Writes text/html + text/plain so Word & PPT get bold, Slack gets **
+// Writes text/html + text/plain together so the receiver picks its best flavour.
+// getContent() may return html:null to suppress the rich flavour entirely.
 function mkRichCopyBtn(label, getContent) {
   const btn = document.createElement('button');
   btn.className = 'btn btn-ghost';
@@ -10318,7 +10491,9 @@ function mkRichCopyBtn(label, getContent) {
     const { html, plain } = getContent();
     const orig = btn.textContent;
     const done = ok => { btn.textContent = ok ? 'Copied!' : 'Failed'; setTimeout(() => { btn.textContent = orig; }, 1500); };
-    if (navigator.clipboard && window.ClipboardItem) {
+    // html === null is the Plain destination: withhold the text/html flavour so
+    // a rich-capable receiver has nothing to prefer over the plain one.
+    if (html !== null && navigator.clipboard && window.ClipboardItem) {
       try {
         await navigator.clipboard.write([new ClipboardItem({
           'text/html':  new Blob([html],  { type: 'text/html' }),

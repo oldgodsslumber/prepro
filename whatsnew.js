@@ -17,6 +17,23 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-09-08a',
+    title: 'Text export knows where you are pasting',
+    dateLabel: 'Sep 8, 2026',
+    groups: [
+      {
+        area: 'Team · Text export',
+        items: [
+          { tag: 'new', text: 'A “Copy for” switch — Outlook, Webex or Plain. The export was built for Outlook, which lays the schedule out as a table; Webex has no table at all and throws that layout away, so the same copy arrived there as a run of unstructured text. Each destination now gets markup it actually keeps.' },
+          { tag: 'new', text: 'The Webex copy runs the date inline and puts invitees in a real bullet list, which is what survives. It also drops the ** markers and the column padding from the plain version, neither of which Webex renders.' },
+          { tag: 'new', text: 'Plain sends no formatting whatsoever. Use it anywhere the rich paste misbehaves — it is the only way to stop an app helping itself to the formatted version.' },
+          { tag: 'new', text: 'The Dossier copies as headings and bullets into Outlook and Webex now, instead of plain text only. Plain still gives you the aligned monospace page.' },
+          { tag: 'fix', text: 'The preview now shows the destination you picked rather than always showing the Outlook version, so it stops promising a layout the paste cannot deliver. “Align tasks” greys out away from Outlook for the same reason — there are no columns to align.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-08-31k',
     title: 'More fixes from an adversarial pass',
     dateLabel: 'Aug 31, 2026',
