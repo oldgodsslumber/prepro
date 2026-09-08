@@ -17,6 +17,22 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-09-08c',
+    title: 'Invites bring the right people with them',
+    dateLabel: 'Sep 8, 2026',
+    groups: [
+      {
+        area: 'Team · Invites',
+        items: [
+          { tag: 'fix', text: 'A meeting that reaches this tab by its name — a Kickoff Call, rather than something tagged as a review — keeps the person assigned to it in a different place than a review keeps its attendees, and the invite was only ever reading the second one. Those people were missing from the row and from the invite, while the text export listed them. Everything reads the same place now.' },
+          { tag: 'fix', text: 'Somebody who is both the assignee and an attendee is no longer added twice.' },
+          { tag: 'new', text: 'Anyone with no email on file shows as a red ⚠ count on the row. They were being dropped from the invite in silence — their name was on screen, so the meeting simply went out smaller than it looked. Hover to see who, then add the address in Settings → People.' },
+          { tag: 'fix', text: 'The .ics download had all the same gaps and is fixed with it.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-09-08b',
     title: 'Outlook invite links work again',
     dateLabel: 'Sep 8, 2026',

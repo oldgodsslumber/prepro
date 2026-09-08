@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260908b';
+window.PREPRO_BUILD = '20260908c';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,27 +29,27 @@ window.PREPRO_BUILD = '20260908b';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260908b"></script>
+<script type="module" src="./auth.js?v=20260908c"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260908b"></script>
+<script src="./whatsnew.js?v=20260908c"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20260908b"></script>
+<script src="./people.js?v=20260908c"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20260908b"></script>
+<script src="./commitments.js?v=20260908c"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20260908b"></script>
+<script src="./dossier.js?v=20260908c"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20260908b"></script>
+<script src="./prepro-llm.js?v=20260908c"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20260908b"></script>
+<script src="./prepro-ai.js?v=20260908c"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260908b"></script>
+<script src="./xlsx.full.min.js?v=20260908c"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -888,6 +888,7 @@ textarea.pi-edit { resize: vertical; min-height: 46px; white-space: pre-wrap; }
 .invite-badge { font-size: 10px; padding: 1px 6px; border-radius: 3px; background: rgba(192,57,79,.18); color: #c0394f; white-space: nowrap; flex-shrink: 0; }
 .invite-name { font-size: 12px; font-weight: 600; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .invite-atts { flex: 1; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.invite-warn { font-size: 10px; padding: 1px 6px; border-radius: 3px; background: rgba(224,85,85,.15); color: var(--danger); white-space: nowrap; flex-shrink: 0; cursor: help; }
 
 /* ── ROSTER PANEL (rendered inside export-content) ── */
 .roster-content { display: flex; flex-direction: row; flex-wrap: wrap; gap: 0; padding: 4px 0 8px; width: 100%; overflow-y: auto; }
@@ -8318,7 +8319,6 @@ function makeICS(tasks, proj) {
       dtstart = 'DTSTART:' + fmtDT(t.date, 9, 0);
       dtend   = 'DTEND:'   + fmtDT(t.date, 9, 30);
     }
-    const attendees = (t.attendees || []);
     const lines = [
       'BEGIN:VEVENT',
       'UID:' + (t.id || genId()) + '@prepro',
@@ -8326,11 +8326,8 @@ function makeICS(tasks, proj) {
       'SUMMARY:' + esc(inviteSubject(t, proj)),
       'DESCRIPTION:' + esc(inviteBody(t, proj)),
     ];
-    attendees.forEach(a => {
-      const email = getPersonEmail(a.person);
-      if (!email) return;
-      const cn = esc(a.person || '');
-      lines.push('ATTENDEE;CN=' + cn + ';ROLE=REQ-PARTICIPANT;RSVP=TRUE:mailto:' + email);
+    inviteRoster(t).withEmail.forEach(a => {
+      lines.push('ATTENDEE;CN=' + esc(a.name) + ';ROLE=REQ-PARTICIPANT;RSVP=TRUE:mailto:' + a.email);
     });
     lines.push('END:VEVENT');
     return lines.join('\r\n');
@@ -8347,6 +8344,55 @@ function downloadICS(icsStr, filename) {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(a.href);
+}
+
+// ── WHO GOES ON THE INVITE ──
+// Reads taskPeople(), NOT t.attendees.
+//
+// A meeting that lands in this tab by keyword rather than by review label — a
+// "Kickoff Call" task — normally carries its person in the legacy `task.person`
+// field and has no attendees array at all. Reading t.attendees directly therefore
+// dropped exactly those people from the invite, and from the row above it, while
+// the text export (which does use taskPeople) listed them. Same accessor
+// everywhere now, so the row, the invite and the export cannot disagree.
+//
+// Split rather than filtered, because someone with no address on file is
+// silently uninvitable: the caller needs to be able to say so instead of
+// quietly shipping a smaller meeting than the screen promised.
+function inviteRoster(t) {
+  const withEmail = [], without = [], seen = new Set();
+  taskPeople(t).forEach(pp => {
+    const name = (pp.person || '').trim();
+    if (!name) return;
+    const email = (getPersonEmail(name) || '').trim();
+    // Only real mailboxes reach Outlook. A bare name gets dropped into the
+    // compose body by some Outlook versions instead of landing in To:.
+    if (email && email.includes('@')) {
+      // The same person can arrive as both the primary assignee and an
+      // attendee; Outlook shows the repeat, so dedupe on the address.
+      const key = email.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      withEmail.push({ name, role: pp.role, email });
+    } else if (!without.some(w => w.name === name)) {
+      without.push({ name, role: pp.role });
+    }
+  });
+  return { withEmail, without };
+}
+
+// Renders an invite row's people, and says who is being left off and why.
+function inviteAttsText(t) {
+  const { withEmail, without } = inviteRoster(t);
+  const fmt = a => a.name + (a.role ? ' (' + a.role + ')' : '');
+  const listed = withEmail.map(fmt).join(', ');
+  if (!without.length) return { text: listed || '(nobody with an email on file)', warn: '', missing: 0 };
+  return {
+    text: listed || '(nobody with an email on file)',
+    missing: without.length,
+    warn: without.length + ' not invited: ' + without.map(fmt).join(', ')
+         + ' — no email on file. Add one in Settings → People.'
+  };
 }
 
 // ── OUTLOOK WEB COMPOSE DEEPLINK ──
@@ -8400,14 +8446,7 @@ function makeOutlookURL(t, proj) {
     startdt = fmtDT(t.date, 9, 0);
     enddt   = fmtDT(t.date, 9, 30);
   }
-  const attendees = (t.attendees || []);
-  // Only pass real emails to Outlook. Bare names without an email get
-  // dropped into the compose body by some Outlook versions instead of
-  // landing in To:, so we skip them entirely. Add emails in Settings to
-  // include someone as a proper invitee.
-  const recipients = attendees
-    .map(a => getPersonEmail(a.person))
-    .filter(em => em && em.includes('@'));
+  const recipients = inviteRoster(t).withEmail.map(r => r.email);
   const params = outlookComposeParams();
   params.set('subject', inviteSubject(t, proj));
   params.set('startdt', startdt);
@@ -8733,7 +8772,9 @@ function renderInvitesWebPanel() {
 
     const atts = document.createElement('span');
     atts.className = 'invite-atts';
-    atts.textContent = (t.attendees || []).map(a => a.person + (a.role ? ' (' + a.role + ')' : '')).join(', ');
+    const attInfo = inviteAttsText(t);
+    atts.textContent = attInfo.text;
+    if (attInfo.warn) atts.title = attInfo.warn;
 
     const btn = document.createElement('button');
     btn.className = 'btn btn-ghost';
@@ -8745,6 +8786,16 @@ function renderInvitesWebPanel() {
     row.appendChild(badge);
     row.appendChild(nameEl);
     row.appendChild(atts);
+    // A person with no address on file is dropped from the invite silently.
+    // The names are right there on the row, so without this the meeting just
+    // arrives smaller than the screen promised and there is nothing to look at.
+    if (attInfo.warn) {
+      const w = document.createElement('span');
+      w.className = 'invite-warn';
+      w.textContent = '⚠ ' + attInfo.missing;
+      w.title = attInfo.warn;
+      row.appendChild(w);
+    }
     row.appendChild(btn);
     list.appendChild(row);
   });
@@ -8792,7 +8843,9 @@ function renderInvitesPanel() {
 
     const atts = document.createElement('span');
     atts.className = 'invite-atts';
-    atts.textContent = (t.attendees || []).map(a => a.person + (a.role ? ' (' + a.role + ')' : '')).join(', ');
+    const attInfo = inviteAttsText(t);
+    atts.textContent = attInfo.text;
+    if (attInfo.warn) atts.title = attInfo.warn;
 
     const btn = document.createElement('button');
     btn.className = 'btn btn-ghost';
@@ -8806,6 +8859,16 @@ function renderInvitesPanel() {
     row.appendChild(badge);
     row.appendChild(nameEl);
     row.appendChild(atts);
+    // A person with no address on file is dropped from the invite silently.
+    // The names are right there on the row, so without this the meeting just
+    // arrives smaller than the screen promised and there is nothing to look at.
+    if (attInfo.warn) {
+      const w = document.createElement('span');
+      w.className = 'invite-warn';
+      w.textContent = '⚠ ' + attInfo.missing;
+      w.title = attInfo.warn;
+      row.appendChild(w);
+    }
     row.appendChild(btn);
     list.appendChild(row);
   });
