@@ -8349,6 +8349,32 @@ function downloadICS(icsStr, filename) {
   URL.revokeObjectURL(a.href);
 }
 
+// ── OUTLOOK WEB COMPOSE DEEPLINK ──
+// The base and the two required routing parameters live here so the two
+// builders below cannot drift apart.
+//
+// The old form — outlook.office.com/calendar/action/compose?subject=… — stopped
+// working: it now lands on the bare calendar (often after a login loop) with
+// none of the event fields filled in. The current form routes through
+// /calendar/deeplink/compose and carries the action as parameters instead:
+// `path=/calendar/action/compose` plus `rru=addevent`. Both are required; the
+// link degrades to exactly that empty-calendar behaviour without them.
+//
+// Kept on outlook.office.com deliberately. Threads about this breakage often
+// recommend outlook.live.com, but that is the consumer domain — it would break
+// every work account here.
+//
+// Times stay naive-local (no trailing Z) on purpose. The Z suffix is optional,
+// and without it Outlook reads the value in the viewer's own timezone, which is
+// what "the 9am review" means to everyone reading it.
+const OUTLOOK_COMPOSE_BASE = 'https://outlook.office.com/calendar/deeplink/compose';
+function outlookComposeParams() {
+  const p = new URLSearchParams();
+  p.set('path', '/calendar/action/compose');
+  p.set('rru',  'addevent');
+  return p;
+}
+
 function makeOutlookURL(t, proj) {
   function pad(n) { return String(n).padStart(2,'0'); }
   function fmtDT(s, h, m) { return s + 'T' + pad(h) + ':' + pad(m) + ':00'; }
@@ -8382,10 +8408,17 @@ function makeOutlookURL(t, proj) {
   const recipients = attendees
     .map(a => getPersonEmail(a.person))
     .filter(em => em && em.includes('@'));
-  const params = new URLSearchParams({ subject: inviteSubject(t, proj), startdt, enddt });
+  const params = outlookComposeParams();
+  params.set('subject', inviteSubject(t, proj));
+  params.set('startdt', startdt);
+  params.set('enddt', enddt);
+  // Say all-day explicitly. Bare dates alone used to be read as all-day; under
+  // the deeplink form they can come through as a midnight-to-midnight timed
+  // event instead, which is not what any of these entries mean.
+  if (allDay) params.set('allday', 'true');
   params.set('body', inviteBody(t, proj));
   if (recipients.length) params.set('to', recipients.join(','));
-  return 'https://outlook.office.com/calendar/action/compose?' + params.toString();
+  return OUTLOOK_COMPOSE_BASE + '?' + params.toString();
 }
 
 // Local YYYY-MM-DD for "today" (calendar-day comparison, not UTC).
@@ -8403,7 +8436,7 @@ function buildOutlookComposeURL({ subject, startDate, endDate, allDay, toEmails 
   const pad = n => String(n).padStart(2, '0');
   const dayAfter = s => { const d = new Date(s + 'T00:00:00'); d.setDate(d.getDate() + 1);
     return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
-  const params = new URLSearchParams();
+  const params = outlookComposeParams();
   if (subject) params.set('subject', subject);
   if (allDay) {
     params.set('allday', 'true');
@@ -8415,7 +8448,7 @@ function buildOutlookComposeURL({ subject, startDate, endDate, allDay, toEmails 
   }
   const recips = (toEmails || []).filter(e => e && e.includes('@'));
   if (recips.length) params.set('to', recips.join(','));
-  return 'https://outlook.office.com/calendar/action/compose?' + params.toString();
+  return OUTLOOK_COMPOSE_BASE + '?' + params.toString();
 }
 
 // Build an Outlook-friendly all-day .ics for a PTO entry.
