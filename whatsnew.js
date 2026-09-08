@@ -17,6 +17,21 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-09-08b',
+    title: 'Outlook invite links work again',
+    dateLabel: 'Sep 8, 2026',
+    groups: [
+      {
+        area: 'Team · Invites',
+        items: [
+          { tag: 'fix', text: 'The Open buttons on the Invites tab stopped filling anything in — they opened Outlook on a bare calendar, sometimes after a login loop, with no subject, times or invitees. Microsoft changed the deeplink Outlook Web accepts; nothing here had changed. The links use the current form now and pre-fill again.' },
+          { tag: 'fix', text: 'All-day entries — on-location shoots and key dates — now say so explicitly, instead of arriving as a midnight-to-midnight timed event.' },
+          { tag: 'fix', text: 'The PTO invite buttons were built on the same broken link and are fixed with it.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-09-08a',
     title: 'Text export knows where you are pasting',
     dateLabel: 'Sep 8, 2026',
