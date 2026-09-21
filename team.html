@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260921d';
+window.PREPRO_BUILD = '20260921e';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,27 +29,27 @@ window.PREPRO_BUILD = '20260921d';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260921d"></script>
+<script type="module" src="./auth.js?v=20260921e"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260921d"></script>
+<script src="./whatsnew.js?v=20260921e"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20260921d"></script>
+<script src="./people.js?v=20260921e"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20260921d"></script>
+<script src="./commitments.js?v=20260921e"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20260921d"></script>
+<script src="./dossier.js?v=20260921e"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20260921d"></script>
+<script src="./prepro-llm.js?v=20260921e"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20260921d"></script>
+<script src="./prepro-ai.js?v=20260921e"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260921d"></script>
+<script src="./xlsx.full.min.js?v=20260921e"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1695,7 +1695,9 @@ let exportPNGRangeMode  = 'auto';   // 'auto' | 'manual'
 let exportPNGStart      = null;     // 'YYYY-MM-DD'
 let exportPNGEnd        = null;
 let exportPNGRangeProj  = null;     // project id the manual range belongs to
-let pngRangePick        = null;     // { start } while click-picking on the calendar
+let pngRangePick        = null;     // { start, projId } while click-picking on the calendar
+let pngWashWin          = null;     // snapped {start,end} the calendar wash paints, set per grid rebuild
+let planBriefOpen       = null;     // Plan-tab Brief expansion; null = not yet read from localStorage
 let showWeekends    = false;
 let showGhosts      = true;
 let resizeState     = null;
@@ -5090,6 +5092,17 @@ function rebuildCalGrid(adjustScrollTop) {
   const prevScrollTop = calScroll.scrollTop;
   const prevHeight    = calScroll.scrollHeight;
 
+  // The PNG custom-range wash, computed once per rebuild (not per cell) from
+  // the snapped export window so it matches what Download will produce.
+  pngWashWin = null;
+  if (exportOpen && exportTabActive === 'png') {
+    const washProj = getProject(activeProjectId);
+    if (washProj && !washProj.isFolder && pngManualRange(washProj)) {
+      const r = pngExportDays(washProj);
+      if (r.days.length) pngWashWin = { start: r.days[0], end: r.days[r.days.length - 1] };
+    }
+  }
+
   const grid = document.getElementById('calGrid');
   const cols = showWeekends ? 7 : 5;
   grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
@@ -5193,6 +5206,12 @@ function updateCalTitle() {
 function renderCalendar() {
   // Persist the active project so reload/reopen restores it
   if (activeProjectId) localStorage.setItem('prepro_active_project', activeProjectId);
+  // PNG range-pick mode is owned by the PNG tab of one project. Every
+  // navigation away funnels through here (project switch, folder view, tab
+  // change, panel collapse), so this is the one cancellation point that
+  // guarantees the banner and crosshair can't outlive their owner.
+  if (pngRangePick && (pngRangePick.projId !== activeProjectId || !exportOpen || exportTabActive !== 'png'))
+    clearPngRangePick();
   const empty   = document.getElementById('emptyState');
   const calArea = document.getElementById('calendarArea');
   const gantt   = document.getElementById('folderGantt');
@@ -5286,11 +5305,11 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghostInfo, showMonthLabel)
   cell.dataset.date = dateStr;
 
   // Wash the chosen PNG-export window while the PNG tab is open, so "what will
-  // the export cover" is answerable at a glance on the calendar itself.
-  if (exportOpen && exportTabActive === 'png') {
-    const mr = pngManualRange(getProject(activeProjectId));
-    if (mr && dateStr >= mr.start && dateStr <= mr.end) cell.classList.add('png-range');
-  }
+  // the export cover" is answerable at a glance. pngWashWin is the SNAPPED
+  // window (computed once per grid rebuild), so this always agrees with the
+  // panel note and the actual export, not the raw picked endpoints.
+  if (pngWashWin && dateStr >= pngWashWin.start && dateStr <= pngWashWin.end)
+    cell.classList.add('png-range');
 
   const numDiv = document.createElement('div');
   numDiv.className = 'cal-day-num';
@@ -9427,8 +9446,13 @@ function renderPlanPanel(content) {
 
   // ── Brief (collapsed by default — the commitments below are the working
   // surface; the brief is context, one row tall until asked for) ──
-  let briefOpen = false;
-  try { briefOpen = localStorage.getItem('prepro_plan_brief_open') === '1'; } catch(_) {}
+  // In-memory state is the source of truth (localStorage can be unavailable —
+  // the toggle must still work); storage just seeds it once and mirrors it.
+  if (planBriefOpen === null) {
+    planBriefOpen = false;
+    try { planBriefOpen = localStorage.getItem('prepro_plan_brief_open') === '1'; } catch(_) {}
+  }
+  const briefOpen = planBriefOpen;
   const briefHead = document.createElement('div');
   briefHead.className = 'pi-section-title';
   briefHead.style.cssText = 'cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px';
@@ -9445,7 +9469,8 @@ function renderPlanPanel(content) {
   briefHead.appendChild(cnt);
   briefHead.title = 'Function, budget, tangible goals and known issues for this project';
   briefHead.addEventListener('click', () => {
-    try { localStorage.setItem('prepro_plan_brief_open', briefOpen ? '0' : '1'); } catch(_) {}
+    planBriefOpen = !briefOpen;
+    try { localStorage.setItem('prepro_plan_brief_open', planBriefOpen ? '1' : '0'); } catch(_) {}
     renderExportPanel();
   });
   content.appendChild(briefHead);
@@ -9507,6 +9532,9 @@ function renderPlanPanel(content) {
       createdBy: me,
       createdAt: today
     });
+    // The panel refuses to rebuild under a focused text field; the commitment
+    // is saved at this point, so release focus (Enter-in-input path) first.
+    if ([txt, own, due].includes(document.activeElement)) document.activeElement.blur();
     refresh();
   };
   addBtn.addEventListener('click', doAdd);
@@ -10268,6 +10296,13 @@ function fmtDateShortIso(iso) {
 function renderExportPanel() {
   const content = document.getElementById('exportContent');
   if (!content) return;
+  // Never rebuild the panel out from under an in-flight hand edit: removing a
+  // focused text field fires no blur, so the typed value would be silently
+  // lost and the caret stolen (background sync calls this constantly). Skip —
+  // one of the many other triggers re-renders after the field blurs.
+  const ae = document.activeElement;
+  if (ae && content.contains(ae) &&
+      (ae.tagName === 'TEXTAREA' || (ae.tagName === 'INPUT' && ae.type !== 'checkbox'))) return;
   const titleEl = document.getElementById('toolsPanelTitle');
   if (titleEl) titleEl.textContent = TAB_TITLES[exportTabActive] || '';
   content.innerHTML = '';
@@ -10484,6 +10519,10 @@ function renderExportPanel() {
     // ── date range: auto (task-driven) or a manually chosen window ──
     const projPNG = getProject(activeProjectId);
     const manual  = projPNG ? pngManualRange(projPNG) : null;
+    // The UI follows the MODE, not the completed range: with an endpoint
+    // cleared, `manual` is null (the export falls back to auto) but the inputs
+    // must stay on screen or there is no way to finish the edit.
+    const manualMode = !!projPNG && exportPNGRangeMode === 'manual' && exportPNGRangeProj === projPNG.id;
     const rangeRow = document.createElement('div');
     rangeRow.className = 'export-opts';
     if (projPNG && !projPNG.isFolder) {
@@ -10499,14 +10538,17 @@ function renderExportPanel() {
         b.addEventListener('click', onClick);
         rangeRow.appendChild(b);
       };
-      mkModeBtn('Auto', !manual, () => {
+      mkModeBtn('Auto', !manualMode, () => {
         exportPNGRangeMode = 'auto';
         renderExportPanel(); renderCalendar();
       });
-      mkModeBtn('Custom', !!manual, () => {
-        if (!pngManualRange(projPNG)) {
-          // First switch for this project: seed the inputs from the auto window
-          // (computed before the mode flips, so it's still the auto answer).
+      mkModeBtn('Custom', manualMode, () => {
+        // Seed from the auto window only when the stored endpoints don't
+        // belong to this project — flipping Auto → Custom to compare must
+        // bring the hand-picked range back, not overwrite it.
+        if (exportPNGRangeProj !== projPNG.id || !exportPNGStart || !exportPNGEnd) {
+          // pngManualRange is null in every case that reaches here, so this
+          // is guaranteed to be the auto answer.
           const r = pngExportDays(projPNG);
           exportPNGStart     = r.days[0];
           exportPNGEnd       = r.days[r.days.length - 1];
@@ -10515,21 +10557,24 @@ function renderExportPanel() {
         exportPNGRangeMode = 'manual';
         renderExportPanel(); renderCalendar();
       });
-      if (manual) {
+      if (manualMode) {
         const mkDateInput = (val, onChange) => {
           const inp = document.createElement('input');
           inp.type = 'date';
-          inp.value = val;
+          inp.value = val || '';
           inp.style.cssText = 'font-size:11px;padding:1px 4px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px';
-          inp.addEventListener('change', () => { onChange(inp.value || null); renderExportPanel(); renderCalendar(); });
+          // Blur before re-rendering: the panel refuses to rebuild under a
+          // focused text field, and after a committed change there is nothing
+          // left in flight to protect.
+          inp.addEventListener('change', () => { onChange(inp.value || null); inp.blur(); renderExportPanel(); renderCalendar(); });
           rangeRow.appendChild(inp);
         };
-        mkDateInput(manual.start, v => { exportPNGStart = v; });
+        mkDateInput(exportPNGStart, v => { exportPNGStart = v; });
         const dash = document.createElement('span');
         dash.className = 'export-note';
         dash.textContent = '–';
         rangeRow.appendChild(dash);
-        mkDateInput(manual.end, v => { exportPNGEnd = v; });
+        mkDateInput(exportPNGEnd, v => { exportPNGEnd = v; });
         const pickBtn = document.createElement('button');
         pickBtn.className = 'btn btn-ghost';
         pickBtn.style.cssText = 'font-size:11px;padding:2px 8px';
@@ -10553,9 +10598,11 @@ function renderExportPanel() {
     if (projPNG && !projPNG.isFolder) {
       const r = pngExportDays(projPNG);
       const fmtN = ds => new Date(ds + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      pngNote.textContent = (manual ? 'Custom range: ' : 'Auto: ')
-        + fmtN(r.days[0]) + ' – ' + fmtN(r.days[r.days.length - 1])
-        + (manual ? ' (snapped to whole weeks)' : ' — 4 weeks from the first task, extended through the last');
+      const span = fmtN(r.days[0]) + ' – ' + fmtN(r.days[r.days.length - 1]);
+      pngNote.textContent =
+        manual     ? 'Custom range: ' + span + ' (snapped to whole weeks)'
+      : manualMode ? 'Custom: set both dates — exporting the auto window: ' + span
+      :              'Auto: ' + span + ' — 4 weeks from the first task, extended through the last';
     } else {
       pngNote.textContent = '4-week view from the start of the project, extended if tasks exist beyond';
     }
@@ -10789,14 +10836,19 @@ function updatePngPickBanner() {
     : '🎯 Click the FIRST day of the export — Esc cancels';
 }
 function startPngRangePick() {
-  pngRangePick = { start: null };
+  pngRangePick = { start: null, projId: activeProjectId };
   document.body.classList.add('png-picking');
   updatePngPickBanner();
 }
-function endPngRangePick() {
+// Tear down the mode without re-rendering — safe to call from inside
+// renderCalendar itself.
+function clearPngRangePick() {
   pngRangePick = null;
   document.body.classList.remove('png-picking');
   if (pngPickBannerEl) { pngPickBannerEl.remove(); pngPickBannerEl = null; }
+}
+function endPngRangePick() {
+  clearPngRangePick();
   renderCalendar();
   if (exportOpen) renderExportPanel();
 }
@@ -10809,12 +10861,27 @@ function endPngRangePick() {
 function pngExportDays(proj) {
   const manual = pngManualRange(proj);
   if (manual) {
+    // Snap outward to the row boundaries the PNG grid actually uses: Sun–Sat
+    // when weekends are shown (the canvas header is Sun-first), Mon–Fri when
+    // hidden. A weekend endpoint in weekday mode snaps INWARD — forward to
+    // Monday / back to Friday — never outward across a blank week.
     const s = new Date(manual.start + 'T00:00:00');
     const startD = new Date(s);
-    startD.setDate(s.getDate() - ((s.getDay() + 6) % 7)); // snap back to Monday
+    const sd = s.getDay();
+    if (showWeekends)  startD.setDate(s.getDate() - sd);
+    else if (sd === 0) startD.setDate(s.getDate() + 1);
+    else if (sd === 6) startD.setDate(s.getDate() + 2);
+    else               startD.setDate(s.getDate() - (sd - 1));
     const e = new Date(manual.end + 'T00:00:00');
-    const endD = new Date(e);
-    endD.setDate(e.getDate() + (showWeekends ? (7 - e.getDay()) % 7 : ((5 - e.getDay()) + 7) % 7)); // snap to week end
+    let endD = new Date(e);
+    const ed = e.getDay();
+    if (showWeekends)  endD.setDate(e.getDate() + (6 - ed));
+    else if (ed === 0) endD.setDate(e.getDate() - 2);
+    else if (ed === 6) endD.setDate(e.getDate() - 1);
+    else               endD.setDate(e.getDate() + (5 - ed));
+    // A weekend-only range in weekday mode inverts after the inward snaps;
+    // give it the week it lands in rather than an empty grid.
+    if (endD < startD) { endD = new Date(startD); endD.setDate(startD.getDate() + 4); }
     const days = [];
     const cur = new Date(startD);
     while (cur <= endD) {
@@ -10831,10 +10898,11 @@ function pngExportDays(proj) {
     const minStr = proj.tasks.reduce((m, t) => t.date < m ? t.date : m, proj.tasks[0].date);
     const minD = new Date(minStr + 'T00:00:00');
     startD = new Date(minD);
-    startD.setDate(minD.getDate() - ((minD.getDay() + 6) % 7)); // snap to Monday
+    // Row start matches the canvas header: Sunday with weekends, Monday without.
+    startD.setDate(minD.getDate() - (showWeekends ? minD.getDay() : (minD.getDay() + 6) % 7));
   } else {
     startD = new Date(todayD);
-    startD.setDate(todayD.getDate() - ((todayD.getDay() + 6) % 7));
+    startD.setDate(todayD.getDate() - (showWeekends ? todayD.getDay() : (todayD.getDay() + 6) % 7));
   }
 
   // End at the week containing the last task
@@ -10846,8 +10914,8 @@ function pngExportDays(proj) {
     if (maxStr) {
       const maxD = new Date(maxStr + 'T00:00:00');
       if (maxD > endD) {
-        // snap to end of that week (Fri or Sun)
-        const add = showWeekends ? (7 - maxD.getDay()) % 7 : ((5 - maxD.getDay()) + 7) % 7;
+        // snap to end of that row (Sat with weekends shown, Fri without)
+        const add = showWeekends ? 6 - maxD.getDay() : ((5 - maxD.getDay()) + 7) % 7;
         maxD.setDate(maxD.getDate() + add);
         endD = maxD;
       }
@@ -11483,6 +11551,10 @@ function setupInitListeners() {
     const cellEl = e.target.closest('.cal-day');
     if (!cellEl || !cellEl.dataset.date) return;
     const ds = cellEl.dataset.date;
+    // The renderCalendar cancellation covers project switches, but keep the
+    // guard here too so a stale second click can never pin a range that was
+    // started against a different project's schedule.
+    if (pngRangePick.projId !== activeProjectId) { endPngRangePick(); return; }
     if (!pngRangePick.start) {
       pngRangePick.start = ds;
       cellEl.classList.add('png-range');
