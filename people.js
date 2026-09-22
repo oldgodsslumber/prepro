@@ -89,7 +89,11 @@ function normalizePeopleRecords(src) {
   var out = {};
   Object.keys(src || {}).sort().forEach(function (name) {
     var r = src[name] || {};
-    out[name] = {
+    // Object.assign(r, …): fields this build doesn't know about are carried
+    // through instead of dropped. Before this, a stale cached copy of this
+    // file normalised away any newer field (e.g. `handle`) and its next
+    // savePeopleRecords erased that data for everyone.
+    var merged = Object.assign({}, r, {
       team:        r.team || '',
       roles:       Array.isArray(r.roles) ? r.roles.slice().sort() : [],
       defaultRole: r.defaultRole || '',
@@ -99,7 +103,14 @@ function normalizePeopleRecords(src) {
       handle:      r.handle || '',
       active:      r.active !== false,
       departedOn:  r.departedOn || null
-    };
+    });
+    // Rebuild with sorted keys: applyRemotePeople compares JSON strings, and
+    // key order must not depend on where the object came from (a Firebase
+    // echo of our own save must stringify identical, or every snapshot would
+    // count as a remote change and re-render mid-edit).
+    var rec = {};
+    Object.keys(merged).sort().forEach(function (k) { rec[k] = merged[k]; });
+    out[name] = rec;
   });
   return out;
 }

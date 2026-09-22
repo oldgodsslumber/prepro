@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260922a';
+window.PREPRO_BUILD = '20260922b';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,27 +29,27 @@ window.PREPRO_BUILD = '20260922a';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260922a"></script>
+<script type="module" src="./auth.js?v=20260922b"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260922a"></script>
+<script src="./whatsnew.js?v=20260922b"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20260922a"></script>
+<script src="./people.js?v=20260922b"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20260922a"></script>
+<script src="./commitments.js?v=20260922b"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20260922a"></script>
+<script src="./dossier.js?v=20260922b"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20260922a"></script>
+<script src="./prepro-llm.js?v=20260922b"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20260922a"></script>
+<script src="./prepro-ai.js?v=20260922b"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260922a"></script>
+<script src="./xlsx.full.min.js?v=20260922b"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -3132,6 +3132,16 @@ function renderPeopleSettings(c) {
         handle.title = 'This person’s username in the Video Scheduler export’s "Service Provider" column (e.g. "rwalsh"). Paste the full value — any @domain part is stripped. Imports use it to auto-assign the lead producer.';
         handle.value = rec.handle || '';
         handle.addEventListener('blur', () => {
+          // One handle, one person: a silent collision would make every import
+          // assign the alphabetically-first holder with no warning anywhere.
+          const key = normalizePersonHandle(handle.value);
+          const taken = key && Object.keys(peopleRecords).find(n =>
+            n !== p.name && normalizePersonHandle((peopleRecords[n] || {}).handle) === key);
+          if (taken) {
+            alert('The handle "' + key + '" is already assigned to ' + taken + '. Clear it there first, or double-check which of them it belongs to.');
+            handle.value = personHandle(p.name); // revert to what's stored
+            return;
+          }
           setPersonHandle(p.name, handle.value);
           handle.value = personHandle(p.name); // show the normalised form back
         });
@@ -3658,6 +3668,11 @@ function xlNormalizeDate(raw) {
 // assignment column. First/Last Name stays as the fallback for rows whose
 // handle is blank or not mapped yet.
 function producerFromRow(row) {
+  // A hand-edit in the review grid outranks the handle: the Lead Producer cell
+  // writes back to row.producer, and a correction the user typed must never be
+  // silently overridden by the file's Service Provider column.
+  const edited = row._origProducer !== undefined && (row.producer || '') !== row._origProducer;
+  if (edited) return resolvePersonName(row.producer) || (row.producer || '').trim();
   return resolvePersonByHandle(row.serviceProvider) ||
          resolvePersonName(row.producer) || (row.producer || '').trim();
 }
@@ -3772,6 +3787,10 @@ const XL_GRID_COLS = [
 const XL_STATUS_OPTIONS = ['New','Draft','Pending-Approval','Pending-Fulfillment','On Hold','Resolved-COERejected'];
 
 let _xlReviewRows = [];   // candidate rows currently shown in the review overlay
+// Unmapped Service Provider handles across the WHOLE file, computed before the
+// skip/update split — unchanged rows never reach confirmExcelImport, and a
+// steady-state re-import full of unmapped handles must still say so.
+let _xlUnmappedHandles = [];
 
 function handleExcelImport(file) {
   if (typeof XLSX === 'undefined') { alert('Excel parser failed to load (xlsx.full.min.js).'); return; }
@@ -3809,8 +3828,15 @@ function handleExcelImport(file) {
       });
       // Lead producer is tracked by first name only.
       obj.producer = (obj.firstName || '').trim();
+      // Pristine copy, so producerFromRow can tell a hand-edit in the review
+      // grid apart from the value the file arrived with.
+      obj._origProducer = obj.producer;
       if ((obj.ticketId || '').trim()) candidates.push(obj);
     }
+
+    const allUnmapped = new Set();
+    candidates.forEach(o => { const h = unmappedHandleOf(o); if (h) allUnmapped.add(h); });
+    _xlUnmappedHandles = [...allUnmapped].sort();
 
     // Cross-check against existing projects by Case ID. New tickets become
     // "New" rows; already-present tickets whose Case Status changed (or that can
@@ -3839,11 +3865,17 @@ function handleExcelImport(file) {
       const newLabel      = (o.label || '').trim();
       const oldLabel      = ticketLabelOf(existing);
       const labelChanged  = !!newLabel && newLabel.toLowerCase() !== oldLabel.toLowerCase();
-      if (statusChanged || producerFill || producerMoved || labelChanged) {
+      // The lead we already hold is right, but the roster doesn't count them yet
+      // (imports before build 20260922b never touched the roster). Without this
+      // an otherwise-unchanged row is skipped and the workload views keep
+      // undercounting the lead forever; flagging it once converges the backlog.
+      const rosterFill    = !!incomingProd && incomingProd === oldProd &&
+        !(((existing.roster || {}).Producer) || []).includes(incomingProd);
+      if (statusChanged || producerFill || producerMoved || labelChanged || rosterFill) {
         updateRows.push(Object.assign({}, o, {
           _update: true, _existingId: existing.id, _oldStatus: existing.caseStatus || '',
           _oldLabel: oldLabel, _labelChanged: labelChanged,
-          _oldProducer: oldProd, _producerMoved: producerMoved
+          _oldProducer: oldProd, _producerMoved: producerMoved, _rosterFill: rosterFill
         }));
       } else {
         skipped.push(o);
@@ -3962,6 +3994,15 @@ function openExcelReview(newRows, updateRows, totalRows, skippedCount, missingRo
   summary.innerHTML = '<b>' + totalRows + '</b> rows in file · <b>' + skippedCount +
     '</b> already in app (unchanged) · <b>' + nNew + '</b> new · <b>' + nUpd + '</b> updated' +
     (nMiss ? ' · <b>' + nMiss + '</b> no longer in file' : '');
+  if (_xlUnmappedHandles.length) {
+    // textContent on purpose: handle strings come straight from the file.
+    const uh = document.createElement('div');
+    uh.style.cssText = 'margin-top:4px; font-size:11px; color:var(--dim);';
+    uh.textContent = '⚠ ' + _xlUnmappedHandles.length + ' Service Provider handle' +
+      (_xlUnmappedHandles.length === 1 ? '' : 's') + ' not mapped to anyone: ' +
+      _xlUnmappedHandles.join(', ') + ' — add them in Settings → People (Video Team) to auto-assign leads.';
+    summary.appendChild(uh);
+  }
 
   const wrap = document.getElementById('excelReviewGridWrap');
   wrap.innerHTML = '';
@@ -4036,7 +4077,10 @@ function buildExcelReviewTable() {
       const tips = [];
       if (row._labelChanged) tips.push('Renamed from: "' + (row._oldLabel || '') + '"');
       if (row._oldStatus)    tips.push('Was: ' + row._oldStatus);
-      if (row._producerMoved) tips.push('Producer: ' + row._oldProducer + ' → ' + (row.producer || ''));
+      // producerFromRow, not row.producer: the handle-resolved name is what an
+      // apply will actually assign, and this tooltip is how the user vets it.
+      if (row._producerMoved) tips.push('Producer: ' + row._oldProducer + ' → ' + (producerFromRow(row) || ''));
+      if (row._rosterFill)    tips.push('Adds lead ' + row._oldProducer + ' to the project roster');
       if (tips.length) badge.title = tips.join(' · ');
     }
     kCell.appendChild(badge);
@@ -4057,6 +4101,8 @@ function buildExcelReviewTable() {
         field = document.createElement('input'); field.type = 'text';
       }
       field.value = row[col.key] || '';
+      if (col.key === 'serviceProvider') field.title = 'Pega username. When mapped in Settings → People it decides the lead producer — unless you edit the Lead Producer cell, which always wins.';
+      if (col.key === 'producer')        field.title = 'Editing this overrides the Service Provider handle for this row.';
       field.addEventListener('input', () => { row[col.key] = field.value; });
       field.addEventListener('change', () => { row[col.key] = field.value; });
       td.appendChild(field);
@@ -4146,6 +4192,7 @@ function updateExcelConfirmLabel() {
 function closeExcelReview() {
   document.getElementById('excelReviewOverlay').style.display = 'none';
   _xlReviewRows = [];
+  _xlUnmappedHandles = [];
 }
 
 function confirmExcelImport() {
@@ -4153,7 +4200,9 @@ function confirmExcelImport() {
   if (!chosen.length) { closeExcelReview(); return; }
   let added = 0, updated = 0, closed = 0;
   const newPeople = [];
-  const unmappedHandles = new Set();
+  // Seed with the whole-file scan so handles on rows that were skipped as
+  // unchanged still make the alert; chosen rows re-add theirs (post-edit).
+  const unmappedHandles = new Set(_xlUnmappedHandles);
   chosen.forEach(row => {
     // Give imported names a record up front, so a fresh requester arrives with a
     // team instead of landing in the "needs a home" pile. Names that resolve to
