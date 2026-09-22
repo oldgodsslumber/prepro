@@ -57,7 +57,7 @@ var PERSON_COUNTRY_CODES = PERSON_COUNTRIES.map(function (c) { return c.code; })
  * The single source of truth about a person:
  *
  *   name -> { team, roles[], defaultRole, email, country, aliases[],
- *             active, departedOn }
+ *             handle, active, departedOn }
  *
  * Keyed by NAME rather than a generated id on purpose: every task already
  * stores `t.person = "<name>"` and every roster is an array of names, so ids
@@ -96,6 +96,7 @@ function normalizePeopleRecords(src) {
       email:       r.email || '',
       country:     r.country || '',
       aliases:     Array.isArray(r.aliases) ? r.aliases.slice().sort() : [],
+      handle:      r.handle || '',
       active:      r.active !== false,
       departedOn:  r.departedOn || null
     };
@@ -146,7 +147,7 @@ function upsertPerson(name, patch) {
   if (!nm) return null;
   var cur = peopleRecords[nm] || {
     team: '', roles: [], defaultRole: '', email: '',
-    country: '', aliases: [], active: true, departedOn: null
+    country: '', aliases: [], handle: '', active: true, departedOn: null
   };
   peopleRecords[nm] = Object.assign({}, cur, patch || {});
   savePeopleRecords();
@@ -166,6 +167,41 @@ function setPersonTeam(name, teamKey) {
 function setPersonCountry(name, code) {
   return upsertPerson(name, { country: PERSON_COUNTRY_CODES.includes(code) ? code : '' });
 }
+// ── PEGA HANDLES (Service Provider column) ──
+// The Video Scheduler export's "Service Provider" column carries an email-style
+// username handle that matches none of the emails we hold, so it has to be
+// mapped by hand. Stored per person; only Video Team members get the input in
+// settings, and only they are considered when resolving.
+//
+// Normalised form: lowercase, leading "@" stripped, anything from an "@domain"
+// onward dropped — so "RWalsh", "@rwalsh" and "rwalsh@company.com" all match
+// the same stored handle.
+function normalizePersonHandle(raw) {
+  var s = String(raw == null ? '' : raw).trim().toLowerCase();
+  if (!s) return '';
+  if (s.charAt(0) === '@') s = s.slice(1);
+  var at = s.indexOf('@');
+  if (at > -1) s = s.slice(0, at);
+  return s.trim();
+}
+function setPersonHandle(name, raw) {
+  return upsertPerson(name, { handle: normalizePersonHandle(raw) });
+}
+function personHandle(name) { var r = getPerson(name); return (r && r.handle) || ''; }
+// Canonical name for a Service Provider handle, or '' when nobody matches.
+// Restricted to the Video Team on purpose: the column only ever names the
+// producer, and a stray handle collision with a stakeholder must not win.
+function resolvePersonByHandle(raw) {
+  var key = normalizePersonHandle(raw);
+  if (!key) return '';
+  var names = Object.keys(peopleRecords);
+  for (var i = 0; i < names.length; i++) {
+    var rec = peopleRecords[names[i]];
+    if (rec.team === 'video' && normalizePersonHandle(rec.handle) === key) return names[i];
+  }
+  return '';
+}
+
 function setPersonAliases(name, raw) {
   var seen = {}, list = [];
   String(raw || '').split(',').forEach(function (a) {
@@ -289,7 +325,7 @@ function mergePersonRecords(from, into) {
 
   var merged = Object.assign({
     team: '', roles: [], defaultRole: '', email: '',
-    country: '', aliases: [], active: true, departedOn: null
+    country: '', aliases: [], handle: '', active: true, departedOn: null
   }, recFrom || {}, recInto || {});
 
   var union = function (a, b) {
@@ -312,6 +348,7 @@ function mergePersonRecords(from, into) {
   if (!merged.team && recFrom) merged.team = recFrom.team || '';
   if (!merged.email && recFrom) merged.email = recFrom.email || '';
   if (!merged.country && recFrom) merged.country = recFrom.country || '';
+  if (!merged.handle && recFrom) merged.handle = recFrom.handle || '';
   if (merged.defaultRole && !merged.roles.includes(merged.defaultRole)) merged.roles.push(merged.defaultRole);
 
   peopleRecords[into] = merged;

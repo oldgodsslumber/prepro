@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260921e';
+window.PREPRO_BUILD = '20260922a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,27 +29,27 @@ window.PREPRO_BUILD = '20260921e';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260921e"></script>
+<script type="module" src="./auth.js?v=20260922a"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260921e"></script>
+<script src="./whatsnew.js?v=20260922a"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20260921e"></script>
+<script src="./people.js?v=20260922a"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20260921e"></script>
+<script src="./commitments.js?v=20260922a"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20260921e"></script>
+<script src="./dossier.js?v=20260922a"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20260921e"></script>
+<script src="./prepro-llm.js?v=20260922a"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20260921e"></script>
+<script src="./prepro-ai.js?v=20260922a"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260921e"></script>
+<script src="./xlsx.full.min.js?v=20260922a"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -258,6 +258,7 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 .people-row .pmeta select, .people-row .pmeta input { background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 3px 6px; color: var(--text); font-size: 11px; outline: none; transition: border-color .15s; }
 .people-row .pmeta select:focus, .people-row .pmeta input:focus { border-color: var(--accent); }
 .people-row .pmeta input.palias { flex: 1; min-width: 120px; }
+.people-row .pmeta input.phandle { width: 110px; }
 .people-row .pteam-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .people-row .pmeta-lbl { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .4px; }
 /* Someone the migration could not place, or a record still missing its team. */
@@ -1121,6 +1122,8 @@ textarea.pi-edit { resize: vertical; min-height: 46px; white-space: pre-wrap; }
       </div>
       <a href="ops.html" target="_blank" class="data-mig-btn" title="Ops mode — team workload view">📊 Ops</a>
       <a href="dash.html" target="_blank" class="data-mig-btn" title="Personal dashboard view">📋 Dash</a>
+      <!-- href re-pointed at CEA_BASE on init so the URL lives in one place -->
+      <a href="https://corporateexpress.pegacloud.io/prweb/sso/app/CampaignExecution" id="ceaHomeLink" target="_blank" rel="noopener" class="data-mig-btn" title="CEA landing page (Pega)">🔗 CEA</a>
       <input type="file" id="importFileInput" accept=".json" style="display:none">
       <input type="file" id="excelImportInput" accept=".xlsx,.xls" style="display:none">
     </div>
@@ -3018,7 +3021,7 @@ function renderPeopleSettings(c) {
 
   const hint = document.createElement('div');
   hint.className = 'settings-hint';
-  hint.textContent = 'Everyone belongs to exactly one team — that is what groups them in the roster panel, so nobody shows up twice. Setting a country puts that person on every Holiday matching it, automatically, and re-checks the holidays already on the calendar. “Also known as” catches the alternate spellings that imports arrive with, so a re-import matches the person you already have instead of creating a duplicate. Email auto-fills the To: line when exporting meetings to Outlook. Sunset hides someone from every selection list while keeping their existing assignments (reversible) — give them a last day too, and the workload views stop counting them as available after it. Delete removes them from every roster and unassigns their tasks. Merging moves all roles, rosters, and assignments from one person to another, and records the old name as an alias.';
+  hint.textContent = 'Everyone belongs to exactly one team — that is what groups them in the roster panel, so nobody shows up twice. Setting a country puts that person on every Holiday matching it, automatically, and re-checks the holidays already on the calendar. “Also known as” catches the alternate spellings that imports arrive with, so a re-import matches the person you already have instead of creating a duplicate. Email auto-fills the To: line when exporting meetings to Outlook. Video Team members also get a “Pega handle” box — the username from the export’s Service Provider column — which lets an Excel import auto-assign that person as lead producer. Sunset hides someone from every selection list while keeping their existing assignments (reversible) — give them a last day too, and the workload views stop counting them as available after it. Delete removes them from every roster and unassigns their tasks. Merging moves all roles, rosters, and assignments from one person to another, and records the old name as an alias.';
   c.appendChild(hint);
 
   const refreshAll = () => {
@@ -3117,6 +3120,24 @@ function renderPeopleSettings(c) {
       alias.addEventListener('blur', () => { setPersonAliases(p.name, alias.value); });
       alias.addEventListener('keydown', e => { if (e.key === 'Enter') alias.blur(); });
       meta.appendChild(alias);
+
+      // Pega handle — Video Team only, because the export's "Service Provider"
+      // column only ever names the producer. Mapping it here is what lets an
+      // import assign the lead producer automatically.
+      if (rec.team === 'video') {
+        const handle = document.createElement('input');
+        handle.className = 'phandle';
+        handle.type = 'text';
+        handle.placeholder = 'Pega handle';
+        handle.title = 'This person’s username in the Video Scheduler export’s "Service Provider" column (e.g. "rwalsh"). Paste the full value — any @domain part is stripped. Imports use it to auto-assign the lead producer.';
+        handle.value = rec.handle || '';
+        handle.addEventListener('blur', () => {
+          setPersonHandle(p.name, handle.value);
+          handle.value = personHandle(p.name); // show the normalised form back
+        });
+        handle.addEventListener('keydown', e => { if (e.key === 'Enter') handle.blur(); });
+        meta.appendChild(handle);
+      }
 
       // Last day, offered only once they're sunset — that's the point at which
       // the date exists and the workload views need it. Migration can't know it,
@@ -3632,6 +3653,31 @@ function xlNormalizeDate(raw) {
   return y + '-' + mo.padStart(2, '0') + '-' + d.padStart(2, '0');
 }
 
+// Lead producer for an import row. The Service Provider handle wins when it
+// maps to someone in Settings → People (Video Team) — it is the authoritative
+// assignment column. First/Last Name stays as the fallback for rows whose
+// handle is blank or not mapped yet.
+function producerFromRow(row) {
+  return resolvePersonByHandle(row.serviceProvider) ||
+         resolvePersonName(row.producer) || (row.producer || '').trim();
+}
+// A handle that resolves to nobody is surfaced after the import so the user
+// can add it in settings — silently falling back forever would hide the gap.
+function unmappedHandleOf(row) {
+  const h = normalizePersonHandle(row.serviceProvider);
+  return (h && !resolvePersonByHandle(h)) ? h : '';
+}
+// Auto-assigning a lead is only half the job: the workload views count roster
+// membership, so the producer lands on roster.Producer too. Adds, never
+// removes — on a handoff the old producer stays until a human takes them off,
+// same principle as "a producer move does not reassign tasks".
+function addProducerToRoster(proj, name) {
+  if (!name) return;
+  if (!proj.roster) proj.roster = {};
+  if (!Array.isArray(proj.roster.Producer)) proj.roster.Producer = [];
+  if (!proj.roster.Producer.includes(name)) proj.roster.Producer.push(name);
+}
+
 // Build a full project object from a reviewed/edited import row (does NOT push to state).
 function buildProjectFromRow(row) {
   const ticketId = (row.ticketId || '').trim();
@@ -3651,6 +3697,9 @@ function buildProjectFromRow(row) {
   // import mints a second person and someone has to merge them back by hand.
   const requester = resolvePersonName(row.requester) || (row.requester || '').trim();
   if (requester) roster.Stakeholder = [requester];
+  // Service Provider handle wins over First/Last Name; see producerFromRow.
+  const producer = producerFromRow(row);
+  if (producer) roster.Producer = [producer];
 
   const now = new Date();
   const sysType = NOTE_TYPES.find(t => t.key === 'system') || NOTE_TYPES[0];
@@ -3665,7 +3714,7 @@ function buildProjectFromRow(row) {
   return {
     id: genId(), name, parentId: null, tasks, roster, dueDate: null, notes,
     ticketId: ticketId || null, ticketLabel: label || null, ticketUrl: null,
-    leadProducer: resolvePersonName(row.producer) || (row.producer || '').trim() || null,
+    leadProducer: producer || null,
     function: null, videoType: (row.videoType || '').trim() || null,
     targetAudience: (row.targetAudience || '').trim() || null, budget: null,
     synopsis: (row.synopsis || '').trim() || null,
@@ -3697,7 +3746,8 @@ const XL_COLUMN_MAP = {
   'casestatus':                'caseStatus',
   'createdatetime':            'createDate',
   'firstname':                 'firstName',
-  'lastname':                  'lastName'
+  'lastname':                  'lastName',
+  'serviceprovider':           'serviceProvider'
 };
 function xlNormHeader(h) { return String(h == null ? '' : h).toLowerCase().replace(/[^a-z0-9]/g, ''); }
 
@@ -3706,6 +3756,7 @@ const XL_GRID_COLS = [
   { key: 'ticketId',            label: 'Case ID',     type: 'text' },
   { key: 'caseStatus',          label: 'Status',      type: 'status' },
   { key: 'producer',            label: 'Lead Producer', type: 'text' },
+  { key: 'serviceProvider',     label: 'Service Provider', type: 'text' },
   { key: 'label',               label: 'Label',       type: 'text' },
   { key: 'dueDateRaw',          label: 'Due Date',    type: 'date' },
   { key: 'videoType',           label: 'Type',        type: 'text' },
@@ -3778,7 +3829,7 @@ function handleExcelImport(file) {
       // treating only the backfill as a change meant a pure producer move was
       // dropped into `skipped`, and the stale name then outlived the import on
       // every page that reads leadProducer.
-      const incomingProd  = resolvePersonName(o.producer) || (o.producer || '').trim();
+      const incomingProd  = producerFromRow(o);
       const oldProd       = (existing.leadProducer || '').trim();
       const producerFill  = !!incomingProd && !oldProd;
       const producerMoved = !!incomingProd && !!oldProd && incomingProd !== oldProd;
@@ -3862,12 +3913,15 @@ function ticketLabelOf(proj) {
 function applyTicketUpdate(row) {
   const proj = getProject(row._existingId);
   if (!proj) return false;
-  const prod      = resolvePersonName(row.producer) || (row.producer || '').trim();
+  const prod      = producerFromRow(row);
   const newStatus = (row.caseStatus || '').trim();
   // Backfill an empty lead, and apply a genuine handoff — but only one the user
   // saw flagged and left checked in the review grid. A drag-set lead is never
   // silently clobbered by an import the user didn't get to look at.
   if (prod && (!((proj.leadProducer || '').trim()) || row._producerMoved)) proj.leadProducer = prod;
+  // Whoever holds the lead after this update also belongs on the roster, so
+  // the workload views count them. Add-only; the old lead keeps their spot.
+  addProducerToRoster(proj, (proj.leadProducer || '').trim());
   if (newStatus) proj.caseStatus = newStatus;
   // Rename when the incoming Label differs from the last one Excel gave us.
   const newLabel = (row.label || '').trim();
@@ -4099,14 +4153,19 @@ function confirmExcelImport() {
   if (!chosen.length) { closeExcelReview(); return; }
   let added = 0, updated = 0, closed = 0;
   const newPeople = [];
+  const unmappedHandles = new Set();
   chosen.forEach(row => {
     // Give imported names a record up front, so a fresh requester arrives with a
     // team instead of landing in the "needs a home" pile. Names that resolve to
-    // someone we already have (including via an alias) are left alone.
+    // someone we already have (including via an alias) are left alone. When the
+    // Service Provider handle already resolved the producer, the First Name is
+    // redundant — minting a record from it would duplicate that person.
     newPeople.push(...[
       ensureImportedPerson(row.requester, 'stake'),
-      ensureImportedPerson(row.producer,  'video')
+      resolvePersonByHandle(row.serviceProvider) ? '' : ensureImportedPerson(row.producer, 'video')
     ].filter(Boolean));
+    const uh = unmappedHandleOf(row);
+    if (uh) unmappedHandles.add(uh);
 
     if (row._missing && row._existingId) {
       if (applyTicketClose(row)) closed++;
@@ -4135,6 +4194,10 @@ function confirmExcelImport() {
         (uniqueNew.length
           ? '\n\nNew people added: ' + uniqueNew.join(', ') +
             '\n\nIf any of them are someone you already have under a different spelling, merge them in Manage People — that records the alias so the next import matches.'
+          : '') +
+        (unmappedHandles.size
+          ? '\n\nUnrecognized Service Provider handles: ' + [...unmappedHandles].sort().join(', ') +
+            '\n\nAdd these in Settings → People (Pega handle box on Video Team members) so the next import assigns the lead producer automatically.'
           : ''));
 }
 
@@ -4516,6 +4579,7 @@ function renderSidebar() {
   });
 
   updateFilterCount();
+  updateCeaRailIcon();
 }
 
 function renderStatusSection(status, sectionId, treeId, countId) {
@@ -9261,6 +9325,21 @@ function openCEAVideo(proj) {
   window.open(ceaVideoUrl(proj), '_blank');
 }
 
+// The rail tab's icon doubles as the "does this project have a real ticket?"
+// signal: 🎫 when the active project carries a Case ID, the generic 🔗 when it
+// doesn't (the click then lands on the CEA landing page). The rail is static
+// HTML that never re-renders, so the icon is poked directly — from
+// renderSidebar (project switches) and renderProjectInfo (Case ID edits).
+function updateCeaRailIcon() {
+  const tab = document.querySelector('.tools-rail-tab[data-tab="cea"]');
+  if (!tab) return;
+  const icon = tab.querySelector('.tr-icon');
+  const proj = getProject(activeProjectId);
+  const tid  = proj && (proj.ticketId || '').trim();
+  if (icon) icon.textContent = tid ? '🎫' : '🔗';
+  tab.title = tid ? 'Open Case ' + tid + ' in CEA' : 'Open the CEA landing page';
+}
+
 // First tab: the key ticket data (top) with the project's notes feed (bottom).
 function renderProjectInfo() {
   const content = document.getElementById('exportContent');
@@ -9351,6 +9430,7 @@ function renderProjectInfo() {
   renderNotesTab(wrap);
 
   content.appendChild(wrap);
+  updateCeaRailIcon();
 }
 
 // ── BRIEF ──
@@ -11605,6 +11685,9 @@ function setupInitListeners() {
     if (!document.getElementById('ctxMenu').contains(e.target)) closeContextMenu();
     if (!document.getElementById('typeSwitcher').contains(e.target)) closeTypeSwitcher();
   });
+
+  // The header CEA button and the deep-link builder share one URL constant.
+  { const cl = document.getElementById('ceaHomeLink'); if (cl) cl.href = CEA_BASE; }
 
   // ── Tools rail (vertical tabs) ──
   const railTabs = document.querySelectorAll('.tools-rail-tab');
