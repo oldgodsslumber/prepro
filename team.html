@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260922b';
+window.PREPRO_BUILD = '20260928a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,27 +29,27 @@ window.PREPRO_BUILD = '20260922b';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260922b"></script>
+<script type="module" src="./auth.js?v=20260928a"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260922b"></script>
+<script src="./whatsnew.js?v=20260928a"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20260922b"></script>
+<script src="./people.js?v=20260928a"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20260922b"></script>
+<script src="./commitments.js?v=20260928a"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20260922b"></script>
+<script src="./dossier.js?v=20260928a"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20260922b"></script>
+<script src="./prepro-llm.js?v=20260928a"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20260922b"></script>
+<script src="./prepro-ai.js?v=20260928a"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260922b"></script>
+<script src="./xlsx.full.min.js?v=20260928a"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -506,6 +506,8 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 .tl-task-bar { position: absolute; border-radius: 3px; color: #fff; display: flex; align-items: center; overflow: visible; cursor: grab; user-select: none; }
 .tl-task-bar:active { cursor: grabbing; }
 .tl-task-bar.dragging { opacity: .6; z-index: 50 !important; }
+.tl-task-bar.copying { opacity: .8; outline: 2px dashed var(--accent); outline-offset: 1px; cursor: copy; }
+.tl-task-bar.copying::after { content: '+'; position: absolute; top: -9px; right: -7px; width: 14px; height: 14px; line-height: 13px; text-align: center; font-size: 11px; font-weight: 700; color: #fff; background: var(--accent); border-radius: 50%; pointer-events: none; }
 .tl-task-bar.drag-accepting { outline: 2px solid var(--accent); outline-offset: 1px; }
 .tl-pto-bar { cursor: default; background: repeating-linear-gradient(45deg, #6e6e7b 0, #6e6e7b 6px, #56565f 6px, #56565f 12px); border: 1px solid #9a9aa6; }
 .tl-pto-bar .tl-bar-name { font-weight: 700; opacity: 1; }
@@ -3866,7 +3868,7 @@ function handleExcelImport(file) {
       const oldLabel      = ticketLabelOf(existing);
       const labelChanged  = !!newLabel && newLabel.toLowerCase() !== oldLabel.toLowerCase();
       // The lead we already hold is right, but the roster doesn't count them yet
-      // (imports before build 20260922b never touched the roster). Without this
+      // (imports before build 20260928a never touched the roster). Without this
       // an otherwise-unchanged row is skipped and the workload views keep
       // undercounting the lead forever; flagging it once converges the backlog.
       const rosterFill    = !!incomingProd && incomingProd === oldProd &&
@@ -6089,7 +6091,8 @@ function buildGanttBar(entry, row) {
   // the project-level row spell out who is on it.
   const label = entry.person ? entry.label : entry.projectLabel;
   bar.title = entry.projectName + ' — ' + entry.projectLabel
-            + (entry.endDate !== entry.date ? '\n' + entry.date + ' → ' + entry.endDate : '\n' + entry.date);
+            + (entry.endDate !== entry.date ? '\n' + entry.date + ' → ' + entry.endDate : '\n' + entry.date)
+            + (entry.isPTO || entry.isHoliday ? '' : '\nDrag to move · Alt+drag to copy');
 
   const inner = document.createElement('div');
   inner.className = 'tl-bar-inner';
@@ -6173,6 +6176,9 @@ function startTlDrag(e, entry, bar, row) {
     if (!moved && Math.abs(ev.clientX - startX) < 4 && Math.abs(ev.clientY - startY) < 4) return;
     moved = true;
     bar.classList.add('dragging');
+    // Alt = copy. Sampled live off the mouse event so pressing or releasing
+    // Alt mid-drag flips the visual (and the outcome) immediately.
+    bar.classList.toggle('copying', !!ev.altKey);
 
     const colShift = colShiftFrom(ev);
     const origStart = nearestCol(entry.date, true);
@@ -6191,7 +6197,7 @@ function startTlDrag(e, entry, bar, row) {
   function onUp(ev) {
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
-    bar.classList.remove('dragging');
+    bar.classList.remove('dragging', 'copying');
     if (lastHighlight) lastHighlight.classList.remove('drop-target');
 
     if (!moved) {                                   // a click, not a drag
@@ -6201,7 +6207,31 @@ function startTlDrag(e, entry, bar, row) {
 
     const found = findTask(entry.projectId, entry.taskId);
     if (!found) return;
-    const { task } = found;
+    const { proj, task } = found;
+
+    // Alt+drag = copy: the original stays exactly where it was and a clone
+    // lands at the drop position. Full-task copy even from an attendee bar —
+    // duplicating a meeting brings its attendees along, same as the calendar's
+    // alt+drag copy. A drop on another person-row assigns the COPY's primary
+    // person; same-project restriction matches the move.
+    if (ev.altKey) {
+      const colShift = colShiftFrom(ev);
+      const copy = Object.assign({}, task, { id: genId() });
+      if (colShift !== 0) {
+        copy.date = shiftByCols(task.date, colShift);
+        if (task.endDate && task.endDate !== task.date) {
+          const durMs = new Date(task.endDate + 'T00:00:00') - new Date(task.date + 'T00:00:00');
+          const newEndD = new Date(new Date(copy.date + 'T00:00:00').getTime() + durMs);
+          copy.endDate = fmtDate(newEndD.getFullYear(), newEndD.getMonth() + 1, newEndD.getDate());
+        }
+      }
+      if (copy.attendees) copy.attendees = copy.attendees.map(a => Object.assign({}, a, { id: genId() }));
+      const target = legalTarget(ev.clientY);
+      if (target) copy.person = target.dataset.person || null;
+      proj.tasks.push(copy);
+      ganttCommit();
+      return;
+    }
 
     const colShift = colShiftFrom(ev);
     if (colShift !== 0) {
