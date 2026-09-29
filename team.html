@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260928a';
+window.PREPRO_BUILD = '20260929a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,27 +29,27 @@ window.PREPRO_BUILD = '20260928a';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20260928a"></script>
+<script type="module" src="./auth.js?v=20260929a"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260928a"></script>
+<script src="./whatsnew.js?v=20260929a"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20260928a"></script>
+<script src="./people.js?v=20260929a"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20260928a"></script>
+<script src="./commitments.js?v=20260929a"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20260928a"></script>
+<script src="./dossier.js?v=20260929a"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20260928a"></script>
+<script src="./prepro-llm.js?v=20260929a"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20260928a"></script>
+<script src="./prepro-ai.js?v=20260929a"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20260928a"></script>
+<script src="./xlsx.full.min.js?v=20260929a"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -3868,7 +3868,7 @@ function handleExcelImport(file) {
       const oldLabel      = ticketLabelOf(existing);
       const labelChanged  = !!newLabel && newLabel.toLowerCase() !== oldLabel.toLowerCase();
       // The lead we already hold is right, but the roster doesn't count them yet
-      // (imports before build 20260928a never touched the roster). Without this
+      // (imports before build 20260929a never touched the roster). Without this
       // an otherwise-unchanged row is skipped and the workload views keep
       // undercounting the lead forever; flagging it once converges the backlog.
       const rosterFill    = !!incomingProd && incomingProd === oldProd &&
@@ -6092,7 +6092,7 @@ function buildGanttBar(entry, row) {
   const label = entry.person ? entry.label : entry.projectLabel;
   bar.title = entry.projectName + ' — ' + entry.projectLabel
             + (entry.endDate !== entry.date ? '\n' + entry.date + ' → ' + entry.endDate : '\n' + entry.date)
-            + (entry.isPTO || entry.isHoliday ? '' : '\nDrag to move · Alt+drag to copy');
+            + (entry.isPTO || entry.isHoliday ? '' : '\nDrag to move · Alt+drag to copy (drop on any row, any project)');
 
   const inner = document.createElement('div');
   inner.className = 'tl-bar-inner';
@@ -6168,6 +6168,17 @@ function startTlDrag(e, entry, bar, row) {
     if (r.dataset.person === (entry.person || '')) return null;
     return r;
   };
+  // Copy destinations are wider than move destinations: a copy may land on any
+  // person-row in ANY project group — the whole point of copying from the
+  // folder view is seeding the same work across sibling projects. Only the
+  // bar's own row is excluded, since a copy dropped there is just the plain
+  // shifted-in-place case (no reassign, no project change).
+  const copyTarget = y => {
+    const r = targetRowAt(y);
+    if (!r) return null;
+    if (r.dataset.projectId === entry.projectId && r.dataset.person === (entry.person || '')) return null;
+    return r;
+  };
   const colShiftFrom = ev => Math.round((ev.clientX - startX + (sc.scrollLeft - startScrollLeft)) / tlColW);
 
   function onMove(ev) {
@@ -6190,7 +6201,7 @@ function startTlDrag(e, entry, bar, row) {
     bar.style.width = Math.max(TL_BAR_H, (newEnd - newStart + 1) * tlColW - 4) + 'px';
 
     if (lastHighlight) lastHighlight.classList.remove('drop-target');
-    lastHighlight = legalTarget(ev.clientY);
+    lastHighlight = ev.altKey ? copyTarget(ev.clientY) : legalTarget(ev.clientY);
     if (lastHighlight) lastHighlight.classList.add('drop-target');
   }
 
@@ -6213,7 +6224,8 @@ function startTlDrag(e, entry, bar, row) {
     // lands at the drop position. Full-task copy even from an attendee bar —
     // duplicating a meeting brings its attendees along, same as the calendar's
     // alt+drag copy. A drop on another person-row assigns the COPY's primary
-    // person; same-project restriction matches the move.
+    // person — and unlike a move, the row may belong to a DIFFERENT project:
+    // the copy then lands in that project's task list.
     if (ev.altKey) {
       const colShift = colShiftFrom(ev);
       const copy = Object.assign({}, task, { id: genId() });
@@ -6226,9 +6238,10 @@ function startTlDrag(e, entry, bar, row) {
         }
       }
       if (copy.attendees) copy.attendees = copy.attendees.map(a => Object.assign({}, a, { id: genId() }));
-      const target = legalTarget(ev.clientY);
+      const target = copyTarget(ev.clientY);
+      const destProj = (target && getProject(target.dataset.projectId)) || proj;
       if (target) copy.person = target.dataset.person || null;
-      proj.tasks.push(copy);
+      destProj.tasks.push(copy);
       ganttCommit();
       return;
     }
