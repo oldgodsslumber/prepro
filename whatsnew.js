@@ -17,6 +17,22 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-10-13a',
+    title: 'Everything you are on, on one calendar',
+    dateLabel: 'Oct 13, 2026',
+    groups: [
+      {
+        area: 'Dash · Calendar panel',
+        items: [
+          { tag: 'new', text: 'A Calendar panel puts every project a person is on against one set of dates. Team shows one project at a time; this is the same work turned around, so you can see what is stacked on top of what.' },
+          { tag: 'new', text: 'Timeline gives each project its own row with bars across six weeks, so overlaps are easy to spot. Month is a normal month grid. Switch between them at the top of the panel, and it remembers your choice.' },
+          { tag: 'new', text: 'Each project keeps its own colour. Key dates show as an outlined ◆, time off gets its own row, and finished tasks are faded. Hover anything for the dates and effort, or click it to open that project in Team.' },
+          { tag: 'new', text: 'The panel’s ‹ › buttons only page the calendar, so looking ahead to next month leaves Today and Coming Up alone. Changing the date at the top of the page brings the calendar back to that date.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-09-08c',
     title: 'Invites bring the right people with them',
     dateLabel: 'Sep 8, 2026',

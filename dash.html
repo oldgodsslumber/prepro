@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20260922b';
+window.PREPRO_BUILD = '20261013a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,25 +26,25 @@ window.PREPRO_BUILD = '20260922b';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20260922b"></script>
+<script type="module" src="./auth.js?v=20261013a"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20260922b"></script>
+<script src="./whatsnew.js?v=20261013a"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and ops.html. -->
-<script src="./people.js?v=20260922b"></script>
+<script src="./people.js?v=20261013a"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20260922b"></script>
+<script src="./commitments.js?v=20261013a"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20260922b"></script>
+<script src="./dossier.js?v=20261013a"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20260922b"></script>
+<script src="./prepro-llm.js?v=20261013a"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20260922b"></script>
+<script src="./prepro-ai.js?v=20261013a"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -367,6 +367,65 @@ a.today-card-project:hover { color: var(--accent); }
 .gantt-bar.clipped-left { border-top-left-radius: 0; border-bottom-left-radius: 0; }
 .gantt-bar.clipped-right { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .gantt-empty { padding: 24px; text-align: center; color: var(--dim); font-style: italic; font-size: 12px; }
+
+/* ── CALENDAR PANEL (all of a person's projects) ── */
+.pc-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.pc-seg { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.pc-seg-btn { font-size: 11px; font-weight: 600; padding: 4px 12px; color: var(--dim); background: var(--card); border-right: 1px solid var(--border); transition: color .15s, background .15s; }
+.pc-seg-btn:last-child { border-right: none; }
+.pc-seg-btn:hover { color: var(--text); }
+.pc-seg-btn.on { background: rgba(108,99,255,.18); color: var(--accent); }
+.pc-nav { display: flex; align-items: center; gap: 6px; }
+.pc-nav .btn-today:disabled { opacity: .45; cursor: default; }
+.pc-range { font-size: 12px; font-weight: 600; color: var(--text); }
+.pc-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 8px; font-size: 10px; color: var(--dim); }
+.pc-legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.pc-swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.pc-swatch.ms { border-radius: 1px; transform: rotate(45deg) scale(.8); }
+
+.pc-tl-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+.pc-tl { min-width: calc(180px + var(--pc-days) * 18px); }
+.pc-tl-row { display: grid; grid-template-columns: 180px 1fr; }
+.pc-tl-row + .pc-tl-row { border-top: 1px solid var(--border); }
+.pc-tl-head { background: var(--bg); }
+.pc-tl-label { position: sticky; left: 0; z-index: 2; background: var(--card); border-right: 1px solid var(--border); padding: 6px 10px; display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 11px; }
+.pc-tl-head .pc-tl-label { background: var(--bg); }
+.pc-tl-name { font-weight: 600; color: var(--text); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+a.pc-tl-name:hover { color: var(--accent); }
+.pc-tl-track { position: relative; display: grid; grid-template-columns: repeat(var(--pc-days), 1fr); }
+.pc-tl-months { display: grid; grid-template-columns: repeat(var(--pc-days), 1fr); }
+.pc-tl-month { font-size: 10px; font-weight: 700; color: var(--text); padding: 4px 6px 0; border-left: 1px solid var(--border); white-space: nowrap; overflow: hidden; }
+.pc-tl-month:first-child { border-left: none; }
+.pc-tl-cell { border-left: 1px solid transparent; }
+.pc-tl-cell.wk { border-left-color: var(--border); }
+.pc-tl-cell.we { background: rgba(128,128,160,.08); }
+.pc-tl-cell.today { background: rgba(108,99,255,.14); }
+.pc-tl-dh { font-size: 9px; text-align: center; color: var(--dim); padding: 2px 0 4px; line-height: 1.25; }
+.pc-tl-dh b { display: block; font-size: 10px; color: var(--text); font-weight: 600; }
+.pc-tl-dh.today, .pc-tl-dh.today b { color: var(--accent); }
+.pc-bar-el { position: absolute; height: 20px; padding: 0 6px; border-radius: 4px; font-size: 10px; font-weight: 600; color: #fff; display: flex; align-items: center; gap: 4px; overflow: hidden; white-space: nowrap; text-decoration: none; box-shadow: 0 1px 2px rgba(0,0,0,.3); z-index: 1; }
+.pc-bar-el span { overflow: hidden; text-overflow: ellipsis; }
+.pc-bar-el:hover { filter: brightness(1.12); z-index: 3; }
+.pc-bar-el.ms { box-shadow: none; padding: 0 4px; justify-content: center; }
+.pc-bar-el.clip-l { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.pc-bar-el.clip-r { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.pc-done { opacity: .45; }
+
+.pc-mo { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--card); display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) repeat(2, minmax(0, .65fr)); }
+.pc-mo-dow { font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); background: var(--bg); padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.pc-mo-cell { min-height: 92px; padding: 4px; border-top: 1px solid var(--border); border-left: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pc-mo-cell:nth-child(7n+1) { border-left: none; }
+.pc-mo-cell.we { background: rgba(128,128,160,.06); }
+.pc-mo-cell.out { opacity: .4; }
+.pc-mo-cell.today { background: rgba(108,99,255,.1); }
+.pc-mo-num { font-size: 10px; font-weight: 700; color: var(--dim); padding: 1px 3px; }
+.pc-mo-cell.today .pc-mo-num { color: var(--accent); }
+.pc-chip { display: block; font-size: 10px; font-weight: 600; color: #fff; padding: 2px 5px; border-radius: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none; }
+.pc-chip:hover { filter: brightness(1.12); }
+.pc-chip.cont-l { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.pc-chip.cont-r { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.pc-chip.ms, .pc-bar-el.ms { background: transparent !important; border: 1.5px solid currentColor; }
+.pc-more { font-size: 9px; color: var(--dim); padding: 0 4px; cursor: default; }
 
 /* ── MY PROJECTS PANEL ── */
 .mp-list { display: flex; flex-direction: column; gap: 8px; }
@@ -1972,6 +2031,8 @@ const DASH_PANELS = [
   { id: 'today',      label: 'Today',            render: renderTodaySection },
   { id: 'headsup',    label: 'Heads Up',         render: renderHeadsUpSection },
   { id: 'comingup',   label: 'Coming Up',        render: renderComingUpSection },
+  // Visible by default for the same reason as Open Loops below.
+  { id: 'calendar',   label: 'Calendar',         render: renderCalendarPanel },
   { id: 'myProjects', label: 'My Projects',      render: renderMyProjectsPanel },
   { id: 'overdue',    label: 'Needs Attention',  render: renderOverduePanel },
   // Visible by default: it is the panel that answers the question the whole
@@ -3603,6 +3664,405 @@ function taskIsForSelected(t) {
   if ((t.attendees || []).some(a => a.person === selectedPerson)) return true;
   if (isTimeOffTask(t) && personOnTimeOff(t, selectedPerson)) return true;
   return false;
+}
+
+// ── PANEL: CALENDAR (every project this person is on, one calendar) ──
+// team.html's calendar is one project at a time. This is the same work turned
+// person-first, so everything somebody is on reads against one date axis.
+// Two layouts over the same data: Timeline (a row per project, bars across the
+// dates — what overlaps is obvious) and Month (a classic grid, chips per day).
+// Read-only; clicking anything opens that project in Team.
+//
+// Paging is local to the panel. Paging through selectedDate would also move
+// Today / Heads Up / Coming Up, so a quick look at next month would quietly
+// change what the rest of the dashboard says. The window follows the header
+// date instead, and ‹ › offset from it; changing the header date resets that.
+const PC_MODE_KEY = 'dash_calendar_mode';
+// Kept clear of the milestone red and the time-off amber the rest of the
+// dashboard uses, so a project colour never reads as either.
+const PC_PALETTE = ['#4a90d9', '#4cba6a', '#9b6bd6', '#2bb5b0', '#e06ca0', '#7a8cff',
+                    '#8fb33a', '#e0844a', '#3fa37a', '#b87ad9', '#5bb8e8', '#d0698a'];
+const PC_OFF_COLOR = '#c8923a';
+const PC_NONWORK_COLOR = '#6a6a85';
+const PC_TL_WEEKS = 6;       // timeline window
+const PC_TL_LEAD_WEEKS = 1;  // weeks shown before the anchor week, for context
+const PC_TL_STEP_WEEKS = 4;  // one ‹ › step; less than the window, so pages overlap
+const pcState = { mode: 'timeline', offset: 0, anchor: null };
+try {
+  const m = localStorage.getItem(PC_MODE_KEY);
+  if (m === 'timeline' || m === 'month') pcState.mode = m;
+} catch (_) {}
+
+function pcDayDiff(a, b) {
+  return Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 864e5);
+}
+function pcFmtMD(d) {
+  const x = new Date(d + 'T00:00:00');
+  return MONTH_ABBR[x.getMonth()] + ' ' + x.getDate();
+}
+
+// Colour per project, by name order across ALL of this person's active
+// projects rather than just the ones in view, so a project keeps its colour
+// while you page around.
+function pcProjectColors() {
+  const map = new Map();
+  (state.projects || [])
+    .filter(p => isActiveProject(p) && !isNonWorkProject(p) && (p.tasks || []).some(taskIsForSelected))
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    .forEach((p, i) => map.set(p.id, PC_PALETTE[i % PC_PALETTE.length]));
+  return map;
+}
+
+// Every task of the selected person overlapping [winStart, winEnd]. Same
+// filters as Coming Up, so the two panels can never disagree about a day.
+function pcCollect(winStart, winEnd, colors) {
+  const items = [];
+  (state.projects || []).filter(isActiveProject).forEach(proj => {
+    const nonWork = isNonWorkProject(proj);
+    (proj.tasks || []).forEach(task => {
+      const start = task.date;
+      if (!start || !taskIsForSelected(task)) return;
+      const end = task.endDate && task.endDate >= start ? task.endDate : start;
+      if (end < winStart || start > winEnd) return;
+      const off = isTimeOffTask(task);
+      items.push({
+        task, proj, start, end, off,
+        ms: !off && !!task.isDueDate,
+        done: isTaskDone(task.id),
+        // Time off is one row regardless of which bucket project holds it.
+        group: off ? '__off' : proj.id,
+        color: off ? PC_OFF_COLOR : nonWork ? PC_NONWORK_COLOR : (colors.get(proj.id) || PC_NONWORK_COLOR),
+        rank: off ? 2 : nonWork ? 1 : 0
+      });
+    });
+  });
+  return items;
+}
+
+function pcTooltip(it) {
+  const name = taskDisplayName(it.task);
+  const range = it.start === it.end ? fmtDateShort(it.start) : fmtDateShort(it.start) + ' – ' + fmtDateShort(it.end);
+  const loe = !it.task.isDueDate && it.task.loe ? '\nEffort: ' + it.task.loe : '';
+  return name + ' — ' + it.proj.name + '\n' + range + loe + (it.done ? '\n✓ Done' : '');
+}
+function pcProjectHref(proj) { return 'team.html#project=' + encodeURIComponent(proj.id); }
+
+function pcStyleItem(el, it) {
+  if (it.ms) el.style.color = it.color;
+  else el.style.background = it.color;
+  if (it.ms) el.classList.add('ms');
+  if (it.done) el.classList.add('pc-done');
+  el.title = pcTooltip(it);
+  el.href = pcProjectHref(it.proj);
+  el.target = '_blank';
+}
+
+// ── Timeline: a row per project, overlapping tasks stacked into lanes ──
+function pcRenderTimeline(body, colors) {
+  const winStart = addDays(getWeekStart(selectedDate), (pcState.offset * PC_TL_STEP_WEEKS - PC_TL_LEAD_WEEKS) * 7);
+  const n = PC_TL_WEEKS * 7;
+  const days = [];
+  for (let i = 0; i < n; i++) days.push(addDays(winStart, i));
+  const winEnd = days[n - 1];
+  const today = todayStr();
+  const items = pcCollect(winStart, winEnd, colors);
+  const label = pcFmtMD(winStart) + ' – ' + pcFmtMD(winEnd) + ', ' + winEnd.slice(0, 4);
+
+  if (!items.length) {
+    const e = document.createElement('div');
+    e.className = 'gantt-empty';
+    e.textContent = 'Nothing scheduled between ' + pcFmtMD(winStart) + ' and ' + pcFmtMD(winEnd) + '.';
+    body.appendChild(e);
+    return { label, items };
+  }
+
+  // Group into rows: real projects by first date in view, then admin-type
+  // buckets, then time off at the bottom.
+  const groups = new Map();
+  items.forEach(it => {
+    if (!groups.has(it.group)) groups.set(it.group, { key: it.group, proj: it.proj, color: it.color, rank: it.rank, first: it.start, items: [] });
+    const g = groups.get(it.group);
+    g.items.push(it);
+    if (it.start < g.first) g.first = it.start;
+  });
+  const rows = [...groups.values()].sort((a, b) =>
+    a.rank - b.rank || a.first.localeCompare(b.first) || (a.proj.name || '').localeCompare(b.proj.name || ''));
+
+  const scroll = document.createElement('div');
+  scroll.className = 'pc-tl-scroll';
+  const tl = document.createElement('div');
+  tl.className = 'pc-tl';
+  tl.style.setProperty('--pc-days', n);
+
+  const cellClass = (d, i) => 'pc-tl-cell'
+    + (i > 0 && new Date(d + 'T00:00:00').getDay() === 1 ? ' wk' : '')
+    + (isWeekend(d) ? ' we' : '')
+    + (d === today ? ' today' : '');
+
+  // Header: month band over day numbers.
+  const head = document.createElement('div');
+  head.className = 'pc-tl-row pc-tl-head';
+  head.appendChild(Object.assign(document.createElement('div'), { className: 'pc-tl-label' }));
+  const headRight = document.createElement('div');
+  const months = document.createElement('div');
+  months.className = 'pc-tl-months';
+  let segStart = 0;
+  for (let i = 1; i <= n; i++) {
+    if (i < n && days[i].slice(0, 7) === days[segStart].slice(0, 7)) continue;
+    const m = document.createElement('div');
+    m.className = 'pc-tl-month';
+    m.style.gridColumn = (segStart + 1) + ' / span ' + (i - segStart);
+    const md = new Date(days[segStart] + 'T00:00:00');
+    m.textContent = MONTH_ABBR[md.getMonth()] + ' ' + md.getFullYear();
+    months.appendChild(m);
+    segStart = i;
+  }
+  headRight.appendChild(months);
+  const dayRow = document.createElement('div');
+  dayRow.className = 'pc-tl-track';
+  days.forEach((d, i) => {
+    const c = document.createElement('div');
+    const dt = new Date(d + 'T00:00:00');
+    c.className = cellClass(d, i) + ' pc-tl-dh' + (d === today ? ' today' : '');
+    c.innerHTML = DOW_SHORT[dt.getDay()].charAt(0) + '<b>' + dt.getDate() + '</b>';
+    dayRow.appendChild(c);
+  });
+  headRight.appendChild(dayRow);
+  head.appendChild(headRight);
+  tl.appendChild(head);
+
+  const LANE_H = 24;
+  rows.forEach(g => {
+    // Greedy lane packing so overlapping tasks in one project stack, not hide.
+    const placed = g.items.map(it => ({
+      it,
+      s: Math.max(0, pcDayDiff(winStart, it.start)),
+      e: Math.min(n - 1, pcDayDiff(winStart, it.end))
+    })).sort((a, b) => a.s - b.s || (b.e - b.s) - (a.e - a.s));
+    const laneEnds = [];
+    placed.forEach(p => {
+      let lane = laneEnds.findIndex(end => end < p.s);
+      if (lane < 0) { lane = laneEnds.length; laneEnds.push(p.e); } else laneEnds[lane] = p.e;
+      p.lane = lane;
+    });
+
+    const row = document.createElement('div');
+    row.className = 'pc-tl-row';
+    const lab = document.createElement('div');
+    lab.className = 'pc-tl-label';
+    const sw = document.createElement('span');
+    sw.className = 'pc-swatch';
+    sw.style.background = g.color;
+    lab.appendChild(sw);
+    let name;
+    if (g.key === '__off') {
+      name = document.createElement('span');
+      name.textContent = 'Time off';
+    } else {
+      name = document.createElement('a');
+      name.href = pcProjectHref(g.proj);
+      name.target = '_blank';
+      name.textContent = g.proj.name;
+      name.title = g.proj.name;
+    }
+    name.className = 'pc-tl-name';
+    lab.appendChild(name);
+    row.appendChild(lab);
+
+    const track = document.createElement('div');
+    track.className = 'pc-tl-track';
+    track.style.minHeight = (laneEnds.length * LANE_H + 6) + 'px';
+    days.forEach((d, i) => {
+      const c = document.createElement('div');
+      c.className = cellClass(d, i);
+      track.appendChild(c);
+    });
+    placed.forEach(({ it, s, e, lane }) => {
+      const bar = document.createElement('a');
+      bar.className = 'pc-bar-el'
+        + (it.start < winStart ? ' clip-l' : '')
+        + (it.end > winEnd ? ' clip-r' : '');
+      bar.style.left = `calc(${(s / n) * 100}% + 1px)`;
+      bar.style.width = `calc(${((e - s + 1) / n) * 100}% - 2px)`;
+      bar.style.top = (4 + lane * LANE_H) + 'px';
+      const txt = document.createElement('span');
+      // A one-day key date is a single ~20px column: the diamond is all that fits.
+      txt.textContent = it.ms ? (e === s ? '◆' : '◆ ' + taskDisplayName(it.task)) : taskDisplayName(it.task);
+      bar.appendChild(txt);
+      pcStyleItem(bar, it);
+      track.appendChild(bar);
+    });
+    row.appendChild(track);
+    tl.appendChild(row);
+  });
+
+  scroll.appendChild(tl);
+  body.appendChild(scroll);
+  return { label, items };
+}
+
+// ── Month: classic Mon–Sun grid, a chip per task per day ──
+const PC_MO_MAX_CHIPS = 4;
+function pcRenderMonth(body, colors) {
+  const base = new Date(selectedDate + 'T00:00:00');
+  base.setDate(1);
+  base.setMonth(base.getMonth() + pcState.offset);
+  const y = base.getFullYear(), m = base.getMonth();
+  const monthStart = fmtDate(y, m + 1, 1);
+  const monthEnd = fmtDate(y, m + 1, new Date(y, m + 1, 0).getDate());
+  const gridStart = getWeekStart(monthStart);
+  const gridEnd = addDays(getWeekStart(monthEnd), 6);
+  const today = todayStr();
+  const items = pcCollect(gridStart, gridEnd, colors);
+  const label = base.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+  // Stable order inside a day: time off, key dates, then projects in the
+  // legend's order, longest first so continuing bars tend to keep their slot.
+  const projOrder = new Map([...colors.keys()].map((id, i) => [id, i]));
+  const sorted = items.slice().sort((a, b) =>
+    (b.off - a.off) || (b.ms - a.ms)
+    || ((projOrder.has(a.proj.id) ? projOrder.get(a.proj.id) : 999) - (projOrder.has(b.proj.id) ? projOrder.get(b.proj.id) : 999))
+    || a.start.localeCompare(b.start) || pcDayDiff(b.start, b.end) - pcDayDiff(a.start, a.end));
+
+  const grid = document.createElement('div');
+  grid.className = 'pc-mo';
+  ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(d => {
+    const h = document.createElement('div');
+    h.className = 'pc-mo-dow';
+    h.textContent = d;
+    grid.appendChild(h);
+  });
+  for (let d = gridStart; d <= gridEnd; d = addDays(d, 1)) {
+    const cell = document.createElement('div');
+    cell.className = 'pc-mo-cell'
+      + (d < monthStart || d > monthEnd ? ' out' : '')
+      + (isWeekend(d) ? ' we' : '')
+      + (d === today ? ' today' : '');
+    const num = document.createElement('div');
+    num.className = 'pc-mo-num';
+    num.textContent = new Date(d + 'T00:00:00').getDate();
+    cell.appendChild(num);
+
+    const todays = sorted.filter(it => it.start <= d && it.end >= d);
+    todays.slice(0, PC_MO_MAX_CHIPS).forEach(it => {
+      const chip = document.createElement('a');
+      chip.className = 'pc-chip'
+        + (it.start < d ? ' cont-l' : '')
+        + (it.end > d ? ' cont-r' : '');
+      chip.textContent = (it.ms ? '◆ ' : '') + taskDisplayName(it.task);
+      pcStyleItem(chip, it);
+      cell.appendChild(chip);
+    });
+    if (todays.length > PC_MO_MAX_CHIPS) {
+      const more = document.createElement('div');
+      more.className = 'pc-more';
+      const rest = todays.slice(PC_MO_MAX_CHIPS);
+      more.textContent = '+' + rest.length + ' more';
+      more.title = rest.map(it => taskDisplayName(it.task) + ' — ' + it.proj.name).join('\n');
+      cell.appendChild(more);
+    }
+    grid.appendChild(cell);
+  }
+  body.appendChild(grid);
+  return { label, items };
+}
+
+function pcRenderLegend(el, items, colors) {
+  const seen = new Map();
+  items.forEach(it => {
+    if (it.off) return;
+    if (!seen.has(it.proj.id)) seen.set(it.proj.id, it);
+  });
+  const order = [...seen.values()].sort((a, b) => a.rank - b.rank || (a.proj.name || '').localeCompare(b.proj.name || ''));
+  const add = (color, text, ms) => {
+    const item = document.createElement('span');
+    item.className = 'pc-legend-item';
+    const sw = document.createElement('span');
+    sw.className = 'pc-swatch' + (ms ? ' ms' : '');
+    if (ms) sw.style.border = '1.5px solid var(--dim)'; else sw.style.background = color;
+    item.appendChild(sw);
+    item.appendChild(document.createTextNode(text));
+    el.appendChild(item);
+  };
+  order.forEach(it => add(it.color, it.proj.name));
+  if (items.some(it => it.ms)) add(null, 'Key date', true);
+  if (items.some(it => it.off)) add(PC_OFF_COLOR, 'Time off');
+}
+
+function renderCalendarPanel() {
+  if (pcState.anchor !== selectedDate) { pcState.anchor = selectedDate; pcState.offset = 0; }
+  const section = mkPanelSection('Calendar');
+
+  const bar = document.createElement('div');
+  bar.className = 'pc-bar';
+  const seg = document.createElement('div');
+  seg.className = 'pc-seg';
+  const modeBtns = {};
+  [['timeline', 'Timeline'], ['month', 'Month']].forEach(([key, txt]) => {
+    const b = document.createElement('button');
+    b.className = 'pc-seg-btn';
+    b.textContent = txt;
+    b.addEventListener('click', () => {
+      if (pcState.mode === key) return;
+      pcState.mode = key;
+      pcState.offset = 0;
+      try { localStorage.setItem(PC_MODE_KEY, key); } catch (_) {}
+      paint();
+    });
+    modeBtns[key] = b;
+    seg.appendChild(b);
+  });
+  bar.appendChild(seg);
+
+  const nav = document.createElement('div');
+  nav.className = 'pc-nav';
+  const prev = document.createElement('button');
+  prev.className = 'date-nav-btn';
+  prev.textContent = '‹';
+  const home = document.createElement('button');
+  home.className = 'btn-today';
+  const next = document.createElement('button');
+  next.className = 'date-nav-btn';
+  next.textContent = '›';
+  prev.addEventListener('click', () => { pcState.offset--; paint(); });
+  next.addEventListener('click', () => { pcState.offset++; paint(); });
+  home.addEventListener('click', () => { pcState.offset = 0; paint(); });
+  nav.appendChild(prev);
+  nav.appendChild(home);
+  nav.appendChild(next);
+  bar.appendChild(nav);
+
+  const range = document.createElement('div');
+  range.className = 'pc-range';
+  bar.appendChild(range);
+  section.appendChild(bar);
+
+  const legend = document.createElement('div');
+  legend.className = 'pc-legend';
+  section.appendChild(legend);
+  const body = document.createElement('div');
+  section.appendChild(body);
+
+  // Repaints in place, so paging doesn't rebuild (and re-scroll) the whole
+  // dashboard around it.
+  function paint() {
+    body.innerHTML = '';
+    legend.innerHTML = '';
+    const month = pcState.mode === 'month';
+    modeBtns.timeline.classList.toggle('on', !month);
+    modeBtns.month.classList.toggle('on', month);
+    prev.title = month ? 'Previous month' : 'Back ' + PC_TL_STEP_WEEKS + ' weeks';
+    next.title = month ? 'Next month' : 'Forward ' + PC_TL_STEP_WEEKS + ' weeks';
+    home.textContent = month ? 'This month' : 'This week';
+    home.title = 'Back to the dashboard date (' + fmtDateShort(selectedDate) + ')';
+    home.disabled = pcState.offset === 0;
+    const colors = pcProjectColors();
+    const r = month ? pcRenderMonth(body, colors) : pcRenderTimeline(body, colors);
+    range.textContent = r.label;
+    pcRenderLegend(legend, r.items, colors);
+  }
+  paint();
+  return section;
 }
 
 // ── PANEL: MY PROJECTS ──
