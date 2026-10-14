@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261013a';
+window.PREPRO_BUILD = '20261014a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,27 +29,27 @@ window.PREPRO_BUILD = '20261013a';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20261013a"></script>
+<script type="module" src="./auth.js?v=20261014a"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261013a"></script>
+<script src="./whatsnew.js?v=20261014a"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20261013a"></script>
+<script src="./people.js?v=20261014a"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261013a"></script>
+<script src="./commitments.js?v=20261014a"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261013a"></script>
+<script src="./dossier.js?v=20261014a"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261013a"></script>
+<script src="./prepro-llm.js?v=20261014a"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261013a"></script>
+<script src="./prepro-ai.js?v=20261014a"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20261013a"></script>
+<script src="./xlsx.full.min.js?v=20261014a"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1211,13 +1211,6 @@ textarea.pi-edit { resize: vertical; min-height: 46px; white-space: pre-wrap; }
               <button type="button" class="loe-dot loe-medium" data-loe="medium" title="Medium" aria-label="Medium effort"></button>
               <button type="button" class="loe-dot loe-high"   data-loe="high"   title="High"   aria-label="High effort"></button>
             </div>
-          </div>
-          <div class="panel-field" id="panelFieldPerson">
-            <label id="panelPersonLabel">Person <span class="htip">?<span class="htip-popup">Choose from people added to this project in Role Assignees. Select "Other…" to type a new name — they'll be saved to history for future projects.</span></span></label>
-            <select id="panelPerson" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:5px 9px;color:var(--text);font-size:13px;outline:none;transition:border-color .15s;min-width:100px;">
-              <option value="">—</option>
-            </select>
-            <input type="text" id="panelPersonOther" placeholder="Name" autocomplete="off" style="display:none;flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:5px 9px;color:var(--text);font-size:13px;outline:none;transition:border-color .15s;min-width:80px;">
           </div>
           <div class="panel-field" id="panelFieldTask">
             <label id="panelTaskLabel">Task</label>
@@ -6797,9 +6790,9 @@ function buildDueDateMarker(task, dateStr) {
     setSelectedTask(task.id);
   });
 
-  // Accept role drops
+  // Accept person drops
   el.addEventListener('dragover', e => {
-    if (!dragPayload || dragPayload.type === 'move' || dragPayload.type === 'copy' || dragPayload.type === 'review' || dragPayload.type === 'duedate' || dragPayload.type === 'dup-project' || dragPayload.type === 'tree-move') return;
+    if (!dragPayload || dragPayload.type !== 'person') return;
     e.preventDefault(); e.stopPropagation();
     el.classList.add('drag-accepting');
   });
@@ -6811,8 +6804,8 @@ function buildDueDateMarker(task, dateStr) {
     el.classList.remove('drag-accepting');
     let pl = dragPayload;
     if (!pl) { try { pl = JSON.parse(e.dataTransfer.getData('text')); } catch(_) { return; } }
-    if (!pl || pl.type === 'move' || pl.type === 'copy' || pl.type === 'review' || pl.type === 'duedate' || pl.type === 'dup-project') return;
-    openPanel('add-attendee', task.date, task.id, pl.role, pl.category, pl.color, pl.person || null);
+    if (!pl || pl.type !== 'person') return;
+    openPanel('add-attendee', task.date, task.id, pl.role, pl.category, pl.color, pl.person);
   });
 
   // Resize handles: left on start, right on end/solo
@@ -6855,7 +6848,7 @@ function buildDueDateBar(task, dateStr, isEnd) {
 
   // Accept attendee drops anywhere along a multi-day key date, not just the start
   bar.addEventListener('dragover', e => {
-    if (!dragPayload || dragPayload.type === 'move' || dragPayload.type === 'copy' || dragPayload.type === 'review' || dragPayload.type === 'duedate' || dragPayload.type === 'dup-project' || dragPayload.type === 'tree-move') return;
+    if (!dragPayload || dragPayload.type !== 'person') return;
     e.preventDefault(); e.stopPropagation();
     bar.classList.add('drag-accepting');
   });
@@ -6865,8 +6858,8 @@ function buildDueDateBar(task, dateStr, isEnd) {
     bar.classList.remove('drag-accepting');
     let pl = dragPayload;
     if (!pl) { try { pl = JSON.parse(e.dataTransfer.getData('text')); } catch(_) { return; } }
-    if (!pl || pl.type === 'move' || pl.type === 'copy' || pl.type === 'review' || pl.type === 'duedate') return;
-    openPanel('add-attendee', task.date, task.id, pl.role, pl.category, pl.color, pl.person || null);
+    if (!pl || pl.type !== 'person') return;
+    openPanel('add-attendee', task.date, task.id, pl.role, pl.category, pl.color, pl.person);
   });
 
   if (isEnd) {
@@ -6977,9 +6970,9 @@ function buildReviewBlock(task, dateStr) {
   });
   block.addEventListener('dragend', () => { dragPayload = null; });
 
-  // Accept role drops onto the review block
+  // Accept person drops onto the review block
   block.addEventListener('dragover', e => {
-    if (!dragPayload || dragPayload.type === 'move' || dragPayload.type === 'review' || dragPayload.type === 'tree-move') return;
+    if (!dragPayload || dragPayload.type !== 'person') return;
     e.preventDefault();
     e.stopPropagation();
     block.classList.add('drag-accepting');
@@ -6993,8 +6986,8 @@ function buildReviewBlock(task, dateStr) {
     block.classList.remove('drag-accepting');
     let pl = dragPayload;
     if (!pl) { try { pl = JSON.parse(e.dataTransfer.getData('text')); } catch(_) { return; } }
-    if (!pl || pl.type === 'move' || pl.type === 'copy' || pl.type === 'review') return;
-    openPanel('add-attendee', task.date, task.id, pl.role, pl.category, pl.color, pl.person || null);
+    if (!pl || pl.type !== 'person') return;
+    openPanel('add-attendee', task.date, task.id, pl.role, pl.category, pl.color, pl.person);
   });
 
   // Resize handles (left on start/solo, right on end/solo)
@@ -7036,7 +7029,7 @@ function buildReviewBar(task, dateStr, isEnd) {
   bar.addEventListener('dragend', () => { dragPayload = null; });
 
   bar.addEventListener('dragover', e => {
-    if (!dragPayload || dragPayload.type === 'move' || dragPayload.type === 'copy' || dragPayload.type === 'review' || dragPayload.type === 'tree-move') return;
+    if (!dragPayload || dragPayload.type !== 'person') return;
     e.preventDefault(); e.stopPropagation();
     bar.classList.add('drag-accepting');
   });
@@ -7048,8 +7041,8 @@ function buildReviewBar(task, dateStr, isEnd) {
     bar.classList.remove('drag-accepting');
     let pl = dragPayload;
     if (!pl) { try { pl = JSON.parse(e.dataTransfer.getData('text')); } catch(_) { return; } }
-    if (!pl || pl.type === 'move' || pl.type === 'copy' || pl.type === 'review') return;
-    openPanel('add-attendee', task.date, task.id, pl.role, pl.category, pl.color, pl.person || null);
+    if (!pl || pl.type !== 'person') return;
+    openPanel('add-attendee', task.date, task.id, pl.role, pl.category, pl.color, pl.person);
   });
 
   if (isEnd) {
@@ -7369,14 +7362,12 @@ function getPanelLOE() {
 function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) {
   if (!activeProjectId) return;
 
-  const fieldPerson = document.getElementById('panelFieldPerson');
   const fieldTask   = document.getElementById('panelFieldTask');
   const fieldLOE    = document.getElementById('panelFieldLOE');
   const taskLabel   = document.getElementById('panelTaskLabel');
   const taskInput   = document.getElementById('panelTask');
 
   // Reset field visibility and badge state
-  fieldPerson.style.display = '';
   fieldTask.style.display   = '';
   fieldLOE.style.display    = '';
   taskLabel.textContent     = 'Task';
@@ -7385,26 +7376,7 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
   const _badge = document.getElementById('panelRoleBadge');
   _badge.onclick = null; _badge.style.cursor = ''; _badge.title = '';
 
-  if (mode === 'create') {
-    panelContext = { mode, date: dateStr, role, category, color };
-    document.getElementById('panelRoleBadge').textContent      = role;
-    document.getElementById('panelRoleBadge').style.background = color;
-    document.getElementById('panelDateLabel').textContent      = fmtDateLabel(dateStr);
-    populatePersonDropdown(role);
-    taskInput.value = '';
-    document.getElementById('panelDelete').classList.add('hidden');
-    if (prefillPerson) {
-      const sel = document.getElementById('panelPerson');
-      const otherInp = document.getElementById('panelPersonOther');
-      if ([...sel.options].some(o => o.value === prefillPerson)) {
-        sel.value = prefillPerson;
-      } else {
-        sel.value = '__other__';
-        otherInp.style.display = ''; otherInp.value = prefillPerson;
-      }
-    }
-
-  } else if (mode === 'edit') {
+  if (mode === 'edit') {
     const proj = getProject(activeProjectId);
     if (!proj) return;
     const task = proj.tasks.find(t => t.id === taskId);
@@ -7417,7 +7389,6 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     setSelectedTask(taskId);
     // People are managed by dropping them onto the block, so the panel only
     // edits name + effort now. The verb default shows as a ghosted placeholder.
-    fieldPerson.style.display = 'none';
     taskInput.value           = task.taskName || '';
     taskInput.placeholder     = roleVerb(task.role);
     setPanelLOE(task.loe || 'low');
@@ -7429,7 +7400,6 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     document.getElementById('panelRoleBadge').textContent      = lbl;
     document.getElementById('panelRoleBadge').style.background = REVIEW_COLOR;
     document.getElementById('panelDateLabel').textContent      = fmtDateLabel(dateStr);
-    fieldPerson.style.display = 'none';
     // Effort applies here too. A Review, Meeting, Studio Work or Shoot books real
     // hours from everyone who attends, and until now none of them could say how
     // many — so every one of them scored the same default. A six-hour concepting
@@ -7456,7 +7426,6 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     document.getElementById('panelDateLabel').textContent      = fmtDateLabel(task.date);
     setPanelDateRange(task);
     setSelectedTask(taskId);
-    fieldPerson.style.display = 'none';
     taskLabel.textContent     = lbl + ' Name';
     taskInput.placeholder     = lbl; // ghosted default — type to override
     taskInput.value           = task.taskName || '';
@@ -7469,29 +7438,21 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     const task = proj.tasks.find(t => t.id === taskId);
     if (!task) return;
 
-    // If the person is already known, save directly without opening the panel.
-    // Dropping them onto a chip also promotes them onto the project roster
-    // (dotted suggestion → solid assignee).
-    if (prefillPerson) {
-      if (!task.attendees) task.attendees = [];
-      task.attendees.push({ id: genId(), role, category, person: prefillPerson, color });
-      addToRoster(role, prefillPerson); // adds to roster + records name history
-      maybeAutoLeadProducer(proj, role, prefillPerson);
-      saveState();
-      renderCalendar();
-      renderPalette();
-      if (exportOpen) renderExportPanel();
-      return;
-    }
-
-    panelContext = { mode: 'add-attendee', taskId, role, category, color };
-    document.getElementById('panelRoleBadge').textContent      = role;
-    document.getElementById('panelRoleBadge').style.background = color;
-    document.getElementById('panelDateLabel').textContent      = fmtDateLabel(task.date) + ' · ' + (task.taskName || 'Review');
-    populatePersonDropdown(role);
-    fieldTask.style.display = 'none';
-    fieldLOE.style.display  = 'none';
-    document.getElementById('panelDelete').classList.add('hidden');
+    // Every block now only accepts a dragged *person*, so there is always a name
+    // and nothing to ask — save directly without opening the panel. (The old
+    // Person picker for bare role-chip drops is gone; leaving it blank used to
+    // file an attendee literally named after the role.) Dropping someone onto a
+    // chip also promotes them onto the project roster (dotted → solid assignee).
+    if (!prefillPerson) return;
+    if (!task.attendees) task.attendees = [];
+    task.attendees.push({ id: genId(), role, category, person: prefillPerson, color });
+    addToRoster(role, prefillPerson); // adds to roster + records name history
+    maybeAutoLeadProducer(proj, role, prefillPerson);
+    saveState();
+    renderCalendar();
+    renderPalette();
+    if (exportOpen) renderExportPanel();
+    return;
 
   } else if (mode === 'edit-duedate') {
     const proj = getProject(activeProjectId);
@@ -7509,7 +7470,6 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     badge2.title            = mLabel2 + ' · Click to change type';
     badge2.onclick          = e => { closePanel(); openTypeSwitcher(e, taskId, mLabel2); };
     document.getElementById('panelDateLabel').textContent      = fmtDateLabel(task.date);
-    fieldPerson.style.display = 'none';
     fieldLOE.style.display    = 'none';
     taskLabel.textContent     = 'Label';
     taskInput.placeholder     = mLabel2; // ghosted default — type to override
@@ -7519,8 +7479,9 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
 
   renderTaskSuggestions();
   document.getElementById('taskPanel').classList.add('open');
-  const focusId = (mode === 'create-review' || mode === 'edit-review' || mode === 'edit') ? 'panelTask' : 'panelPerson';
-  setTimeout(() => { const fEl = document.getElementById(focusId); if (fEl) fEl.focus(); }, 220);
+  if (mode === 'create-review' || mode === 'edit-review' || mode === 'edit') {
+    setTimeout(() => { const fEl = document.getElementById('panelTask'); if (fEl) fEl.focus(); }, 220);
+  }
 }
 
 // Second panel row: quick-pick task-title chips that fill the Task input.
@@ -7531,7 +7492,7 @@ function renderTaskSuggestions() {
   let opts = [];
   if (panelContext) {
     const m = panelContext.mode;
-    if (m === 'create' || m === 'edit') {
+    if (m === 'edit') {
       opts = TASK_SUGGESTIONS[panelContext.role] || [];
     } else if (m === 'create-review') {
       opts = REVIEW_SUGGESTIONS[panelContext.label] || [];
@@ -7570,43 +7531,15 @@ function closePanel() {
   if (sr) { sr.style.display = 'none'; sr.innerHTML = ''; }
 }
 
-function getPanelPerson() {
-  const sel = document.getElementById('panelPerson');
-  if (!sel) return '';
-  if (sel.value === '__other__') {
-    return (document.getElementById('panelPersonOther').value || '').trim();
-  }
-  return sel.value.trim();
-}
-
 function savePanel() {
   if (!panelContext || !activeProjectId) return;
-  const person   = getPanelPerson();
   const taskName = document.getElementById('panelTask').value.trim();
   const proj = getProject(activeProjectId);
   if (!proj) return;
 
-  // If Other… was used, save name to roster + history so it's pre-selectable next time
-  const personSel = document.getElementById('panelPerson');
-  if (person && personSel && personSel.value === '__other__' && panelContext.role) {
-    addToRoster(panelContext.role, person); // also calls recordNameHistory internally
-  }
-
   const loe = getPanelLOE();
 
-  if (panelContext.mode === 'create') {
-    if (!person && !taskName) { document.getElementById('panelPerson').focus(); return; }
-    proj.tasks.push({
-      id: genId(),
-      date: panelContext.date,
-      role: panelContext.role,
-      roleCategory: panelContext.category,
-      person, taskName, loe,
-      color: panelContext.color
-    });
-    if (person) maybeAutoLeadProducer(proj, panelContext.role, person);
-
-  } else if (panelContext.mode === 'edit') {
+  if (panelContext.mode === 'edit') {
     // Blank stays null so the verb shows as a ghosted placeholder (not stored text)
     const task = proj.tasks.find(t => t.id === panelContext.taskId);
     if (task) { task.taskName = taskName || null; task.loe = loe; }
@@ -7627,21 +7560,6 @@ function savePanel() {
   } else if (panelContext.mode === 'edit-review') {
     const task = proj.tasks.find(t => t.id === panelContext.taskId);
     if (task) { task.taskName = taskName || null; task.loe = loe; }
-
-  } else if (panelContext.mode === 'add-attendee') {
-    const task = proj.tasks.find(t => t.id === panelContext.taskId);
-    if (task) {
-      if (!task.attendees) task.attendees = [];
-      task.attendees.push({
-        id: genId(),
-        role: panelContext.role,
-        category: panelContext.category,
-        person: person || panelContext.role,
-        color: panelContext.color
-      });
-      if (person) addToRoster(panelContext.role, person); // promote to solid roster member
-      if (person) maybeAutoLeadProducer(proj, panelContext.role, person);
-    }
 
   } else if (panelContext.mode === 'edit-duedate') {
     const task = proj.tasks.find(t => t.id === panelContext.taskId);
@@ -8131,42 +8049,6 @@ function buildTSV() {
     }
   });
   return [header, ...rows].join('\n');
-}
-
-// Populate the person dropdown for a given role
-function populatePersonDropdown(role) {
-  const sel   = document.getElementById('panelPerson');
-  const other = document.getElementById('panelPersonOther');
-  if (!sel) return;
-
-  // Combine explicit roster names with names already used in tasks for this role
-  const rosterNames = getRosterNames(role);
-  const taskNames   = new Set();
-  const proj = getProject(activeProjectId);
-  if (proj) {
-    (proj.tasks || []).forEach(t => {
-      if (t.role === role && t.person) taskNames.add(t.person);
-      // Also pick up attendees with this role
-      (t.attendees || []).forEach(a => { if (a.role === role && a.person) taskNames.add(a.person); });
-    });
-  }
-  const allNames = [...new Set([...rosterNames, ...taskNames])].filter(n => !isSunset(n)).sort();
-
-  sel.innerHTML = '';
-  const blank = document.createElement('option');
-  blank.value = ''; blank.textContent = '—';
-  sel.appendChild(blank);
-  allNames.forEach(n => {
-    const opt = document.createElement('option');
-    opt.value = n; opt.textContent = n;
-    sel.appendChild(opt);
-  });
-  const otherOpt = document.createElement('option');
-  otherOpt.value = '__other__'; otherOpt.textContent = 'Other…';
-  sel.appendChild(otherOpt);
-  sel.value = '';
-  other.style.display = 'none';
-  other.value = '';
 }
 
 function renderRosterPanel() {
@@ -11670,18 +11552,6 @@ function setupInitListeners() {
   document.getElementById('panelLOE').addEventListener('click', e => {
     const dot = e.target.closest('.loe-dot');
     if (dot) setPanelLOE(dot.dataset.loe);
-  });
-
-  // Person dropdown → show/hide Other input
-  document.getElementById('panelPerson').addEventListener('change', function() {
-    const other = document.getElementById('panelPersonOther');
-    if (this.value === '__other__') {
-      other.style.display = '';
-      other.focus();
-    } else {
-      other.style.display = 'none';
-      other.value = '';
-    }
   });
 
   // Keyboard
