@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261014a';
+window.PREPRO_BUILD = '20261019a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,27 +29,27 @@ window.PREPRO_BUILD = '20261014a';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20261014a"></script>
+<script type="module" src="./auth.js?v=20261019a"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261014a"></script>
+<script src="./whatsnew.js?v=20261019a"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20261014a"></script>
+<script src="./people.js?v=20261019a"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261014a"></script>
+<script src="./commitments.js?v=20261019a"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261014a"></script>
+<script src="./dossier.js?v=20261019a"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261014a"></script>
+<script src="./prepro-llm.js?v=20261019a"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261014a"></script>
+<script src="./prepro-ai.js?v=20261019a"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20261014a"></script>
+<script src="./xlsx.full.min.js?v=20261019a"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -5167,7 +5167,44 @@ function buildGhostInfo(holidaysOnly) {
   return { people, byDate };
 }
 
-// Sync continuation bar/spacer heights to match the start block's actual rendered height
+// Line every multi-day span up across the days it covers. A span's lane index
+// is the same in each cell, but the blocks stacked above it aren't: a role block
+// grows with its attendee list, so lane 2 can sit 30px lower on Tuesday than on
+// Monday and the span visibly breaks between the two. Per calendar row, push
+// each span's segments down to its lowest one. Lanes go top-down with a fresh
+// measure each pass, so a nudge in lane 1 is seen before lane 2 is placed.
+function alignLanes() {
+  const grid = document.getElementById('calGrid');
+  if (!grid) return;
+  const chips = grid.querySelectorAll('.cal-day > [data-lane][data-task-id]');
+  chips.forEach(el => { el.style.marginTop = ''; });
+  // taskId + row → segments. Cells in one grid row share offsetTop.
+  const spans = new Map();
+  chips.forEach(el => {
+    const key = el.dataset.taskId + '|' + el.parentElement.offsetTop;
+    if (!spans.has(key)) spans.set(key, []);
+    spans.get(key).push(el);
+  });
+  const byLane = [];
+  spans.forEach(segs => {
+    if (segs.length < 2) return;
+    const lane = +segs[0].dataset.lane;
+    (byLane[lane] = byLane[lane] || []).push(segs);
+  });
+  byLane.forEach(group => {
+    if (!group) return;
+    // Read the whole lane, then write it, so each lane costs one layout.
+    const moves = [];
+    group.forEach(segs => {
+      const tops = segs.map(el => el.getBoundingClientRect().top);
+      const low  = Math.max(...tops);
+      segs.forEach((el, i) => { if (low - tops[i] > 0.5) moves.push([el, low - tops[i]]); });
+    });
+    moves.forEach(([el, dy]) => { el.style.marginTop = dy + 'px'; });
+  });
+}
+
+// Sync continuation bar heights to match the start block's actual rendered height
 function syncBarHeights() {
   const apply = () => {
     document.querySelectorAll('.review-block[data-task-id], .duedate-marker[data-task-id], .role-block[data-task-id]').forEach(block => {
@@ -5175,9 +5212,10 @@ function syncBarHeights() {
       const h  = block.offsetHeight;
       if (!h) return;
       document.querySelectorAll(
-        `.review-bar[data-task-id="${id}"], .duedate-bar[data-task-id="${id}"], .role-bar[data-task-id="${id}"], [data-spacer-for="${id}"]`
+        `.review-bar[data-task-id="${id}"], .duedate-bar[data-task-id="${id}"], .role-bar[data-task-id="${id}"]`
       ).forEach(el => { el.style.height = h + 'px'; });
     });
+    alignLanes();
     // Re-apply glow after DOM rebuild
     if (selectedTaskId) {
       document.querySelectorAll(`[data-task-id="${selectedTaskId}"]`).forEach(el => el.classList.add('task-selected'));
@@ -5433,14 +5471,15 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghostInfo, showMonthLabel)
   }
   cell.appendChild(numDiv);
 
-  laneArr.forEach(taskOrNull => {
-    if (!taskOrNull || taskOrNull._spacerFor !== undefined) {
+  laneArr.forEach((taskOrNull, lane) => {
+    if (!taskOrNull || taskOrNull._spacer) {
       const sp = document.createElement('div');
       sp.className = 'chip-spacer';
-      if (taskOrNull?._spacerFor) sp.dataset.spacerFor = taskOrNull._spacerFor;
       cell.appendChild(sp);
     } else {
-      cell.appendChild(buildChip(taskOrNull, dateStr));
+      const chip = buildChip(taskOrNull, dateStr);
+      chip.dataset.lane = lane;   // alignLanes lines spans up lane by lane
+      cell.appendChild(chip);
     }
   });
 
@@ -7087,6 +7126,7 @@ function buildTaskLayout(dates) {
 }
 
 // Lane-packs an arbitrary task list across `dates` → Map<dateStr, Array<task|null|spacer>>.
+const LANE_SPACER = Object.freeze({ _spacer: true });
 function packTasks(tasks, dates) {
   if (!tasks || !dates.length) return new Map(dates.map(d => [d, []]));
 
@@ -7109,8 +7149,7 @@ function packTasks(tasks, dates) {
     return a.date.localeCompare(b.date);
   });
 
-  const laneOcc      = []; // laneOcc[i]      = Set<dateStr> of occupied dates
-  const laneOwner    = []; // laneOwner[i]    = task currently owning lane i (for spacer tagging)
+  const laneOcc = []; // laneOcc[i] = Set<dateStr> of occupied dates
 
   sortedMulti.forEach(task => {
     const td = taskDates(task);
@@ -7121,14 +7160,14 @@ function packTasks(tasks, dates) {
     td.forEach(d => laneOcc[lane].add(d));
     td.forEach(d => {
       const arr = layout.get(d);
-      // Pad with tagged spacer objects so bar-height sync can find them
-      while (arr.length < lane) {
-        const spacerTask = laneOwner[arr.length] || null;
-        arr.push(spacerTask ? { _spacerFor: spacerTask.id } : null);
-      }
+      // Pad empty lanes with plain spacers. They used to borrow a height from
+      // whichever task last claimed the lane — often one months away — which
+      // threw the lanes below off by that task's attendee list. Lane indexes
+      // alone can't line a span up anyway (blocks vary in height day to day),
+      // so the renderers align each span themselves (alignLanes / exportPNG).
+      while (arr.length < lane) arr.push(LANE_SPACER);
       arr[lane] = task;
     });
-    laneOwner[lane] = task;
   });
 
   // Single-day tasks: fill first null slot or append
@@ -11071,6 +11110,34 @@ function exportPNG() {
     else                    h = (14 + (exportPNGAttendees ? taskPeople(task).length * 10 : 0)) * SC;
     taskHeights.set(task.id, h);
   });
+  // Holidays are banners now (the Company holidays toggle), never chips;
+  // the PTO toggle governs only pto-type key dates.
+  const pngDraws = task => !(isHolidayTask(task) || (!exportPNGPTO && isTimeOffTask(task)));
+
+  // Each lane's y in each cell, aligned per calendar row the same way the
+  // on-screen alignLanes does it: a multi-day card sits at the lowest point any
+  // of its days reaches, so it doesn't step up and down as the cards above it
+  // change height day to day. Keyed 'date|lane', offset from the first lane.
+  const laneY = new Map();
+  for (let r = 0; r * COLS < days.length; r++) {
+    const rowDays = days.slice(r * COLS, r * COLS + COLS);
+    const cursor  = new Map(rowDays.map(d => [d, 0]));
+    const lanes   = Math.max(0, ...rowDays.map(d => (layout.get(d) || []).length));
+    for (let lane = 0; lane < lanes; lane++) {
+      const spans = new Map();   // taskId → { task, ds: dates in this row }
+      rowDays.forEach(d => {
+        const e = (layout.get(d) || [])[lane];
+        if (!e || e._spacer || !pngDraws(e)) return;
+        if (!spans.has(e.id)) spans.set(e.id, { task: e, ds: [] });
+        spans.get(e.id).ds.push(d);
+      });
+      spans.forEach(({ task, ds }) => {
+        const y = Math.max(...ds.map(d => cursor.get(d)));
+        const h = taskHeights.get(task.id) || 14*SC;
+        ds.forEach(d => { laneY.set(d + '|' + lane, y); cursor.set(d, y + h + 3*SC); });
+      });
+    }
+  }
 
   // cells
   days.forEach((dateStr, idx) => {
@@ -11145,27 +11212,11 @@ function exportPNG() {
     // use the same height on every segment (single tall card, not start-tall/
     // continuation-short).
     const laneArr = layout.get(dateStr) || [];
-    let ty = cy + 28*SC + HOLI_H;
 
-    laneArr.forEach(entry => {
-      if (!entry) return;
-
-      // Spacer: owning task doesn't occupy this cell but keeps this lane
-      // open so lower lanes stay aligned with neighbouring cells.
-      if (entry._spacerFor !== undefined) {
-        const owner = proj.tasks.find(t => t.id === entry._spacerFor);
-        if (!owner) return;
-        if (isHolidayTask(owner) || (!exportPNGPTO && isTimeOffTask(owner))) return;
-        const h = taskHeights.get(entry._spacerFor) || 14*SC;
-        ty += h + 3*SC;
-        return;
-      }
-
+    laneArr.forEach((entry, lane) => {
+      if (!entry || entry._spacer || !pngDraws(entry)) return;
       const task = entry;
-      // Holidays are banners now (the Company holidays toggle), never chips;
-      // the PTO toggle governs only pto-type key dates.
-      if (isHolidayTask(task) || (!exportPNGPTO && isTimeOffTask(task))) return;
-
+      const ty    = cy + 28*SC + HOLI_H + laneY.get(dateStr + '|' + lane);
       const taskH = taskHeights.get(task.id) || 14*SC;
       if (ty + taskH > cy + CH - 4*SC) return; // no room
 
@@ -11306,8 +11357,6 @@ function exportPNG() {
           ctx.restore();
         }
       }
-
-      ty += taskH + 3*SC;
     });
   });
 
