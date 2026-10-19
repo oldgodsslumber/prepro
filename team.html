@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261019a';
+window.PREPRO_BUILD = '20261019b';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,27 +29,27 @@ window.PREPRO_BUILD = '20261019a';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20261019a"></script>
+<script type="module" src="./auth.js?v=20261019b"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261019a"></script>
+<script src="./whatsnew.js?v=20261019b"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20261019a"></script>
+<script src="./people.js?v=20261019b"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261019a"></script>
+<script src="./commitments.js?v=20261019b"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261019a"></script>
+<script src="./dossier.js?v=20261019b"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261019a"></script>
+<script src="./prepro-llm.js?v=20261019b"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261019a"></script>
+<script src="./prepro-ai.js?v=20261019b"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20261019a"></script>
+<script src="./xlsx.full.min.js?v=20261019b"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -143,6 +143,35 @@ input  { font: inherit; }
 #meSelect { max-width: 150px; background: transparent; border: none; outline: none; color: var(--text); font-family: inherit; font-size: 11px; font-weight: 600; cursor: pointer; padding: 0 2px; text-overflow: ellipsis; }
 .me-picker.unset #meSelect { color: var(--dim); font-weight: 500; }
 #meSelect option { background: var(--card); color: var(--text); }
+
+/* ── MY CALENDAR ── (see setMyCal) */
+.mycal-toggle.on { color: var(--accent); border-color: var(--accent); background: rgba(108,99,255,.14); }
+.mycal-toggle:disabled { opacity: .4; cursor: not-allowed; }
+.mycal-toggle:disabled:hover { color: var(--dim); border-color: var(--border); }
+/* Where new chips go, beside the name. Red and unmissable when nothing is. */
+.mc-target { display: inline-flex; align-items: center; gap: 6px; margin-left: 14px; vertical-align: middle; font-size: 11px; font-weight: 700; letter-spacing: 0; padding: 3px 4px 3px 10px; border-radius: 12px; color: var(--text); background: var(--card); border: 1.5px solid var(--mc-proj, var(--border)); }
+.mc-target.none { color: #ff8a8a; background: rgba(224,85,85,.12); border-color: rgba(224,85,85,.7); padding-right: 10px; }
+:root[data-theme="light"] .mc-target.none { color: #b42323; }
+.mc-target-x { background: none; border: none; color: var(--dim); cursor: pointer; font-size: 11px; line-height: 1; padding: 2px 4px; border-radius: 8px; }
+.mc-target-x:hover { color: var(--text); background: var(--bg); }
+/* Project identity: a band across the top of every segment (continuous over a
+   span because segments bleed into each other), the name on the first one. */
+body.my-cal .cal-day > [data-proj]::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--mc-proj); pointer-events: none; }
+.mc-proj-tag { font-size: 9px; font-weight: 700; color: var(--mc-proj); text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; margin: 1px 0 2px; }
+/* With a target picked, the rest step back — still editable, just quieter. */
+body.my-cal.mc-has-target .cal-day > .mc-other { opacity: .5; }
+body.my-cal.mc-has-target .cal-day > .mc-other:hover { opacity: 1; }
+/* Exports are per project; they have no meaning on a many-project calendar. */
+body.my-cal .tools-rail-tab[data-tab="text"],
+body.my-cal .tools-rail-tab[data-tab="table"],
+body.my-cal .tools-rail-tab[data-tab="png"],
+body.my-cal .tools-rail-tab[data-tab="invites-web"] { display: none; }
+/* The refused-drop warning, and the sidebar pulsing to say "pick here". */
+.mc-warn { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 900; background: #c0392b; color: #fff; font-size: 13px; font-weight: 700; padding: 10px 18px; border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.4); pointer-events: none; }
+.mc-warn.show { animation: mc-warn-in .18s ease-out; }
+@keyframes mc-warn-in { from { opacity: 0; transform: translate(-50%, -8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.sidebar-tree.mc-flash { animation: mc-flash 1.2s ease-out; }
+@keyframes mc-flash { 0%, 40% { box-shadow: inset 0 0 0 2px #e05555; background: rgba(224,85,85,.08); } 100% { box-shadow: inset 0 0 0 2px transparent; background: transparent; } }
 
 /* ── BASE ── */
 html, body { height: 100%; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; font-size: 13px; overflow: hidden; }
@@ -1055,6 +1084,7 @@ textarea.pi-edit { resize: vertical; min-height: 46px; white-space: pre-wrap; }
     <span class="me-picker-icon">👤</span>
     <select id="meSelect"><option value="">Who are you?</option></select>
   </span>
+  <button class="theme-toggle mycal-toggle" id="myCalToggle" title="My Calendar — every project you're on, on one calendar" disabled>🗓</button>
   <button class="theme-toggle" id="themeToggle" title="Toggle light / dark mode">☀</button>
 </header>
 
@@ -1146,6 +1176,7 @@ textarea.pi-edit { resize: vertical; min-height: 46px; white-space: pre-wrap; }
 
     <!-- CALENDAR -->
     <div class="cal-wrap" id="calWrap">
+      <div class="mc-warn hidden" id="myCalWarn" role="alert">⚠ No project selected — pick one of your projects on the left, then drop the chip again.</div>
       <div class="empty-state" id="emptyState">
         <h2>No project selected</h2>
         <p>Create a project to start scheduling</p>
@@ -1582,10 +1613,10 @@ function removePersonFromProject(name) {
   });
   saveState();
 }
-function addPersonToProject(name, teamKey) {
+function addPersonToProject(name, teamKey, proj) {
   const nm = (name || '').trim();
   if (!nm) return;
-  addToRoster(rosterRoleFor(nm, teamKey || personTeamOrDerived(nm)), nm);
+  addToRoster(rosterRoleFor(nm, teamKey || personTeamOrDerived(nm)), nm, proj);
 }
 // Add a brand-new name straight from the panel. Creating the record here (when
 // records exist) is what keeps them out of the "needs a home" pile later.
@@ -1780,8 +1811,8 @@ function maybeAutoLeadProducer(proj, role, person) {
   if (proj.leadProducer) return;
   proj.leadProducer = person;
 }
-function addToRoster(role, name) {
-  const proj = getProject(activeProjectId);
+function addToRoster(role, name, proj) {
+  proj = proj || getProject(activeProjectId);
   if (!proj) return;
   if (!proj.roster) proj.roster = {};
   if (!proj.roster[role]) proj.roster[role] = [];
@@ -1992,15 +2023,152 @@ function renderMePicker() {
   });
   sel.value = myPerson || '';
   if (pick) pick.classList.toggle('unset', !myPerson);
+  syncMyCalChrome();   // the 🗓 button needs an identity to work
 }
 
 function setMyPerson(name) {
   myPerson = (name || '').trim() || null;
   if (myPerson) localStorage.setItem('dash_me', myPerson);
   else localStorage.removeItem('dash_me');
+  onMyPersonChanged();
+}
+// Shared by the picker and the cross-tab `storage` sync. My Calendar is about
+// one person, so a new identity drops the target (it was the old person's) and
+// no identity at all leaves the mode.
+function onMyPersonChanged() {
   renderMePicker();
+  if (myCalOn) {
+    if (!myPerson) { setMyCal(false); return; }
+    activeProjectId = null;
+    closePanel();
+    renderSidebar();
+    renderCalendar();
+  }
   if (exportOpen) renderExportPanel();   // PTO invites re-filter immediately
 }
+
+// ── MY CALENDAR ──
+// One person, every project they're on, one calendar — the dashboard's Calendar
+// panel, but editable. While it's on:
+//   · the sidebar lists only active projects you're on (roster, a chip, or lead);
+//   · the calendar shows only YOUR chips from all of them — nobody else's work;
+//   · activeProjectId is the TARGET: the project new chips go into. It may be
+//     null, and then a drop is refused with a red warning instead of guessing;
+//   · every chip created here carries you, so it stays in your own view.
+// Existing chips edit in place in their own project (see taskHome).
+let myCalOn = localStorage.getItem('prepro_mycal') === '1';
+let myCalPrevProjectId = localStorage.getItem('prepro_mycal_prev') || null;
+let myCalHome = new Map();   // taskId → project, rebuilt with each grid
+function isMyCal() { return myCalOn && !!myPerson; }
+function myCalPersistTarget() {
+  try { localStorage.setItem('prepro_mycal_target', activeProjectId || ''); } catch (_) {}
+}
+// A project belongs in My Calendar: a real (non-folder), active project you're on.
+function projectIsMine(p) {
+  return !!p && !p.isFolder && !isEffectivelyInactive(p.id) && isPersonOnProject(p, myPerson.toLowerCase());
+}
+function taskIsMine(t) {
+  const me = myPerson.toLowerCase();
+  if ((t.person || '').toLowerCase() === me) return true;
+  return (t.attendees || []).some(a => (a.person || '').toLowerCase() === me);
+}
+function myCalTasks() {
+  myCalHome = new Map();
+  const out = [];
+  (state.projects || []).forEach(p => {
+    if (!projectIsMine(p)) return;
+    (p.tasks || []).forEach(t => { if (taskIsMine(t)) { out.push(t); myCalHome.set(t.id, p); } });
+  });
+  return out;
+}
+// The attendee entry for you, built the way a drag from the Team panel builds
+// one: your role as that panel would show it, its category and colour.
+function myCalAttendee() {
+  const role = rosterRoleFor(myPerson, personTeamOrDerived(myPerson));
+  return { id: genId(), person: myPerson, role, category: catLabelForRole(role), color: colorForRole(role) };
+}
+// Put you on a chip you just created (and on its project's roster), so it
+// doesn't vanish from a view that only shows your own work. No-op outside the mode.
+function myCalClaim(proj, task) {
+  if (!isMyCal() || !proj || !task) return;
+  if (!task.attendees) task.attendees = [];
+  const att = myCalAttendee();
+  if (!task.attendees.some(a => a.person === myPerson)) task.attendees.push(att);
+  addToRoster(att.role, myPerson, proj);
+  maybeAutoLeadProducer(proj, att.role, myPerson);
+}
+function setMyCal(on) {
+  on = !!on && !!myPerson;
+  if (on === myCalOn && on === isMyCal()) return;
+  closePanel();
+  if (on) {
+    myCalPrevProjectId = activeProjectId;
+    try { localStorage.setItem('prepro_mycal_prev', myCalPrevProjectId || ''); } catch (_) {}
+    // Start with nothing targeted: picking where new chips go is a deliberate act.
+    activeProjectId = null;
+    // Exports don't apply to a many-project view; land on Info instead.
+    if (['text', 'table', 'png', 'invites-web'].includes(exportTabActive)) exportTabActive = 'projectinfo';
+  } else if (!getProject(activeProjectId)) {
+    const roots = getActiveRootProjects();
+    activeProjectId = getProject(myCalPrevProjectId) ? myCalPrevProjectId : (roots.length ? roots[0].id : null);
+  }
+  myCalOn = on;
+  try { localStorage.setItem('prepro_mycal', on ? '1' : '0'); } catch (_) {}
+  myCalPersistTarget();
+  calEarliestDate = null;
+  document.querySelectorAll('.tools-rail-tab').forEach(t => t.classList.toggle('active', exportOpen && t.dataset.tab === exportTabActive));
+  renderSidebar();
+  renderCalendar();
+  if (exportOpen) renderExportPanel();
+}
+// Body classes + header button + sidebar label, derived from the mode. Called
+// from renderCalendar so every path that repaints keeps them honest.
+function syncMyCalChrome() {
+  const on = isMyCal();
+  document.body.classList.toggle('my-cal', on);
+  document.body.classList.toggle('mc-has-target', on && !!getProject(activeProjectId));
+  const btn = document.getElementById('myCalToggle');
+  if (btn) {
+    btn.classList.toggle('on', on);
+    btn.disabled = !myPerson;
+    btn.title = !myPerson ? 'My Calendar — pick who you are first'
+      : on ? 'Leave My Calendar' : 'My Calendar — every project you\'re on, on one calendar';
+  }
+  const lbl = document.querySelector('.sidebar-head-label');
+  if (lbl) lbl.textContent = on ? 'My projects' : 'Projects';
+}
+// The red warning for a drop with nowhere to go.
+let _mcWarnTimer = null;
+function myCalNoTargetWarning() {
+  const el = document.getElementById('myCalWarn');
+  if (el) {
+    el.classList.remove('hidden', 'show');
+    void el.offsetWidth;            // restart the animation on repeat drops
+    el.classList.add('show');
+    clearTimeout(_mcWarnTimer);
+    _mcWarnTimer = setTimeout(() => el.classList.add('hidden'), 4000);
+  }
+  const tree = document.getElementById('sidebarTree');
+  if (tree) { tree.classList.remove('mc-flash'); void tree.offsetWidth; tree.classList.add('mc-flash'); }
+}
+// Project identity on a chip: a colour band across the top of every segment
+// (Dash's colours, so a project matches on both pages), its name on the first
+// segment, and a fade when a target is picked and this isn't it.
+function decorateMyCalChip(el, task) {
+  const proj = myCalHome.get(task.id) || taskHome(task.id);
+  if (!proj) return;
+  el.dataset.proj = proj.id;
+  el.style.setProperty('--mc-proj', myCalColors.get(proj.id) || '#6a6a85');
+  if (activeProjectId && proj.id !== activeProjectId) el.classList.add('mc-other');
+  if (el.classList.contains('role-block') || el.classList.contains('review-block') || el.classList.contains('duedate-marker')) {
+    const tag = document.createElement('div');
+    tag.className = 'mc-proj-tag';
+    tag.textContent = proj.name || '';
+    tag.title = proj.name || '';
+    el.insertBefore(tag, el.firstChild);
+  }
+}
+let myCalColors = new Map();
 
 function deletePersonEverywhere(name) {
   Object.keys(nameHistory || {}).forEach(role => {
@@ -3636,6 +3804,9 @@ function addProject(name, parentId, isFolder) {
               isFolder: !!isFolder };
   state.projects.push(p); saveState();
   addSystemNote(p.id, isFolder ? 'Folder created' : 'Project created');
+  // Made in My Calendar → it's yours; otherwise it would vanish from a tree that
+  // only lists projects you're on, the moment it was created.
+  if (isMyCal() && !isFolder) addPersonToProject(myPerson, null, p);
   return p;
 }
 
@@ -4530,6 +4701,9 @@ function projectSearchHaystack(proj) {
 // against projects with missing/empty fields.
 function projectMatchesFilter(proj) {
   if (!proj) return false;
+  // My Calendar narrows the tree to your own active projects. Its own term, so
+  // whatever is typed in the person box keeps working on top of it.
+  if (isMyCal() && !projectIsMine(proj)) return false;
   // Person filter (name attached to project, optionally lead-producer only).
   const q = filterPerson.trim().toLowerCase();
   if (q) {
@@ -4569,7 +4743,7 @@ function updateFilterCount() {
   if (!countEl) return;
   const active = anyFilterActive();
   const projects = (state.projects || []).filter(p => p && !p.isFolder);
-  if (!active) {
+  if (!active && !isMyCal()) {
     countEl.textContent = projects.length + (projects.length === 1 ? ' project' : ' projects');
     countEl.classList.remove('filtered');
   } else {
@@ -4655,6 +4829,24 @@ function renderStatusSection(status, sectionId, treeId, countId) {
     node.appendChild(lbl);
     node.appendChild(more);
     node.addEventListener('click', () => {
+      if (isMyCal()) {
+        // Folders hold no chips, so they can't be a target — just open them.
+        if (proj.isFolder) {
+          expandedIds.has(proj.id) ? expandedIds.delete(proj.id) : expandedIds.add(proj.id);
+          saveExpandedIds();
+          renderSidebar();
+          return;
+        }
+        // Click the target again to clear it. The calendar is the same either
+        // way, so it keeps its scroll position (no calEarliestDate reset).
+        activeProjectId = activeProjectId === proj.id ? null : proj.id;
+        myCalPersistTarget();
+        closePanel();
+        renderSidebar();
+        renderCalendar();
+        if (exportOpen) renderExportPanel();
+        return;
+      }
       activeProjectId = proj.id;
       calEarliestDate = null;
       closePanel();
@@ -4704,6 +4896,24 @@ function renderTreeLevel(parentId, depth, container) {
     node.appendChild(more);
 
     node.addEventListener('click', () => {
+      if (isMyCal()) {
+        // Folders hold no chips, so they can't be a target — just open them.
+        if (proj.isFolder) {
+          expandedIds.has(proj.id) ? expandedIds.delete(proj.id) : expandedIds.add(proj.id);
+          saveExpandedIds();
+          renderSidebar();
+          return;
+        }
+        // Click the target again to clear it. The calendar is the same either
+        // way, so it keeps its scroll position (no calEarliestDate reset).
+        activeProjectId = activeProjectId === proj.id ? null : proj.id;
+        myCalPersistTarget();
+        closePanel();
+        renderSidebar();
+        renderCalendar();
+        if (exportOpen) renderExportPanel();
+        return;
+      }
       activeProjectId = proj.id;
       calEarliestDate = null;
       closePanel();
@@ -5241,7 +5451,7 @@ function rebuildCalGrid(adjustScrollTop) {
   // The PNG custom-range wash, computed once per rebuild (not per cell) from
   // the snapped export window so it matches what Download will produce.
   pngWashWin = null;
-  if (exportOpen && exportTabActive === 'png') {
+  if (exportOpen && exportTabActive === 'png' && !isMyCal()) {
     const washProj = getProject(activeProjectId);
     if (washProj && !washProj.isFolder && pngManualRange(washProj)) {
       const r = pngExportDays(washProj);
@@ -5270,7 +5480,7 @@ function rebuildCalGrid(adjustScrollTop) {
 
   const layout    = buildTaskLayout(allDates);
   // Always built: with the overlay off it carries holidays alone (see buildGhostInfo).
-  const ghostInfo = buildGhostInfo(!showGhosts);
+  const ghostInfo = isMyCal() ? null : buildGhostInfo(!showGhosts);
   let prevMonth = null;
   allDates.forEach(dateStr => {
     const d = new Date(dateStr + 'T00:00:00');
@@ -5334,7 +5544,27 @@ function updateCalTitle() {
   // title is left empty (acts as a flex spacer for the nav buttons).
   const proj = getProject(activeProjectId);
   const nameBar = document.getElementById('projectNameBar');
-  if (nameBar) {
+  if (nameBar && isMyCal()) {
+    // Whose calendar, then where new chips go — or a standing red notice that
+    // nothing is picked, so the drop warning is never the first you hear of it.
+    nameBar.textContent = '🗓 ' + myPerson + '’s calendar';
+    nameBar.classList.remove('is-folder');
+    const pill = document.createElement('span');
+    pill.className = 'mc-target' + (proj ? '' : ' none');
+    if (proj) {
+      pill.textContent = 'Adding to: ' + proj.name;
+      pill.style.setProperty('--mc-proj', myCalColors.get(proj.id) || '#6a6a85');
+      const x = document.createElement('button');
+      x.className = 'mc-target-x';
+      x.textContent = '✕';
+      x.title = 'Clear — stop adding to this project';
+      x.addEventListener('click', () => { activeProjectId = null; myCalPersistTarget(); closePanel(); renderSidebar(); renderCalendar(); if (exportOpen) renderExportPanel(); });
+      pill.appendChild(x);
+    } else {
+      pill.textContent = '⚠ No project selected — pick one on the left to add chips';
+    }
+    nameBar.appendChild(pill);
+  } else if (nameBar) {
     nameBar.textContent = proj ? proj.name : '';
     nameBar.classList.toggle('is-folder', !!(proj && proj.isFolder));
     if (proj && proj.isFolder) {
@@ -5362,15 +5592,24 @@ function renderCalendar() {
   const calArea = document.getElementById('calendarArea');
   const gantt   = document.getElementById('folderGantt');
   const nav     = document.getElementById('calNav');
+  // A target that stopped being yours (completed, deleted, you came off it)
+  // quietly un-targets rather than taking chips you can no longer see.
+  if (isMyCal() && activeProjectId && !projectIsMine(getProject(activeProjectId))) {
+    activeProjectId = null;
+    myCalPersistTarget();
+  }
+  if (isMyCal()) myCalColors = personProjectColors(state.projects, taskIsMine, isNonWorkProject);
+  syncMyCalChrome();
   const folderMode = isFolderView();
 
   // Nav bar is shared: swap the view-specific controls rather than duplicating ids.
-  document.getElementById('ghostToggle').classList.toggle('hidden', folderMode);
+  // Team Conflicts is about other people's load — not what My Calendar shows.
+  document.getElementById('ghostToggle').classList.toggle('hidden', folderMode || isMyCal());
   document.getElementById('tlZoom').classList.toggle('hidden', !folderMode);
   document.getElementById('calHelpTip').classList.toggle('hidden', folderMode);
   document.getElementById('ganttHelpTip').classList.toggle('hidden', !folderMode);
 
-  const noProject = !activeProjectId || !getProject(activeProjectId);
+  const noProject = !isMyCal() && (!activeProjectId || !getProject(activeProjectId));
   if (noProject) {
     const h2 = empty.querySelector('h2'), p = empty.querySelector('p');
     if (h2) h2.textContent = 'No project selected';
@@ -5479,6 +5718,7 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghostInfo, showMonthLabel)
     } else {
       const chip = buildChip(taskOrNull, dateStr);
       chip.dataset.lane = lane;   // alignLanes lines spans up lane by lane
+      if (isMyCal()) decorateMyCalChip(chip, taskOrNull);
       cell.appendChild(chip);
     }
   });
@@ -5595,7 +5835,15 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghostInfo, showMonthLabel)
     cell.classList.remove('drag-over');
     let pl = dragPayload;
     if (!pl) { try { pl = JSON.parse(e.dataTransfer.getData('text')); } catch(_) { return; } }
-    if (!pl || !activeProjectId || pl.type === 'dup-project') return;
+    if (!pl || pl.type === 'dup-project') return;
+    // Moves and copies act on the chip's own project, so they need no target.
+    // Everything else creates a chip and needs a project to put it in — in My
+    // Calendar that's the picked target, and with none picked it's refused.
+    const creates = !['move', 'copy', 'person'].includes(pl.type);
+    if (creates && !getProject(activeProjectId)) {
+      if (isMyCal()) myCalNoTargetWarning();
+      return;
+    }
     if (pl.type === 'move') {
       moveTask(pl.taskId, dateStr, pl.grabDate);
     } else if (pl.type === 'copy') {
@@ -5603,7 +5851,9 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghostInfo, showMonthLabel)
     } else if (pl.type === 'duedate') {
       const proj = getProject(activeProjectId);
       if (!proj) return;
-      proj.tasks.push(newDueDateTask(dateStr, pl.defaultLabel));
+      const task = newDueDateTask(dateStr, pl.defaultLabel);
+      proj.tasks.push(task);
+      myCalClaim(proj, task);
       saveState(); renderCalendar(); if (exportOpen) renderExportPanel();
     } else if (pl.type === 'review') {
       openPanel('create-review', dateStr, null, pl.label || 'Review', null, REVIEW_COLOR);
@@ -5617,8 +5867,11 @@ function makeCell(dayNum, dateStr, todayStr, laneArr, ghostInfo, showMonthLabel)
       if (!proj) return;
       // A new Producer block defaults its assignee to the project's lead producer
       // (when one is set) so producing chips aren't blank. Other roles stay empty.
-      const autoPerson = (pl.role || '').toLowerCase() === 'producer' ? (proj.leadProducer || null) : null;
-      proj.tasks.push({ id: genId(), date: dateStr, role: pl.role, roleCategory: pl.category, color: pl.color, person: autoPerson, taskName: null, loe: 'low', attendees: [] });
+      // In My Calendar the chip is yours instead (myCalClaim), not the lead's.
+      const autoPerson = !isMyCal() && (pl.role || '').toLowerCase() === 'producer' ? (proj.leadProducer || null) : null;
+      const task = { id: genId(), date: dateStr, role: pl.role, roleCategory: pl.category, color: pl.color, person: autoPerson, taskName: null, loe: 'low', attendees: [] };
+      proj.tasks.push(task);
+      myCalClaim(proj, task);
       saveState(); renderCalendar(); if (exportOpen) renderExportPanel();
     }
   });
@@ -5655,7 +5908,16 @@ function getContLabel(task) {
   if (task.taskName) return task.taskName + (ppl.length ? ' · ' + ppl[0] : '');
   return ppl[0] || task.reviewLabel || (task.role ? roleVerb(task.role) : '');
 }
-function getActiveTask(id) { const p = getProject(activeProjectId); return p ? (p.tasks || []).find(t => t.id === id) : null; }
+// The project a task lives in: the active one first (the common case), then
+// anywhere. My Calendar puts every project's chips on one grid, so there a
+// chip's own project is usually NOT the active one — every chip action has to
+// resolve through here, never through activeProjectId directly.
+function taskHome(taskId) {
+  const a = getProject(activeProjectId);
+  if (a && (a.tasks || []).some(t => t.id === taskId)) return a;
+  return (state.projects || []).find(p => (p.tasks || []).some(t => t.id === taskId)) || null;
+}
+function getActiveTask(id) { const p = taskHome(id); return p ? (p.tasks || []).find(t => t.id === id) : null; }
 // Toggle one country code on a Holiday chip. Stored normalised, so the calendar
 // overlay groups holidays picked in a different order onto the same row.
 function toggleHolidayFlag(taskId, code) {
@@ -7103,7 +7365,7 @@ function buildReviewBar(task, dateStr, isEnd) {
 }
 
 function removeAttendee(taskId, attId) {
-  const proj = getProject(activeProjectId);
+  const proj = taskHome(taskId);
   if (!proj) return;
   const task = proj.tasks.find(t => t.id === taskId);
   if (!task || !task.attendees) return;
@@ -7120,6 +7382,7 @@ function fmtDate(y, m, d) {
 // Assigns each task to a consistent lane index so multi-day bars never shift row
 // when solo tasks exist on only some of the days they span.
 function buildTaskLayout(dates) {
+  if (isMyCal()) return packTasks(myCalTasks(), dates);
   const proj = getProject(activeProjectId);
   if (!proj) return new Map(dates.map(d => [d, []]));
   return packTasks(proj.tasks, dates);
@@ -7203,7 +7466,7 @@ function navigateWeeks(delta) {
 function startResize(e, taskId, side) {
   e.preventDefault();
   e.stopPropagation();
-  const proj = getProject(activeProjectId);
+  const proj = taskHome(taskId);
   const task = proj && proj.tasks.find(t => t.id === taskId);
   if (!task) return;
   isResizing = true;
@@ -7263,7 +7526,7 @@ function onResizeUp() {
 // ── MOVE TASK ──
 // grabDate: which day of the task was dragged. The drop target becomes that day's new position.
 function moveTask(taskId, dropDate, grabDate) {
-  const proj = getProject(activeProjectId);
+  const proj = taskHome(taskId);
   if (!proj) return;
   const task = proj.tasks.find(t => t.id === taskId);
   if (!task) return;
@@ -7301,7 +7564,7 @@ function moveTask(taskId, dropDate, grabDate) {
 }
 
 function copyTask(taskId, dropDate, grabDate) {
-  const proj = getProject(activeProjectId);
+  const proj = taskHome(taskId);
   if (!proj) return;
   const orig = proj.tasks.find(t => t.id === taskId);
   if (!orig) return;
@@ -7399,7 +7662,8 @@ function getPanelLOE() {
 }
 
 function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) {
-  if (!activeProjectId) return;
+  // Editing resolves through the task's own project; only creating needs one.
+  if (taskId ? !taskHome(taskId) : !activeProjectId) return;
 
   const fieldTask   = document.getElementById('panelFieldTask');
   const fieldLOE    = document.getElementById('panelFieldLOE');
@@ -7416,7 +7680,7 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
   _badge.onclick = null; _badge.style.cursor = ''; _badge.title = '';
 
   if (mode === 'edit') {
-    const proj = getProject(activeProjectId);
+    const proj = taskHome(taskId);
     if (!proj) return;
     const task = proj.tasks.find(t => t.id === taskId);
     if (!task) return;
@@ -7450,7 +7714,7 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     document.getElementById('panelDelete').classList.add('hidden');
 
   } else if (mode === 'edit-review') {
-    const proj = getProject(activeProjectId);
+    const proj = taskHome(taskId);
     if (!proj) return;
     const task = proj.tasks.find(t => t.id === taskId);
     if (!task) return;
@@ -7472,7 +7736,7 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     document.getElementById('panelDelete').classList.remove('hidden');
 
   } else if (mode === 'add-attendee') {
-    const proj = getProject(activeProjectId);
+    const proj = taskHome(taskId);
     if (!proj) return;
     const task = proj.tasks.find(t => t.id === taskId);
     if (!task) return;
@@ -7485,7 +7749,7 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     if (!prefillPerson) return;
     if (!task.attendees) task.attendees = [];
     task.attendees.push({ id: genId(), role, category, person: prefillPerson, color });
-    addToRoster(role, prefillPerson); // adds to roster + records name history
+    addToRoster(role, prefillPerson, proj); // the chip's project's roster + name history
     maybeAutoLeadProducer(proj, role, prefillPerson);
     saveState();
     renderCalendar();
@@ -7494,7 +7758,7 @@ function openPanel(mode, dateStr, taskId, role, category, color, prefillPerson) 
     return;
 
   } else if (mode === 'edit-duedate') {
-    const proj = getProject(activeProjectId);
+    const proj = taskHome(taskId);
     if (!proj) return;
     const task = proj.tasks.find(t => t.id === taskId);
     if (!task) return;
@@ -7571,9 +7835,9 @@ function closePanel() {
 }
 
 function savePanel() {
-  if (!panelContext || !activeProjectId) return;
+  if (!panelContext) return;
   const taskName = document.getElementById('panelTask').value.trim();
-  const proj = getProject(activeProjectId);
+  const proj = panelContext.taskId ? taskHome(panelContext.taskId) : getProject(activeProjectId);
   if (!proj) return;
 
   const loe = getPanelLOE();
@@ -7585,7 +7849,7 @@ function savePanel() {
 
   } else if (panelContext.mode === 'create-review') {
     const lbl  = panelContext.label || 'Review';
-    proj.tasks.push({
+    const task = {
       id: genId(),
       date: panelContext.date,
       isReview: true,
@@ -7594,7 +7858,9 @@ function savePanel() {
       loe,
       color: REVIEW_COLOR,
       attendees: []
-    });
+    };
+    proj.tasks.push(task);
+    myCalClaim(proj, task);
 
   } else if (panelContext.mode === 'edit-review') {
     const task = proj.tasks.find(t => t.id === panelContext.taskId);
@@ -7614,7 +7880,7 @@ function savePanel() {
 function deleteFromPanel() {
   if (!panelContext) return;
   if (panelContext.mode !== 'edit' && panelContext.mode !== 'edit-review' && panelContext.mode !== 'edit-duedate') return;
-  const proj = getProject(activeProjectId);
+  const proj = taskHome(panelContext.taskId);
   if (!proj) return;
   proj.tasks = proj.tasks.filter(t => t.id !== panelContext.taskId);
   saveState();
@@ -7691,7 +7957,7 @@ function openTypeSwitcher(e, taskId, currentType) {
   // Inside a Time Off project the only meaningful swap is PTO ↔ Holiday — that
   // project's palette can't even create the other types, so offering Studio
   // Shoot here is a mis-click waiting to happen.
-  const defs = isPtoProject(getProject(activeProjectId))
+  const defs = isPtoProject(taskHome(taskId))
     ? TYPE_SWITCHER_DEFS.filter(d => d.label === 'PTO' || d.label === 'Holiday')
     : TYPE_SWITCHER_DEFS;
   defs.forEach(def => {
@@ -7716,16 +7982,11 @@ function openTypeSwitcher(e, taskId, currentType) {
 function closeTypeSwitcher() { document.getElementById('typeSwitcher').classList.add('hidden'); }
 
 function convertTask(taskId, newType) {
-  // Look in the active project first, then anywhere. The switcher can outlive
+  // Resolve through taskHome, not the active project. The switcher can outlive
   // the selection that opened it (closePanel runs before it opens, and a remote
   // sync can re-home a task mid-menu), and scoping the lookup to the active
   // project made that failure completely silent — the click just did nothing.
-  let proj = getProject(activeProjectId);
-  let task = proj && (proj.tasks || []).find(t => t.id === taskId);
-  if (!task) {
-    proj = (state.projects || []).find(p => (p.tasks || []).some(t => t.id === taskId));
-    task = proj && proj.tasks.find(t => t.id === taskId);
-  }
+  const task = getActiveTask(taskId);
   if (!task) { console.warn('convertTask: task not found', taskId); return; }
   const REVIEW_TYPES = ['Review', 'Meeting', 'Studio Shoot', 'On-Location Shoot', 'Studio Work'];
   // Chips are created with taskName preset to their type's own name, so a PTO
@@ -10400,6 +10661,20 @@ function renderExportPanel() {
   if (titleEl) titleEl.textContent = TAB_TITLES[exportTabActive] || '';
   content.innerHTML = '';
 
+  // My Calendar spans many projects: no exports, and the project tabs follow
+  // the target — with none picked there is nothing for them to show.
+  if (isMyCal()) {
+    const msg = ['text', 'table', 'png', 'invites-web'].includes(exportTabActive)
+      ? 'Exports aren’t available in My Calendar. Leave it (🗓 in the header) to export a project.'
+      : !getProject(activeProjectId) ? 'Pick one of your projects on the left to see it here.' : '';
+    if (msg) {
+      const e = document.createElement('div');
+      e.className = 'pi-empty';
+      e.textContent = msg;
+      content.appendChild(e);
+      return;
+    }
+  }
   // These tabs render a single project's schedule; a folder has none of its own.
   if (isFolderView() && ['text', 'table', 'png', 'invites-web'].includes(exportTabActive)) {
     const e = document.createElement('div');
@@ -11462,7 +11737,17 @@ function initFirebase() {
         const hashId = hashMatch ? decodeURIComponent(hashMatch[1]) : null;
         const savedId = localStorage.getItem('prepro_active_project');
         const roots = getRootProjects();
-        if (hashId && getProject(hashId)) activeProjectId = hashId;
+        if (hashId && getProject(hashId) && myCalOn) {
+          // A deep link (Dash click-through) asks for one project, so leave My
+          // Calendar; it comes back to the link's project, not the old one.
+          myCalOn = false;
+          try { localStorage.setItem('prepro_mycal', '0'); } catch (_) {}
+        }
+        if (isMyCal()) {
+          const t = localStorage.getItem('prepro_mycal_target');
+          activeProjectId = t && projectIsMine(getProject(t)) ? t : null;
+        }
+        else if (hashId && getProject(hashId)) activeProjectId = hashId;
         else if (savedId && getProject(savedId)) activeProjectId = savedId;
         else if (roots.length) activeProjectId = roots[0].id;
         viewStart = getWeekStart();
@@ -11512,9 +11797,9 @@ function setupInitListeners() {
   window.addEventListener('storage', e => {
     if (e.key !== 'dash_me') return;
     myPerson = e.newValue || null;
-    renderMePicker();
-    if (exportOpen) renderExportPanel();
+    onMyPersonChanged();
   });
+  document.getElementById('myCalToggle').addEventListener('click', () => setMyCal(!isMyCal()));
 
   // New project
   document.getElementById('btnNewProject').addEventListener('click', () => {

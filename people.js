@@ -367,3 +367,25 @@ function mergePersonRecords(from, into) {
   savePeopleRecords();
   return true;
 }
+
+// ── A PERSON'S PROJECT COLOURS ──
+// Dash's Calendar panel and team.html's My Calendar both colour each of one
+// person's projects, and a project has to be the same colour on both pages.
+// One rule, here: name order across the person's active, real-work projects
+// that hold at least one of their tasks — ALL of them, not just the ones in
+// view, so a colour doesn't shift as you page. Anything outside that set (time
+// off / admin buckets, ghosts, completed) gets no entry; callers pick a neutral.
+// Kept clear of the milestone red and the time-off amber both pages use.
+var PERSON_PROJECT_PALETTE = ['#4a90d9', '#4cba6a', '#9b6bd6', '#2bb5b0', '#e06ca0', '#7a8cff',
+                              '#8fb33a', '#e0844a', '#3fa37a', '#b87ad9', '#5bb8e8', '#d0698a'];
+function personProjectColors(projects, isMine, isNonWork) {
+  var map = new Map();
+  (projects || [])
+    .filter(function (p) {
+      return p && !p.completed && !p.onHold && !p.cancelled && !p.draft && !p.ghost &&
+        !isNonWork(p) && (p.tasks || []).some(isMine);
+    })
+    .sort(function (a, b) { return (a.name || '').localeCompare(b.name || ''); })
+    .forEach(function (p, i) { map.set(p.id, PERSON_PROJECT_PALETTE[i % PERSON_PROJECT_PALETTE.length]); });
+  return map;
+}

@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261019a';
+window.PREPRO_BUILD = '20261019b';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,25 +26,25 @@ window.PREPRO_BUILD = '20261019a';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20261019a"></script>
+<script type="module" src="./auth.js?v=20261019b"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261019a"></script>
+<script src="./whatsnew.js?v=20261019b"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and ops.html. -->
-<script src="./people.js?v=20261019a"></script>
+<script src="./people.js?v=20261019b"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261019a"></script>
+<script src="./commitments.js?v=20261019b"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261019a"></script>
+<script src="./dossier.js?v=20261019b"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261019a"></script>
+<script src="./prepro-llm.js?v=20261019b"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261019a"></script>
+<script src="./prepro-ai.js?v=20261019b"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -3678,10 +3678,6 @@ function taskIsForSelected(t) {
 // change what the rest of the dashboard says. The window follows the header
 // date instead, and ‹ › offset from it; changing the header date resets that.
 const PC_MODE_KEY = 'dash_calendar_mode';
-// Kept clear of the milestone red and the time-off amber the rest of the
-// dashboard uses, so a project colour never reads as either.
-const PC_PALETTE = ['#4a90d9', '#4cba6a', '#9b6bd6', '#2bb5b0', '#e06ca0', '#7a8cff',
-                    '#8fb33a', '#e0844a', '#3fa37a', '#b87ad9', '#5bb8e8', '#d0698a'];
 const PC_OFF_COLOR = '#c8923a';
 const PC_NONWORK_COLOR = '#6a6a85';
 const PC_TL_WEEKS = 6;       // timeline window
@@ -3701,16 +3697,10 @@ function pcFmtMD(d) {
   return MONTH_ABBR[x.getMonth()] + ' ' + x.getDate();
 }
 
-// Colour per project, by name order across ALL of this person's active
-// projects rather than just the ones in view, so a project keeps its colour
-// while you page around.
+// Colour per project. The rule lives in people.js (personProjectColors) because
+// team.html's My Calendar colours the same projects and they must agree.
 function pcProjectColors() {
-  const map = new Map();
-  (state.projects || [])
-    .filter(p => isActiveProject(p) && !isNonWorkProject(p) && (p.tasks || []).some(taskIsForSelected))
-    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-    .forEach((p, i) => map.set(p.id, PC_PALETTE[i % PC_PALETTE.length]));
-  return map;
+  return personProjectColors(state.projects, taskIsForSelected, isNonWorkProject);
 }
 
 // Every task of the selected person overlapping [winStart, winEnd]. Same

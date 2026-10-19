@@ -17,6 +17,29 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-10-19a',
+    title: 'My Calendar: all your work, and only yours',
+    dateLabel: 'Oct 19, 2026',
+    groups: [
+      {
+        area: 'Team · My Calendar',
+        items: [
+          { tag: 'new', text: 'The 🗓 button next to light/dark mode turns Team into your own calendar. Every chip you are on, from every active project you are on, shows on one calendar. Other people’s work is left out. Pick who you are first; the button needs to know.' },
+          { tag: 'new', text: 'The left panel lists only your projects: ones where you are on the Team tab, on a chip, or lead producer. Click one to add to it, and "Adding to:" appears next to your name. Click it again, or the ✕, to stop adding to it.' },
+          { tag: 'new', text: 'Chips you drop in My Calendar go into the project you picked, with your name already on them. If you haven’t picked one, the drop is refused with a red warning rather than guessing where it should go.' },
+          { tag: 'new', text: 'Each chip is labelled with its project and has a coloured band along the top. A project is the same colour here as on Dash’s Calendar panel. With a project picked, chips from your other projects fade back, but you can still move, resize and edit them.' },
+          { tag: 'new', text: 'Exports are hidden while My Calendar is on. Turn it off to export a project, and you’re back on the project you had open.' }
+        ]
+      },
+      {
+        area: 'Team · Calendar',
+        items: [
+          { tag: 'fix', text: 'Multi-day chips no longer step up or down from one day to the next. A tall block above a chip (a meeting with a long attendee list, say) used to push it lower on some days than others, so it looked broken in pieces. Chips now stay level across their whole span, in the calendar and in the PNG export.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-10-13a',
     title: 'Everything you are on, on one calendar',
     dateLabel: 'Oct 13, 2026',
