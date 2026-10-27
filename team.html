@@ -6,13 +6,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-<title>PRE-PRO — Team</title>
+<!-- @team --><title>PRE-PRO — Team</title><!-- /@team -->
+<!-- @local <title>PRE-PRO</title> -->
 
 <!-- Cache-bust / auto-update: bump PREPRO_BUILD + version.json + the ?v= tokens
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261027a';
+window.PREPRO_BUILD = '20261027b';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -28,28 +29,34 @@ window.PREPRO_BUILD = '20261027a';
 })();
 </script>
 
+<!-- @team -->
+<!-- index.html is generated from this file by build-index.mjs: blocks between
+     @team markers are dropped from it, and each @local comment is unwrapped into
+     it. Here in team.html the @local lines are inert comments. -->
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20261027a"></script>
+<script type="module" src="./auth.js?v=20261027b"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261027a"></script>
+<script src="./whatsnew.js?v=20261027b"></script>
+<!-- /@team -->
+<!-- @local <script src="./local-fb.js?v=20261027b"></script> -->
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20261027a"></script>
+<script src="./people.js?v=20261027b"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261027a"></script>
+<script src="./commitments.js?v=20261027b"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261027a"></script>
+<script src="./dossier.js?v=20261027b"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261027a"></script>
+<script src="./prepro-llm.js?v=20261027b"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261027a"></script>
+<script src="./prepro-ai.js?v=20261027b"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20261027a"></script>
+<script src="./xlsx.full.min.js?v=20261027b"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1075,7 +1082,7 @@ textarea.pi-edit { resize: vertical; min-height: 46px; white-space: pre-wrap; }
 <body>
 
 <header>
-  <span class="header-title">PRE-PRO <span style="font-size:11px;font-weight:500;opacity:.6">Team</span></span>
+  <span class="header-title">PRE-PRO<!-- @team --> <span style="font-size:11px;font-weight:500;opacity:.6">Team</span><!-- /@team --></span>
   <span id="fbStatus" style="font-size:11px;font-weight:600;color:var(--dim);display:flex;align-items:center;gap:5px;margin-right:auto;margin-left:12px;">
     <span id="fbDot" style="width:7px;height:7px;border-radius:50%;background:#555;display:inline-block;"></span>
     <span id="fbLabel">Connecting…</span>
@@ -1152,10 +1159,12 @@ textarea.pi-edit { resize: vertical; min-height: 46px; white-space: pre-wrap; }
           <button type="button" class="proj-filter-clearall hidden" id="projFilterClearAll">Clear filters</button>
         </div>
       </div>
+      <!-- @team -->
       <a href="ops.html" target="_blank" class="data-mig-btn" title="Ops mode — team workload view">📊 Ops</a>
       <a href="dash.html" target="_blank" class="data-mig-btn" title="Personal dashboard view">📋 Dash</a>
       <!-- href re-pointed at CEA_BASE on init so the URL lives in one place -->
       <a href="https://corporateexpress.pegacloud.io/prweb/sso/app/CampaignExecution" id="ceaHomeLink" target="_blank" rel="noopener" class="data-mig-btn" title="CEA landing page (Pega)">🔗 CEA</a>
+      <!-- /@team -->
       <input type="file" id="importFileInput" accept=".json" style="display:none">
       <input type="file" id="excelImportInput" accept=".xlsx,.xls" style="display:none">
     </div>
@@ -1278,12 +1287,14 @@ textarea.pi-edit { resize: vertical; min-height: 46px; white-space: pre-wrap; }
     <div class="tools-rail-tab" data-tab="table"><span class="tr-icon">📊</span>Table</div>
     <div class="tools-rail-tab" data-tab="png"><span class="tr-icon">🖼️</span>PNG</div>
     <div class="tools-rail-tab" data-tab="invites-web"><span class="tr-icon">📅</span>Invites</div>
-    <div class="tools-rail-tab" data-tab="cea"><span class="tr-icon">🔗</span>CEA</div>
+    <!-- @team --><div class="tools-rail-tab" data-tab="cea"><span class="tr-icon">🔗</span>CEA</div><!-- /@team -->
     <!-- Bottom-docked actions: Settings sits above the admin button -->
     <div class="tools-rail-foot">
       <div class="tools-rail-action" id="btnSettings" title="Settings: import/export data, manage people"><span class="tr-icon">⚙</span>Settings</div>
+      <!-- @team -->
       <!-- Admin button (auth.js docks the admin-only invite/approve button here for the admin) -->
       <div id="pp-admin-slot"></div>
+      <!-- /@team -->
     </div>
   </div>
 </div>
@@ -1331,6 +1342,14 @@ textarea.pi-edit { resize: vertical; min-height: 46px; white-space: pre-wrap; }
 
 <script>
 'use strict';
+
+// ── EDITION ──
+// This page is the shared, Firebase-backed Team build. index.html is generated
+// from it (build-index.mjs) as the local single-user edition: local-fb.js stands
+// in for Firebase and sets PREPRO_LOCAL, and everything Pega-specific — CEA
+// links, the Video Scheduler Excel import, Pega handles, the team distribution
+// lists — is switched off with this flag.
+const TEAM_EDITION = !window.PREPRO_LOCAL;
 
 // ── CONSTANTS ──
 const ROLE_CATS = [
@@ -1707,6 +1726,7 @@ if (!COPY_TARGETS.some(t => t[0] === exportCopyTarget)) exportCopyTarget = 'outl
 // whose localStorage still points at it falls through to projectinfo below.
 const TAB_TITLES = { projectinfo: 'Project Info & Notes', roster: 'Role Assignees', plan: 'Plan & Open Loops', text: 'Text Export', table: 'Table / Excel', png: 'PNG Export', 'invites-web': 'Meeting Invites', cea: 'CEA' };
 // Normalize any stale/removed tab id from localStorage (e.g. the old Trello tab).
+if (!TEAM_EDITION) delete TAB_TITLES.cea;
 if (!TAB_TITLES[exportTabActive]) exportTabActive = 'projectinfo';
 let exportOpen       = false;
 let exportOptRoles      = false;
@@ -2946,7 +2966,8 @@ function renderDataSettings(c) {
   hint.textContent = 'Export downloads a JSON backup of every project, name history, and saved emails. Import merges projects by ID (overwrites duplicates) and adds new names/emails.';
   c.appendChild(hint);
 
-  // ── Excel ticket import ──
+  // ── Excel ticket import ── (Pega Video Scheduler format, Team edition only)
+  if (!TEAM_EDITION) return;
   const xlTitle = document.createElement('div');
   xlTitle.className = 'settings-section-title';
   xlTitle.style.marginTop = '24px';
@@ -3190,7 +3211,9 @@ function renderPeopleSettings(c) {
 
   const hint = document.createElement('div');
   hint.className = 'settings-hint';
-  hint.textContent = 'Everyone belongs to exactly one team — that is what groups them in the roster panel, so nobody shows up twice. Setting a country puts that person on every Holiday matching it, automatically, and re-checks the holidays already on the calendar. “Also known as” catches the alternate spellings that imports arrive with, so a re-import matches the person you already have instead of creating a duplicate. Email auto-fills the To: line when exporting meetings to Outlook. Video Team members also get a “Pega handle” box — the username from the export’s Service Provider column — which lets an Excel import auto-assign that person as lead producer. Sunset hides someone from every selection list while keeping their existing assignments (reversible) — give them a last day too, and the workload views stop counting them as available after it. Delete removes them from every roster and unassigns their tasks. Merging moves all roles, rosters, and assignments from one person to another, and records the old name as an alias.';
+  hint.textContent = 'Everyone belongs to exactly one team — that is what groups them in the roster panel, so nobody shows up twice. Setting a country puts that person on every Holiday matching it, automatically, and re-checks the holidays already on the calendar. “Also known as” catches the alternate spellings that imports arrive with, so a re-import matches the person you already have instead of creating a duplicate. Email auto-fills the To: line when exporting meetings to Outlook.' +
+    (TEAM_EDITION ? ' Video Team members also get a “Pega handle” box — the username from the export’s Service Provider column — which lets an Excel import auto-assign that person as lead producer.' : '') +
+    ' Sunset hides someone from every selection list while keeping their existing assignments (reversible) — give them a last day too, and the workload views stop counting them as available after it. Delete removes them from every roster and unassigns their tasks. Merging moves all roles, rosters, and assignments from one person to another, and records the old name as an alias.';
   c.appendChild(hint);
 
   const refreshAll = () => {
@@ -3293,7 +3316,7 @@ function renderPeopleSettings(c) {
       // Pega handle — Video Team only, because the export's "Service Provider"
       // column only ever names the producer. Mapping it here is what lets an
       // import assign the lead producer automatically.
-      if (rec.team === 'video') {
+      if (TEAM_EDITION && rec.team === 'video') {
         const handle = document.createElement('input');
         handle.className = 'phandle';
         handle.type = 'text';
@@ -3754,7 +3777,7 @@ function setFbStatus(connected) {
   const label = document.getElementById('fbLabel');
   if (!dot || !label) return;
   dot.style.background   = connected ? '#4cba6a' : '#e05555';
-  label.textContent      = connected ? 'Live' : 'Offline';
+  label.textContent      = !TEAM_EDITION ? 'Saved in this browser' : connected ? 'Live' : 'Offline';
   label.style.color      = connected ? '#4cba6a' : '#e05555';
 }
 function genId() {
@@ -9030,10 +9053,15 @@ function renderPtoInvitesPanel(content, proj) {
     '<div style="margin:0;">• <b>Notify Team</b>: all-day <b>Free</b>, reminder off, responses off, team addresses already filled in. <b>Press Edit → Send.</b> You won\'t get a copy — Outlook never sends you your own invite; it\'s already on your calendar, and in Sent Items.</div>';
   content.appendChild(note);
 
-  const teamEmails = [
+  // The local edition has no distribution lists, so it addresses the Video
+  // Team members individually — whoever has an email saved in Settings → People.
+  const teamEmails = TEAM_EDITION ? [
     { name: 'Video Team', email: VIDEO_TEAM_DIST },
     { name: 'Brand Creative', email: BRAND_CREATIVE_DIST }
-  ];
+  ] : Object.keys(peopleRecords)
+        .filter(n => (peopleRecords[n] || {}).team === 'video' && getPersonEmail(n).includes('@'))
+        .sort()
+        .map(n => ({ name: n, email: getPersonEmail(n) }));
 
   const list = document.createElement('div');
   list.className = 'export-table-wrap';
@@ -9088,8 +9116,8 @@ function renderPtoInvitesPanel(content, proj) {
       // Generic ticket link, copied from the CEA URL used in project names so it
       // can be changed here independently later.
       const TICKET_URL = 'https://corporateexpress.pegacloud.io/prweb/sso/app/CampaignExecution';
-      const oofBody = 'Thank you for your message! I am out of office and will return on ' + backStr + '.\n\n' +
-        'If you would like to request a video, you can submit a ticket here: ' + TICKET_URL;
+      const oofBody = 'Thank you for your message! I am out of office and will return on ' + backStr + '.' +
+        (TEAM_EDITION ? '\n\nIf you would like to request a video, you can submit a ticket here: ' + TICKET_URL : '');
       const ics = buildPtoICS({
         // Fresh UID per download. A stable UID gets tombstoned by Exchange after
         // the first failed/deleted import, and every later import of that same
@@ -9107,8 +9135,9 @@ function renderPtoInvitesPanel(content, proj) {
     btn2.className = 'btn btn-ghost';
     btn2.style.flexShrink = '0';
     btn2.textContent = '👥 Notify Team';
-    btn2.title = 'Opens as your own appointment — press Edit → Send. Goes to ' +
-      teamEmails.map(r => r.email).join(', ');
+    btn2.title = teamEmails.length
+      ? 'Opens as your own appointment — press Edit → Send. Goes to ' + teamEmails.map(r => r.email).join(', ')
+      : 'Opens as your own appointment with no one on it yet — save emails for the Video Team in Settings → People to fill the To: line.';
     btn2.addEventListener('click', () => {
       const teamSubject = ptoOnSubject(people, isHoli ? subjectSelf : 'PTO');
       // METHOD:PUBLISH, mirroring the OOF file that imports and sticks.
@@ -9679,7 +9708,7 @@ function renderProjectInfo() {
     l.textContent = label;
     const value = document.createElement('div');
     value.className = 'pi-value';
-    if (kind === 'cea') {
+    if (kind === 'cea' && TEAM_EDITION) {
       const a = document.createElement('a');
       a.textContent = v;
       a.href = '#';
@@ -9696,7 +9725,8 @@ function renderProjectInfo() {
   if (!shown) {
     const e = document.createElement('div');
     e.className = 'pi-empty';
-    e.textContent = 'No ticket data on this project yet. Import from Excel to populate it.';
+    e.textContent = TEAM_EDITION ? 'No ticket data on this project yet. Import from Excel to populate it.'
+                                 : 'No ticket data on this project yet.';
     grid.appendChild(e);
   }
   wrap.appendChild(grid);
