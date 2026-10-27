@@ -12,7 +12,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261019b';
+window.PREPRO_BUILD = '20261027a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -29,27 +29,27 @@ window.PREPRO_BUILD = '20261019b';
 </script>
 
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20261019b"></script>
+<script type="module" src="./auth.js?v=20261027a"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261019b"></script>
+<script src="./whatsnew.js?v=20261027a"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20261019b"></script>
+<script src="./people.js?v=20261027a"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261019b"></script>
+<script src="./commitments.js?v=20261027a"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261019b"></script>
+<script src="./dossier.js?v=20261027a"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261019b"></script>
+<script src="./prepro-llm.js?v=20261027a"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261019b"></script>
+<script src="./prepro-ai.js?v=20261027a"></script>
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20261019b"></script>
+<script src="./xlsx.full.min.js?v=20261027a"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -2170,10 +2170,18 @@ function decorateMyCalChip(el, task) {
 }
 let myCalColors = new Map();
 
+// Delete and merge touch four Firebase slices. Each one is saved the moment it
+// is edited, never batched at the end: this page listens on the whole `prepro`
+// root, and Firebase fires that listener synchronously inside every set(). A
+// save of one slice while another still held unsaved local edits handed
+// applyRemoteState the stale server copy of the edited slice, which it adopted
+// as a "remote change" — so the record merged but the rosters, tasks and name
+// history snapped back, and the merged-away person stayed in the list.
 function deletePersonEverywhere(name) {
   Object.keys(nameHistory || {}).forEach(role => {
     nameHistory[role] = (nameHistory[role] || []).filter(n => n !== name);
   });
+  saveNameHistory();
   (state.projects || []).forEach(p => {
     const roster = p.roster || {};
     Object.keys(roster).forEach(role => {
@@ -2185,11 +2193,10 @@ function deletePersonEverywhere(name) {
     });
     if (p.leadProducer === name) p.leadProducer = null;
   });
-  delete peopleEmails[name];
-  deletePersonRecord(name); // record + legacy sunset entry, from people.js
-  saveNameHistory();
-  savePeopleEmails();
   saveState();
+  delete peopleEmails[name];
+  savePeopleEmails();
+  deletePersonRecord(name); // record + legacy sunset entry, from people.js
 }
 
 function mergePersonInto(from, into) {
@@ -2201,6 +2208,7 @@ function mergePersonInto(from, into) {
       if (!nameHistory[role].includes(into)) nameHistory[role].push(into);
     }
   });
+  saveNameHistory();
   (state.projects || []).forEach(p => {
     const roster = p.roster || {};
     Object.keys(roster).forEach(role => {
@@ -2224,17 +2232,15 @@ function mergePersonInto(from, into) {
     });
     if (p.leadProducer === from) p.leadProducer = into;
   });
+  saveState();
   if (!peopleEmails[into] && peopleEmails[from]) peopleEmails[into] = peopleEmails[from];
   delete peopleEmails[from];
+  savePeopleEmails();
 
   // Fold the two records together. mergePersonRecords also records the
   // merged-away name as an alias, so whatever kept re-creating the duplicate
   // matches the survivor next time instead of minting it again.
   mergePersonRecords(from, into);
-
-  saveNameHistory();
-  savePeopleEmails();
-  saveState();
 }
 
 // ── SETTINGS MODAL ──
@@ -11688,13 +11694,11 @@ function applyRemoteState(snapshot) {
     }
   }
 
+  // Taken as-is. This used to re-add every DEFAULT_NAME_HISTORY name on each
+  // snapshot, which resurrected any default name ("Liz", "Chuck") that had been
+  // merged away or deleted — the next page load put them straight back.
   if (data.nameHistory && JSON.stringify(data.nameHistory) !== JSON.stringify(nameHistory)) {
     nameHistory = data.nameHistory;
-    // Seed defaults for any role not yet in history
-    Object.entries(DEFAULT_NAME_HISTORY).forEach(([role, names]) => {
-      if (!nameHistory[role]) nameHistory[role] = [];
-      names.forEach(n => { if (!nameHistory[role].includes(n)) nameHistory[role].push(n); });
-    });
     changed = true;
   }
 
