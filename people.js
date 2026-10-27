@@ -318,10 +318,13 @@ function personCapacityOn(name, dateStr) {
  * forget it — which is exactly what went wrong before this module existed.
  * ─────────────────────────────────────────────────────────────────────────── */
 function deletePersonRecord(name) {
+  // Save each slice right after changing it. Every save fires team.html's root
+  // listener synchronously; saving sunset while the record's deletion was still
+  // unsaved let that listener adopt the stored record back, so deleting a
+  // sunset person snapped back (the same bug class as e9c9e5f).
   var touched = false;
-  if (peopleRecords[name]) { delete peopleRecords[name]; touched = true; }
+  if (peopleRecords[name]) { delete peopleRecords[name]; touched = true; savePeopleRecords(); }
   if (sunsetPeople[name]) { delete sunsetPeople[name]; saveSunsetPeople(); }
-  if (touched) savePeopleRecords();
   return touched;
 }
 // Fold two records together. The merged-away name becomes an alias of the

@@ -643,11 +643,23 @@ var PP_ADVISORY_SYSTEM = [
   '- summary: one sentence a producer could read in three seconds.'
 ].join('\n');
 
+// Dossier options for the advisory. Completions come from whichever page loaded
+// this file — dash keeps them (isTaskDone), team reads dash's copy
+// (isTaskDoneHere). The local edition has no source, and passing none makes the
+// dossier say nothing about done/overdue instead of calling all past work late.
+function ppDossierOpts() {
+  var done = window.PREPRO_LOCAL ? null
+    : typeof isTaskDoneHere === 'function' ? isTaskDoneHere
+    : typeof isTaskDone === 'function' ? isTaskDone
+    : null;
+  return done ? { today: ppAiToday(), isTaskDone: done } : { today: ppAiToday() };
+}
+
 function ppBuildAdvisoryPrompt(proj) {
   return [
     'Today is ' + ppAiToday() + '.',
     '',
-    buildProjectDossier(proj, { today: ppAiToday() }),
+    buildProjectDossier(proj, ppDossierOpts()),
     '',
     'Return the JSON described by the schema.'
   ].join('\n');
@@ -726,7 +738,7 @@ function ppClearAdvisory(projectId) {
 }
 
 function ppDossierHash(proj) {
-  return ppHash(buildProjectDossier(proj, { today: ppAiToday() }));
+  return ppHash(buildProjectDossier(proj, ppDossierOpts()));
 }
 
 // Is the cached analysis still about the project as it stands? A false here is

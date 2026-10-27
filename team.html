@@ -13,7 +13,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261027b';
+window.PREPRO_BUILD = '20261027c';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -34,29 +34,31 @@ window.PREPRO_BUILD = '20261027b';
      @team markers are dropped from it, and each @local comment is unwrapped into
      it. Here in team.html the @local lines are inert comments. -->
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20261027b"></script>
+<script type="module" src="./auth.js?v=20261027c"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261027b"></script>
+<script src="./whatsnew.js?v=20261027c"></script>
 <!-- /@team -->
-<!-- @local <script src="./local-fb.js?v=20261027b"></script> -->
+<!-- @local <script src="./local-fb.js?v=20261027c"></script> -->
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20261027b"></script>
+<script src="./people.js?v=20261027c"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261027b"></script>
+<script src="./commitments.js?v=20261027c"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261027b"></script>
+<script src="./dossier.js?v=20261027c"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261027b"></script>
+<script src="./prepro-llm.js?v=20261027c"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261027b"></script>
+<script src="./prepro-ai.js?v=20261027c"></script>
+<!-- @team -->
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20261027b"></script>
+<script src="./xlsx.full.min.js?v=20261027c"></script>
+<!-- /@team -->
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1142,7 +1144,7 @@ textarea.pi-edit { resize: vertical; min-height: 46px; white-space: pre-wrap; }
     <div class="data-migration">
       <div class="proj-filter">
         <div class="proj-filter-row">
-          <input type="text" id="projFilterSearch" class="proj-filter-input" placeholder="Search projects…" autocomplete="off" title="Search across project name, Case ID, type, region, synopsis, notes and people">
+          <input type="text" id="projFilterSearch" class="proj-filter-input" placeholder="Search projects…" autocomplete="off" title="Search across project name, ID, type, region, synopsis, notes and people">
         </div>
         <div class="proj-filter-row">
           <input type="text" id="projFilterName" class="proj-filter-input" placeholder="Filter by person…" list="projFilterNames" autocomplete="off" title="Show only projects this person is attached to">
@@ -1166,7 +1168,7 @@ textarea.pi-edit { resize: vertical; min-height: 46px; white-space: pre-wrap; }
       <a href="https://corporateexpress.pegacloud.io/prweb/sso/app/CampaignExecution" id="ceaHomeLink" target="_blank" rel="noopener" class="data-mig-btn" title="CEA landing page (Pega)">🔗 CEA</a>
       <!-- /@team -->
       <input type="file" id="importFileInput" accept=".json" style="display:none">
-      <input type="file" id="excelImportInput" accept=".xlsx,.xls" style="display:none">
+      <!-- @team --><input type="file" id="excelImportInput" accept=".xlsx,.xls" style="display:none"><!-- /@team -->
     </div>
   </div>
 
@@ -1322,6 +1324,7 @@ textarea.pi-edit { resize: vertical; min-height: 46px; white-space: pre-wrap; }
   </div>
 </div>
 
+<!-- @team -->
 <!-- Excel import review / audit overlay -->
 <div class="settings-overlay" id="excelReviewOverlay" style="display:none; z-index:10000;">
   <div class="settings-modal" id="excelReviewModal" style="width:min(1400px,98vw); max-height:92vh;">
@@ -1339,6 +1342,7 @@ textarea.pi-edit { resize: vertical; min-height: 46px; white-space: pre-wrap; }
     </div>
   </div>
 </div>
+<!-- /@team -->
 
 <script>
 'use strict';
@@ -1350,6 +1354,13 @@ textarea.pi-edit { resize: vertical; min-height: 46px; white-space: pre-wrap; }
 // links, the Video Scheduler Excel import, Pega handles, the team distribution
 // lists — is switched off with this flag.
 const TEAM_EDITION = !window.PREPRO_LOCAL;
+// index.html and team.html share an origin, so they share localStorage. Keys
+// that hold identity or point at project ids go through LS() so the local
+// edition keeps its own — otherwise "who are you" and the open project leak
+// between the two. Pure UI preferences (panel widths, export tab) stay shared.
+const LS = k => TEAM_EDITION ? k : 'local_' + k;
+// Who a note is signed by when nobody has said who they are.
+const NO_AUTHOR = TEAM_EDITION ? 'Team' : 'Me';
 
 // ── CONSTANTS ──
 const ROLE_CATS = [
@@ -1643,7 +1654,7 @@ function addNewPersonToTeam(rawName, teamKey) {
   const raw = (rawName || '').trim();
   if (!raw) return '';
   const name = resolvePersonName(raw) || raw;
-  if (hasPeopleRecords() && !getPerson(name)) {
+  if (peopleStoreInUse() && !getPerson(name)) {
     const t = getTeam(teamKey);
     upsertPerson(name, {
       team:        teamKey || '',
@@ -1654,6 +1665,13 @@ function addNewPersonToTeam(rawName, teamKey) {
   }
   addPersonToProject(name, teamKey);
   return name;
+}
+// New people get a record once the store is in use. An empty store with nobody
+// in it at all (a fresh local install) counts as in use: there is no one to
+// migrate, so holding off would only push every new person into the "needs a
+// home" pile and throw away the team they were just given.
+function peopleStoreInUse() {
+  return hasPeopleRecords() || collectAllPeople().length === 0;
 }
 // People shown on a role task = optional legacy single person + the attendee list.
 function taskPeople(task) {
@@ -1682,25 +1700,25 @@ let activeProjectId = null;
 let viewStart       = null; // YYYY-MM-DD of first visible day
 // Sidebar filter: show only projects a given person is attached to (optionally
 // only those where they are the lead producer). Persisted across reloads.
-let filterPerson   = (() => { try { return localStorage.getItem('prepro_filter_person') || ''; } catch(_) { return ''; } })();
-let filterLeadOnly = (() => { try { return localStorage.getItem('prepro_filter_leadonly') === '1'; } catch(_) { return false; } })();
+let filterPerson   = (() => { try { return localStorage.getItem(LS('prepro_filter_person')) || ''; } catch(_) { return ''; } })();
+let filterLeadOnly = (() => { try { return localStorage.getItem(LS('prepro_filter_leadonly')) === '1'; } catch(_) { return false; } })();
 // Free-text search across project fields. All active filters combine with AND.
 // Persisted across reloads like the others. (The old status filter was dropped —
 // projects already sort into their own status sections, so it was redundant.)
-let filterText     = (() => { try { return localStorage.getItem('prepro_filter_text') || ''; } catch(_) { return ''; } })();
+let filterText     = (() => { try { return localStorage.getItem(LS('prepro_filter_text')) || ''; } catch(_) { return ''; } })();
 function saveFilter() {
   try {
-    localStorage.setItem('prepro_filter_person', filterPerson);
-    localStorage.setItem('prepro_filter_leadonly', filterLeadOnly ? '1' : '0');
-    localStorage.setItem('prepro_filter_text', filterText);
+    localStorage.setItem(LS('prepro_filter_person'), filterPerson);
+    localStorage.setItem(LS('prepro_filter_leadonly'), filterLeadOnly ? '1' : '0');
+    localStorage.setItem(LS('prepro_filter_text'), filterText);
   } catch(_) {}
 }
 let expandedIds     = (() => {
-  try { return new Set(JSON.parse(localStorage.getItem('prepro_expanded_ids') || '[]')); }
+  try { return new Set(JSON.parse(localStorage.getItem(LS('prepro_expanded_ids')) || '[]')); }
   catch(_) { return new Set(); }
 })();
 function saveExpandedIds() {
-  try { localStorage.setItem('prepro_expanded_ids', JSON.stringify([...expandedIds])); } catch(_) {}
+  try { localStorage.setItem(LS('prepro_expanded_ids'), JSON.stringify([...expandedIds])); } catch(_) {}
 }
 let dragPayload     = null;
 let panelContext    = null;
@@ -1776,7 +1794,7 @@ let tlDateMap  = new Map();  // date string → column index
 // ── WHO ARE YOU ──
 // Same localStorage key dash.html stars into, so both pages share one identity.
 // Used for note attribution and to narrow the PTO invites to your own leave.
-let myPerson = localStorage.getItem('dash_me') || null;
+let myPerson = localStorage.getItem(LS('dash_me')) || null;
 // Task completions, mirrored read-only from prepro/dash. team.html has no other
 // way to know a past task is finished rather than late.
 let dashCompletions = {};
@@ -2027,7 +2045,11 @@ function renderMePicker() {
   const sel = document.getElementById('meSelect');
   const pick = document.getElementById('mePicker');
   if (!sel) return;
-  const names = collectAllPeople().filter(isVideoTeamPerson).map(p => p.name);
+  // Team lists the video team because that is dash's audience. Locally the one
+  // user can be on any team, so everyone active is a candidate.
+  const names = collectAllPeople()
+    .filter(p => TEAM_EDITION ? isVideoTeamPerson(p) : !isSunset(p.name))
+    .map(p => p.name);
   if (myPerson && !names.includes(myPerson)) names.push(myPerson);
   names.sort((a, b) => a.localeCompare(b));
 
@@ -2048,8 +2070,10 @@ function renderMePicker() {
 
 function setMyPerson(name) {
   myPerson = (name || '').trim() || null;
-  if (myPerson) localStorage.setItem('dash_me', myPerson);
-  else localStorage.removeItem('dash_me');
+  try {
+    if (myPerson) localStorage.setItem(LS('dash_me'), myPerson);
+    else localStorage.removeItem(LS('dash_me'));
+  } catch (_) {}
   onMyPersonChanged();
 }
 // Shared by the picker and the cross-tab `storage` sync. My Calendar is about
@@ -2076,12 +2100,12 @@ function onMyPersonChanged() {
 //     null, and then a drop is refused with a red warning instead of guessing;
 //   · every chip created here carries you, so it stays in your own view.
 // Existing chips edit in place in their own project (see taskHome).
-let myCalOn = localStorage.getItem('prepro_mycal') === '1';
-let myCalPrevProjectId = localStorage.getItem('prepro_mycal_prev') || null;
+let myCalOn = localStorage.getItem(LS('prepro_mycal')) === '1';
+let myCalPrevProjectId = localStorage.getItem(LS('prepro_mycal_prev')) || null;
 let myCalHome = new Map();   // taskId → project, rebuilt with each grid
 function isMyCal() { return myCalOn && !!myPerson; }
 function myCalPersistTarget() {
-  try { localStorage.setItem('prepro_mycal_target', activeProjectId || ''); } catch (_) {}
+  try { localStorage.setItem(LS('prepro_mycal_target'), activeProjectId || ''); } catch (_) {}
 }
 // A project belongs in My Calendar: a real (non-folder), active project you're on.
 function projectIsMine(p) {
@@ -2123,7 +2147,7 @@ function setMyCal(on) {
   closePanel();
   if (on) {
     myCalPrevProjectId = activeProjectId;
-    try { localStorage.setItem('prepro_mycal_prev', myCalPrevProjectId || ''); } catch (_) {}
+    try { localStorage.setItem(LS('prepro_mycal_prev'), myCalPrevProjectId || ''); } catch (_) {}
     // Start with nothing targeted: picking where new chips go is a deliberate act.
     activeProjectId = null;
     // Exports don't apply to a many-project view; land on Info instead.
@@ -2133,7 +2157,7 @@ function setMyCal(on) {
     activeProjectId = getProject(myCalPrevProjectId) ? myCalPrevProjectId : (roots.length ? roots[0].id : null);
   }
   myCalOn = on;
-  try { localStorage.setItem('prepro_mycal', on ? '1' : '0'); } catch (_) {}
+  try { localStorage.setItem(LS('prepro_mycal'), on ? '1' : '0'); } catch (_) {}
   myCalPersistTarget();
   calEarliestDate = null;
   document.querySelectorAll('.tools-rail-tab').forEach(t => t.classList.toggle('active', exportOpen && t.dataset.tab === exportTabActive));
@@ -2585,7 +2609,9 @@ function renderAiSettings(c) {
 
   const keyHint = document.createElement('div');
   keyHint.className = 'settings-hint';
-  keyHint.innerHTML = 'Make one at <a href="https://aistudio.google.com/app/api-keys" target="_blank" rel="noopener">aistudio.google.com/app/api-keys</a> — choose “Create API key in new project” so it lands on the free tier. It is stored in this browser only: never in the shared database, never in the repo, never visible to anyone else on the team.';
+  keyHint.innerHTML = 'Make one at <a href="https://aistudio.google.com/app/api-keys" target="_blank" rel="noopener">aistudio.google.com/app/api-keys</a> — choose “Create API key in new project” so it lands on the free tier. ' +
+    (TEAM_EDITION ? 'It is stored in this browser only: never in the shared database, never in the repo, never visible to anyone else on the team.'
+                  : 'It is stored in this browser only, and is never included in your backups.');
   c.appendChild(keyHint);
 
   const modelRow = document.createElement('div');
@@ -2852,12 +2878,12 @@ function renderMergeSettings(c) {
   const adTitle = document.createElement('div');
   adTitle.className = 'settings-section-title';
   adTitle.style.marginTop = '26px';
-  adTitle.textContent = 'Auto-detect duplicates · temporary';
+  adTitle.textContent = TEAM_EDITION ? 'Auto-detect duplicates · temporary' : 'Auto-detect duplicates';
   c.appendChild(adTitle);
 
   const adHint = document.createElement('div');
   adHint.className = 'settings-hint';
-  adHint.textContent = 'Scans for projects that share a Case ID or have the same name and groups them. Pick the keeper in each group and merge — uses the same conflict resolution as above.';
+  adHint.textContent = 'Scans for projects that ' + (TEAM_EDITION ? 'share a Case ID or ' : '') + 'have the same name and groups them. Pick the keeper in each group and merge — uses the same conflict resolution as above.';
   c.appendChild(adHint);
 
   const adBtn = document.createElement('button');
@@ -2963,7 +2989,8 @@ function renderDataSettings(c) {
 
   const hint = document.createElement('div');
   hint.className = 'settings-hint';
-  hint.textContent = 'Export downloads a JSON backup of every project, name history, and saved emails. Import merges projects by ID (overwrites duplicates) and adds new names/emails.';
+  hint.textContent = 'Export downloads a JSON backup of every project, open loop, and person (team, email, country, aliases). Import merges projects by ID (overwrites duplicates) and adds people you don’t already have.' +
+    (TEAM_EDITION ? '' : ' Everything lives in this browser only — export regularly, and before clearing site data.');
   c.appendChild(hint);
 
   // ── Excel ticket import ── (Pega Video Scheduler format, Team edition only)
@@ -2997,6 +3024,9 @@ function doExportData() {
     prepro_name_history: JSON.stringify(nameHistory),
     prepro_people_emails: JSON.stringify(peopleEmails),
     prepro_sunset_people: JSON.stringify(sunsetPeople),
+    // Team, roles, country, aliases, last day. In the local edition this file
+    // is the only copy there is.
+    prepro_people: JSON.stringify(peopleRecords),
     // Open loops. A separate Firebase node, so without this line the one copy
     // of every commitment is whatever Firebase happens to be holding.
     prepro_commitments: JSON.stringify(commitments)
@@ -3021,8 +3051,12 @@ function handleImportFile(file) {
       const rawSunset  = payload.prepro_sunset_people || null;
       if (!rawData) { alert('File doesn\'t look like a PRE-PRO backup.'); return; }
 
-      const incoming = JSON.parse(rawData);
-      if (!Array.isArray(incoming.projects)) { alert('No projects found in file.'); return; }
+      const parsed = JSON.parse(rawData);
+      if (!parsed || !Array.isArray(parsed.projects)) { alert('No projects found in file.'); return; }
+      // Same clean-up a load gets, before anything is saved — a bad entry in the
+      // file must not reach storage. Projects without an id can't be merged.
+      const incoming = normalizeState(parsed);
+      incoming.projects = incoming.projects.filter(p => p.id);
 
       const idMap = new Map((state.projects || []).map(p => [p.id, p]));
       incoming.projects.forEach(p => idMap.set(p.id, p));
@@ -3056,6 +3090,17 @@ function handleImportFile(file) {
         } catch(_) {}
       }
 
+      if (payload.prepro_people) {
+        // Fill gaps only, like emails: a record you already have wins over the file.
+        try {
+          const inPeople = normalizePeopleRecords(JSON.parse(payload.prepro_people));
+          let added = false;
+          Object.keys(inPeople).forEach(name => {
+            if (!peopleRecords[name]) { peopleRecords[name] = inPeople[name]; added = true; }
+          });
+          if (added) savePeopleRecords();
+        } catch(_) {}
+      }
       if (payload.prepro_commitments) {
         try { mergeCommitmentsFromBackup(payload.prepro_commitments); } catch(_) {}
       }
@@ -3211,7 +3256,8 @@ function renderPeopleSettings(c) {
 
   const hint = document.createElement('div');
   hint.className = 'settings-hint';
-  hint.textContent = 'Everyone belongs to exactly one team — that is what groups them in the roster panel, so nobody shows up twice. Setting a country puts that person on every Holiday matching it, automatically, and re-checks the holidays already on the calendar. “Also known as” catches the alternate spellings that imports arrive with, so a re-import matches the person you already have instead of creating a duplicate. Email auto-fills the To: line when exporting meetings to Outlook.' +
+  hint.textContent = 'Everyone belongs to exactly one team — that is what groups them in the roster panel, so nobody shows up twice. Setting a country puts that person on every Holiday matching it, automatically, and re-checks the holidays already on the calendar. ' + (TEAM_EDITION ? '“Also known as” catches the alternate spellings that imports arrive with, so a re-import matches the person you already have instead of creating a duplicate.'
+                    : '“Also known as” catches alternate spellings, so typing one finds the person you already have instead of creating a duplicate.') + ' Email auto-fills the To: line when exporting meetings to Outlook.' +
     (TEAM_EDITION ? ' Video Team members also get a “Pega handle” box — the username from the export’s Service Provider column — which lets an Excel import auto-assign that person as lead producer.' : '') +
     ' Sunset hides someone from every selection list while keeping their existing assignments (reversible) — give them a last day too, and the workload views stop counting them as available after it. Delete removes them from every roster and unassigns their tasks. Merging moves all roles, rosters, and assignments from one person to another, and records the old name as an alias.';
   c.appendChild(hint);
@@ -3495,6 +3541,9 @@ function renderPeopleSettings(c) {
     if (existing && existing !== n) {
       if (!confirm('"' + existing + '" already exists and matches "' + n + '".\n\nAdd "' + n + '" as a separate person anyway?\n\nCancel to leave it alone — you can add it as an alias on their row instead.')) return;
     }
+    // Decided before this person lands in nameHistory — after, they'd count as
+    // someone already in the app and a fresh store would never switch on.
+    const makeRecord = peopleStoreInUse();
     const role = roleSel.value;
     if (role) {
       if (!nameHistory[role]) nameHistory[role] = [];
@@ -3511,7 +3560,7 @@ function renderPeopleSettings(c) {
     // Only create a record once the migration has run — otherwise this person
     // would be the sole record in the store and the banner would report
     // everyone else as still needing one, which reads as a bug.
-    if (hasPeopleRecords()) {
+    if (makeRecord) {
       const team = teamSel.value || teamForRole(role) || '';
       upsertPerson(n, {
         team:        team,
@@ -3656,7 +3705,8 @@ function wireSettingsModal() {
   updateUndoRedoButtons();
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && document.getElementById('excelReviewOverlay').style.display === 'flex') { closeExcelReview(); return; }
+    const xlOverlay = document.getElementById('excelReviewOverlay');
+    if (e.key === 'Escape' && xlOverlay && xlOverlay.style.display === 'flex') { closeExcelReview(); return; }
     if (e.key === 'Escape' && document.getElementById('settingsOverlay').style.display === 'flex') { closeSettings(); return; }
 
     // Undo / redo — Ctrl+Z, Ctrl+Shift+Z (and Ctrl+Y) ; ⌘ on Mac.
@@ -3776,8 +3826,12 @@ function setFbStatus(connected) {
   const dot   = document.getElementById('fbDot');
   const label = document.getElementById('fbLabel');
   if (!dot || !label) return;
+  // Locally "connected" means "on disk": a write that overflowed localStorage
+  // keeps the pill red until a later one gets everything saved (local-fb.js).
+  if (!TEAM_EDITION && window._fb && window._fb.unsaved) connected = false;
   dot.style.background   = connected ? '#4cba6a' : '#e05555';
-  label.textContent      = !TEAM_EDITION ? 'Saved in this browser' : connected ? 'Live' : 'Offline';
+  label.textContent      = !TEAM_EDITION ? (connected ? 'Saved in this browser' : 'Storage full — not saved')
+                         : connected ? 'Live' : 'Offline';
   label.style.color      = connected ? '#4cba6a' : '#e05555';
 }
 function genId() {
@@ -4666,7 +4720,7 @@ function editNote(projectId, noteId, changes) {
   const note = proj.notes.find(n => n.id === noteId);
   if (!note) return;
   if (typeof changes.body === 'string') note.body = changes.body;
-  if (typeof changes.person === 'string') note.person = changes.person || 'Team';
+  if (typeof changes.person === 'string') note.person = changes.person || NO_AUTHOR;
   if (typeof changes.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(changes.date)) note.date = changes.date;
   if (typeof changes.time === 'string' && /^\d{2}:\d{2}$/.test(changes.time)) note.time = changes.time;
   saveState();
@@ -5610,7 +5664,7 @@ function updateCalTitle() {
 
 function renderCalendar() {
   // Persist the active project so reload/reopen restores it
-  if (activeProjectId) localStorage.setItem('prepro_active_project', activeProjectId);
+  if (activeProjectId) try { localStorage.setItem(LS('prepro_active_project'), activeProjectId); } catch (_) {}
   // PNG range-pick mode is owned by the PNG tab of one project. Every
   // navigation away funnels through here (project switch, folder view, tab
   // change, panel collapse), so this is the one cancellation point that
@@ -7940,8 +7994,14 @@ function openContextMenu(e, projectId) {
       { label: 'Duplicate',      action: 'duplicate' },
       { label: 'Add Subproject', action: 'addSub' },
       { label: 'Add Subfolder',  action: 'addSubFolder' },
-      { label: proj.ghost ? '👁 Show in Ops' : '👻 Ghost (hide from Ops)', action: 'ghost' },
-      { label: isNonWorkProject(proj) ? '📁 Count as a project' : '🗂 Not a project (exclude from reviews)', action: 'nonWork' },
+      TEAM_EDITION
+        ? { label: proj.ghost ? '👁 Show in Ops' : '👻 Ghost (hide from Ops)', action: 'ghost' }
+        : { label: proj.ghost ? '👁 Show in Team Conflicts' : '👻 Hide from Team Conflicts', action: 'ghost' },
+      // The reviews it excludes from are dash's and ops'. Still offered locally
+      // when already set, so an imported flag can be cleared.
+      ...(TEAM_EDITION || isNonWorkProject(proj)
+        ? [{ label: isNonWorkProject(proj) ? '📁 Count as a project' : '🗂 Not a project (exclude from reviews)', action: 'nonWork' }]
+        : []),
       { label: STATUS_META.draft.mark     + ' Draft',    action: 'status:draft' },
       { label: STATUS_META.completed.mark + ' Complete', action: 'status:completed' },
       { label: STATUS_META.onhold.mark    + ' On Hold',  action: 'status:onhold' },
@@ -9024,18 +9084,20 @@ function renderPtoInvitesPanel(content, proj) {
   // once you've said who you are it shows strictly your own — no "show everyone"
   // override, because grabbing the wrong person's file is the failure to avoid.
   // A shared entry still counts as yours if you're one of the people on it.
-  const tasks = myPerson ? all.filter(t => ptoInvitePeople(t).includes(myPerson)) : all;
+  // Locally there's one user handling everyone's time off, so no filter.
+  const mineOnly = TEAM_EDITION && !!myPerson;
+  const tasks = mineOnly ? all.filter(t => ptoInvitePeople(t).includes(myPerson)) : all;
 
   if (!tasks.length) {
     const em = document.createElement('div');
     em.style.cssText = 'color:var(--dim);font-size:12px;padding:14px 2px;';
     // Distinct wording when filtered, so an empty list doesn't read as "no PTO exists"
-    em.textContent = myPerson ? 'No upcoming PTO or holidays for ' + myPerson + '.'
+    em.textContent = mineOnly ? 'No upcoming PTO or holidays for ' + myPerson + '.'
                               : 'No upcoming or in-progress PTO or holidays.';
     content.appendChild(em); return;
   }
 
-  if (!myPerson) {
+  if (TEAM_EDITION && !myPerson) {
     const prompt = document.createElement('div');
     prompt.style.cssText = 'font-size:11px;color:var(--dim);padding:6px 2px 0;flex-shrink:0;';
     prompt.textContent = '⚠️ Pick who you are (top right) to see just your own PTO and holidays.';
@@ -9044,8 +9106,11 @@ function renderPtoInvitesPanel(content, proj) {
 
   const note = document.createElement('div');
   note.style.cssText = 'font-size:11px;color:var(--dim);padding:6px 2px 8px;flex-shrink:0;line-height:1.55;';
-  note.innerHTML =
-    'Two files per PTO or holiday entry. Each downloads an <b>.ics</b> with the status, reminder, and responses already set.' +
+  note.innerHTML = !TEAM_EDITION
+    ? 'Two files per PTO or holiday entry. Each downloads an <b>.ics</b> with the status, reminder, and responses already set.' +
+      '<div style="margin:7px 0 3px;">• <b>Out of Office</b>: all-day, <b>Show As → Out of Office</b>, reminder off. Give it to the person on leave to open on their own calendar — nothing is sent.</div>' +
+      '<div style="margin:0;">• <b>Notify Team</b>: all-day <b>Free</b>, reminder off, responses off, addressed to the Video Team members with an email in Settings → People. Open it and <b>press Edit → Send.</b></div>'
+    : 'Two files per PTO or holiday entry. Each downloads an <b>.ics</b> with the status, reminder, and responses already set.' +
     '<div style="margin:7px 0;padding:6px 8px;border-radius:6px;background:var(--warn-bg,rgba(230,160,30,.14));border:1px solid var(--warn,rgba(230,160,30,.5));color:var(--text);">' +
     '⚠️ <b>Each person downloads and opens their own files.</b> Both open as your own appointment, ' +
     'already filled in — you just send the team one.</div>' +
@@ -9105,8 +9170,8 @@ function renderPtoInvitesPanel(content, proj) {
     btn1.className = 'btn btn-ghost';
     btn1.style.flexShrink = '0';
     btn1.textContent = '🏖 Out of Office';
-    btn1.title = isHoli ? 'For anyone observing this holiday to open on their own machine'
-                        : 'For the person on PTO to open on their own machine';
+    btn1.title = isHoli ? 'For anyone observing this holiday to open on their own calendar'
+                        : 'For the person on PTO to open on their own calendar';
     btn1.addEventListener('click', () => {
       // First working day back = day after the PTO ends, skipping Sat/Sun.
       const back = new Date(endDate + 'T00:00:00');
@@ -9579,7 +9644,7 @@ function showNoteCompose(container, noteType, addBar) {
     // Attribute to the pinned "This is me" identity from the dashboard, so
     // browsing other people's dashboards never mis-attributes a note. Falls
     // back to the currently-viewed person, then 'Team'.
-    const person = myPerson || localStorage.getItem('dash_selected_person') || 'Team';
+    const person = myPerson || localStorage.getItem(LS('dash_selected_person')) || NO_AUTHOR;
     const body = textarea.value.trim();
     const owner = ownerInput.value.trim();
     const due   = dueInput.value.trim();
@@ -9669,7 +9734,7 @@ function renderProjectInfo() {
   // ── Ticket key data ──
   const t1 = document.createElement('div');
   t1.className = 'pi-section-title';
-  t1.textContent = 'Project Data';
+  t1.textContent = TEAM_EDITION ? 'Project Data' : 'Project';
   wrap.appendChild(t1);
 
   const grid = document.createElement('div');
@@ -9726,7 +9791,7 @@ function renderProjectInfo() {
     const e = document.createElement('div');
     e.className = 'pi-empty';
     e.textContent = TEAM_EDITION ? 'No ticket data on this project yet. Import from Excel to populate it.'
-                                 : 'No ticket data on this project yet.';
+                                 : 'No due date, lead producer, or requester on this project yet.';
     grid.appendChild(e);
   }
   wrap.appendChild(grid);
@@ -9809,7 +9874,9 @@ function renderBriefSection(proj, container) {
 
   const hint = document.createElement('div');
   hint.className = 'pi-hint';
-  hint.textContent = 'The dashboard reads these. A tangible goal lets a nudge ask whether today’s work still serves it, instead of guessing from the calendar.';
+  hint.textContent = TEAM_EDITION
+    ? 'The dashboard reads these. A tangible goal lets a nudge ask whether today’s work still serves it, instead of guessing from the calendar.'
+    : 'The project dossier and the AI project review read these. A tangible goal lets the review ask whether the work still serves it, instead of guessing from the calendar.';
   container.appendChild(hint);
 }
 
@@ -9828,7 +9895,7 @@ function renderPlanPanel(content) {
     return;
   }
 
-  const me = myPerson || localStorage.getItem('dash_selected_person') || '';
+  const me = myPerson || localStorage.getItem(LS('dash_selected_person')) || '';
   // commitments.js's own today, so a row's dates line up with the timestamps
   // the module writes. team.html has no todayStr() of its own.
   const today = cmTodayStr();
@@ -9944,7 +10011,8 @@ function renderPlanPanel(content) {
   if (!all.length) {
     const e = document.createElement('div');
     e.className = 'plan-empty';
-    e.textContent = 'No open loops on this project yet. Add one above, or leave one from the Notes tab when you log a blocker — the dashboard chases whatever lands here.';
+    e.textContent = 'No open loops on this project yet. Add one above, or leave one from the Notes tab when you log a blocker' +
+      (TEAM_EDITION ? ' — the dashboard chases whatever lands here.' : '.');
     content.appendChild(e);
     // Threads too: a thread that produced no loops is still filed, still feeds
     // the dossier and the advisory, and was previously unreachable — this
@@ -10383,7 +10451,7 @@ function renderPasteBox(content, proj, me, refresh) {
       // A guessed sender is not an author. If the thread never named anybody,
       // the note is filed under whoever pasted it — attributing it to a real
       // colleague who did not write it is worse than a slightly vague author.
-      const author = (threadNote.from && !threadNote.fromGuessed) ? threadNote.from : (me || 'Team');
+      const author = (threadNote.from && !threadNote.fromGuessed) ? threadNote.from : (me || NO_AUTHOR);
       const note = addNote(activeProjectId, threadNote.type, threadNote.summary, author);
       if (note) {
         noteId = note.id;
@@ -10778,7 +10846,9 @@ function renderExportPanel() {
 
     if (exportTextFormat === 'dossier') {
       const proj = getProject(activeProjectId);
-      const text = proj ? buildProjectDossier(proj, { isTaskDone: isTaskDoneHere }) : '';
+      // Locally nothing ever ticks a task off (that's dash.html's job), so pass
+      // no completion source rather than one that says "not done" to everything.
+      const text = proj ? buildProjectDossier(proj, TEAM_EDITION ? { isTaskDone: isTaskDoneHere } : {}) : '';
       // Plain keeps the aligned monospace document as written; the rich targets
       // get it as headings and lists, since its column alignment survives only
       // in a monospace reader anyway.
@@ -11687,6 +11757,11 @@ function exportPNG() {
 // ── FIREBASE BOOTSTRAP ──
 function normalizeState(s) {
   if (!s || !Array.isArray(s.projects)) { s = { projects: [] }; }
+  // A null or non-object entry (a bad import, hand-edited data) used to throw
+  // below, which stopped the first load from ever finishing — and the next
+  // write then replaced the whole state with whatever little had loaded.
+  const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
+  s.projects = s.projects.filter(isObj);
   s.projects.forEach(p => {
     // Firebase strips null values and empty arrays — restore safe defaults
     if (p.parentId === undefined) p.parentId = null;
@@ -11694,8 +11769,11 @@ function normalizeState(s) {
     if (!Array.isArray(p.notes))  p.notes  = [];
     if (!p.roster || typeof p.roster !== 'object') p.roster = {};
     // Normalize tasks
+    p.tasks = p.tasks.filter(isObj);
+    p.notes = p.notes.filter(isObj);
     p.tasks.forEach(t => {
       if (!Array.isArray(t.attendees)) t.attendees = [];
+      t.attendees = t.attendees.filter(isObj);
     });
   });
   return s;
@@ -11706,6 +11784,17 @@ function normalizeState(s) {
 // re-renders when it did. Comparing against local (rather than counting our own
 // writes) means we never silently drop a real remote update, and our own echoed
 // writes are recognised as no-ops instead of triggering a clobbering re-apply.
+// Role -> list of names, and nothing else. Old or hand-edited data can hold a
+// bare string or an object where a list belongs, which threw in every render
+// that walks the history.
+function cleanNameHistory(h) {
+  const out = {};
+  if (h && typeof h === 'object') Object.keys(h).forEach(role => {
+    if (Array.isArray(h[role])) out[role] = h[role].filter(n => typeof n === 'string' && n);
+  });
+  return out;
+}
+
 function applyRemoteState(snapshot) {
   const data = snapshot.val();
   if (!data) return false;
@@ -11719,6 +11808,11 @@ function applyRemoteState(snapshot) {
       state = incoming;
       // A change arrived from outside our own writes — rebase undo history on it.
       resetHistoryBaseline();
+      // Another tab wrote this (local edition). Every undo entry is a whole-state
+      // snapshot from before it, so undoing to one would erase that tab's work.
+      // Team can't yet tell a teammate's edit from its own echo here — Firebase
+      // strips nulls, so echoes don't compare equal — and keeps its stacks.
+      if (window._fb && window._fb.fromOtherTab) { _undoStack = []; _redoStack = []; }
       updateUndoRedoButtons();
       changed = true;
     }
@@ -11727,8 +11821,9 @@ function applyRemoteState(snapshot) {
   // Taken as-is. This used to re-add every DEFAULT_NAME_HISTORY name on each
   // snapshot, which resurrected any default name ("Liz", "Chuck") that had been
   // merged away or deleted — the next page load put them straight back.
-  if (data.nameHistory && JSON.stringify(data.nameHistory) !== JSON.stringify(nameHistory)) {
-    nameHistory = data.nameHistory;
+  const inHistory = data.nameHistory && cleanNameHistory(data.nameHistory);
+  if (inHistory && JSON.stringify(inHistory) !== JSON.stringify(nameHistory)) {
+    nameHistory = inHistory;
     changed = true;
   }
 
@@ -11751,6 +11846,26 @@ function applyRemoteState(snapshot) {
   return changed;
 }
 
+// Settings is mostly text boxes that save on blur. Redrawing it under someone
+// mid-word threw away the rest of what they typed and saved the fragment, so a
+// remote change waits until they leave the field.
+function refreshSettingsAfterRemote() {
+  const so = document.getElementById('settingsOverlay');
+  if (so.style.display !== 'flex') return;
+  const a = document.activeElement;
+  if (a && so.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) {
+    if (a._redrawPending) return;
+    a._redrawPending = true;
+    a.addEventListener('blur', () => {
+      a._redrawPending = false;
+      // After the field's own blur handler has saved it.
+      setTimeout(() => { if (so.style.display === 'flex') renderSettingsContent(); }, 0);
+    }, { once: true });
+    return;
+  }
+  renderSettingsContent();
+}
+
 function initFirebase() {
   // Wait for Firebase module to be ready
   const tryInit = () => {
@@ -11769,16 +11884,16 @@ function initFirebase() {
         // Check URL hash for deep link (e.g. #project=abc123)
         const hashMatch = location.hash.match(/project=([^&]+)/);
         const hashId = hashMatch ? decodeURIComponent(hashMatch[1]) : null;
-        const savedId = localStorage.getItem('prepro_active_project');
+        const savedId = localStorage.getItem(LS('prepro_active_project'));
         const roots = getRootProjects();
         if (hashId && getProject(hashId) && myCalOn) {
           // A deep link (Dash click-through) asks for one project, so leave My
           // Calendar; it comes back to the link's project, not the old one.
           myCalOn = false;
-          try { localStorage.setItem('prepro_mycal', '0'); } catch (_) {}
+          try { localStorage.setItem(LS('prepro_mycal'), '0'); } catch (_) {}
         }
         if (isMyCal()) {
-          const t = localStorage.getItem('prepro_mycal_target');
+          const t = localStorage.getItem(LS('prepro_mycal_target'));
           activeProjectId = t && projectIsMine(getProject(t)) ? t : null;
         }
         else if (hashId && getProject(hashId)) activeProjectId = hashId;
@@ -11798,7 +11913,7 @@ function initFirebase() {
         renderCalendar();
         renderPalette();
         if (exportOpen) renderExportPanel();
-        if (document.getElementById('settingsOverlay').style.display === 'flex') renderSettingsContent();
+        refreshSettingsAfterRemote();
       }
     }, err => {
       console.error('Firebase onValue error:', err);
@@ -11829,7 +11944,7 @@ function setupInitListeners() {
   document.getElementById('meSelect').addEventListener('change', e => setMyPerson(e.target.value));
   // dash.html is usually open in another tab — keep both in step without a reload.
   window.addEventListener('storage', e => {
-    if (e.key !== 'dash_me') return;
+    if (e.key !== LS('dash_me')) return;
     myPerson = e.newValue || null;
     onMyPersonChanged();
   });

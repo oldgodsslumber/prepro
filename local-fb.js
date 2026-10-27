@@ -20,9 +20,12 @@
  *  - Another tab writing the tree (the `storage` event) re-fires every
  *    listener, the local counterpart of a teammate's edit.
  *
- * A write that does not fit in localStorage is rejected (the promise rejects
- * and listeners do not fire), and the header status turns red so it can't go
- * unnoticed — the pages only console.error a failed save.
+ * A write that does not fit in localStorage behaves like Firebase offline: the
+ * change stays in memory (so nothing on screen reverts) but is not persisted,
+ * the promise rejects, and `_fb.unsaved` stays true until a later write gets
+ * the whole tree to disk — e.g. after deleting a project frees room. The page
+ * reads `unsaved` to keep its status pill red; the pages only console.error a
+ * failed save, so the alert here is what tells the user.
  *
  * Classic script, loaded before every other app script.
  * ─────────────────────────────────────────────────────────────────────────── */
@@ -32,31 +35,72 @@ window.PREPRO_LOCAL = true;
 
 (function () {
   var LS_KEY = 'prepro_local_db';
-  var tree = load();
+  // What the hand-written index.html (before Oct 2026) stored, slice by slice.
+  var LEGACY = { prepro_data: 'state', prepro_name_history: 'nameHistory', prepro_people_emails: 'peopleEmails' };
   var listeners = [];
+  var unsaved = false;
+  var warned = false;
+  var fromOtherTab = false;
+  var tree = load();
+
+  function isTree(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
 
   function load() {
-    try {
-      var raw = localStorage.getItem(LS_KEY);
-      if (raw) return JSON.parse(raw) || {};
-    } catch (e) { console.error('local-fb: unreadable ' + LS_KEY, e); }
+    var raw = null;
+    try { raw = localStorage.getItem(LS_KEY); } catch (e) {}
+    if (raw) {
+      try {
+        var parsed = JSON.parse(raw);
+        // Valid JSON that isn't an object (an array, a string) would swallow
+        // every write without a word — treat it as unreadable too.
+        if (isTree(parsed)) return parsed;
+        throw new Error('not an object');
+      }
+      catch (e) {
+        // Never let the first write overwrite it: park the unreadable copy where
+        // it can still be recovered by hand, and say so.
+        console.error('local-fb: unreadable ' + LS_KEY, e);
+        var parked = LS_KEY + '_unreadable_' + Date.now();
+        try { localStorage.setItem(parked, raw); localStorage.removeItem(LS_KEY); } catch (_) {}
+        setTimeout(function () {
+          alert('PRE-PRO could not read its saved data and set it aside.\n\n' +
+                'The unreadable copy was kept in this browser under "' + parked + '". ' +
+                'If you have a backup, restore it from Settings → Data → Import.');
+        }, 0);
+      }
+    }
     return migrateLegacy();
   }
 
-  // The hand-written index.html (before Oct 2026) kept its data in three keys of
-  // its own. Seed the tree from them once; the old keys stay as they were, so
-  // this is a copy, never a move.
+  // Move the old keys into the tree. Only once the tree is safely written are
+  // the old keys removed — otherwise a legacy user would carry every byte twice
+  // against the quota, and nothing reads the old copy any more.
   function migrateLegacy() {
-    var t = { prepro: {} };
-    function read(k) { try { var r = localStorage.getItem(k); return r ? JSON.parse(r) : null; } catch (e) { return null; } }
-    var state = read('prepro_data');
-    var names = read('prepro_name_history');
-    var emails = read('prepro_people_emails');
-    if (state) t.prepro.state = state;
-    if (names) t.prepro.nameHistory = names;
-    if (emails) t.prepro.peopleEmails = emails;
-    if (state || names || emails) {
-      try { localStorage.setItem(LS_KEY, JSON.stringify(t)); } catch (e) { console.error('local-fb: migration did not fit', e); }
+    var t = { prepro: {} }, raws = {}, any = false;
+    Object.keys(LEGACY).forEach(function (k) {
+      var r = null;
+      try { r = localStorage.getItem(k); } catch (e) {}
+      if (!r) return;
+      try { t.prepro[LEGACY[k]] = JSON.parse(r); raws[k] = r; any = true; }
+      catch (e) { console.error('local-fb: skipping unreadable ' + k, e); }
+    });
+    if (!any) return t;
+
+    var json = JSON.stringify(t);
+    function dropLegacy() { Object.keys(raws).forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} }); }
+    try {
+      localStorage.setItem(LS_KEY, json);
+      dropLegacy();
+    } catch (e) {
+      // Both copies don't fit side by side. Free the old ones and try again;
+      // if even that fails, put them back exactly as they were.
+      dropLegacy();
+      try { localStorage.setItem(LS_KEY, json); }
+      catch (e2) {
+        Object.keys(raws).forEach(function (k) { try { localStorage.setItem(k, raws[k]); } catch (_) {} });
+        unsaved = true;
+        setTimeout(function () { reportFull(e2); }, 0);
+      }
     }
     return t;
   }
@@ -102,30 +146,34 @@ window.PREPRO_LOCAL = true;
     try { l.cb(snapshot(l.path)); } catch (e) { console.error('local-fb: listener threw', e); }
   }
 
-  var warned = false;
+  function showStatus() {
+    if (typeof window.setFbStatus === 'function') window.setFbStatus(!unsaved);
+  }
+
   function reportFull(err) {
-    var dot = document.getElementById('fbDot'), label = document.getElementById('fbLabel');
-    if (dot) dot.style.background = '#e05555';
-    if (label) { label.textContent = 'Storage full — not saved'; label.style.color = '#e05555'; }
-    if (!warned) {
-      warned = true;
-      alert('PRE-PRO could not save: this browser\'s local storage is full.\n\n' +
-            'Export a backup from Settings → Data now, then delete old projects to free space. ' +
-            'Changes made from here on are not being kept.\n\n(' + (err && err.message || err) + ')');
-    }
+    showStatus();
+    if (warned) return;
+    warned = true;
+    alert('PRE-PRO could not save: this browser\'s local storage is full.\n\n' +
+          'Your latest changes are still on screen but will be lost if you close or reload this page. ' +
+          'Export a backup from Settings → Data now, then delete old projects to free space — ' +
+          'the next change after that saves everything.\n\n(' + (err && err.message || err) + ')');
   }
 
   var db = { local: true };
   function ref(_db, path) { return { path: parts(path) }; }
 
   function set(r, value) {
-    var v = clone(value);
-    var next = writePath(clone(tree), r.path, v);
-    try { localStorage.setItem(LS_KEY, JSON.stringify(next)); }
-    catch (err) { reportFull(err); return Promise.reject(err); }
-    tree = next;
+    tree = writePath(clone(tree), r.path, clone(value));
+    var err = null;
+    try { localStorage.setItem(LS_KEY, JSON.stringify(tree)); }
+    catch (e) { err = e; }
+    var was = unsaved;
+    unsaved = !!err;
+    if (err) reportFull(err);
+    else if (was) { warned = false; showStatus(); }
     listeners.slice().forEach(function (l) { if (overlaps(l.path, r.path)) fire(l); });
-    return Promise.resolve();
+    return err ? Promise.reject(err) : Promise.resolve();
   }
 
   function get(r) { return Promise.resolve(snapshot(r.path)); }
@@ -138,12 +186,18 @@ window.PREPRO_LOCAL = true;
   }
 
   window.addEventListener('storage', function (e) {
-    if (e.key !== LS_KEY) return;
-    tree = load();
-    listeners.slice().forEach(fire);
+    if (e.key !== LS_KEY || e.newValue == null) return;
+    try { var next = JSON.parse(e.newValue); if (!isTree(next)) return; tree = next; } catch (_) { return; }
+    // Lets the page tell another tab's write from its own echo.
+    fromOtherTab = true;
+    try { listeners.slice().forEach(fire); } finally { fromOtherTab = false; }
   });
 
-  var fb = { db: db, ref: ref, set: set, get: get, onValue: onValue };
+  var fb = {
+    db: db, ref: ref, set: set, get: get, onValue: onValue,
+    get unsaved() { return unsaved; },
+    get fromOtherTab() { return fromOtherTab; }
+  };
   // Read-only to everything after this: nothing else may swap in a real
   // Firebase handle. A setter that ignores the write, not writable:false — a
   // strict-mode assignment to a non-writable property throws.

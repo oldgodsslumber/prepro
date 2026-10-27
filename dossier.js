@@ -149,7 +149,7 @@ function dsBrief(proj, out) {
   if (!rows.length) {
     // Said plainly rather than omitted: an empty brief is itself the finding,
     // and the most common reason a nudge has nothing useful to say.
-    out.push('  (empty — no brief imported and no goal typed in the Info tab)');
+    out.push('  (empty — no brief imported and no goal typed in the Plan tab’s Brief)');
     return;
   }
   rows.forEach(function (r) { out.push('  ' + dsPad(r[0], 11) + ' ' + r[1]); });
@@ -187,7 +187,9 @@ function dsTeam(proj, out) {
 // where it is in its own arc — not two separate tables.
 function dsTimeline(proj, out, opts) {
   var today = opts.today;
-  var isDone = typeof opts.isTaskDone === 'function' ? opts.isTaskDone : function () { return false; };
+  // No completion source (the local edition has none) means no ✓ / · claims:
+  // "not done" would be a guess, and it would be wrong for most past work.
+  var isDone = typeof opts.isTaskDone === 'function' ? opts.isTaskDone : null;
 
   var rows = (proj.tasks || []).filter(function (t) { return t && t.date; })
     .slice()
@@ -208,7 +210,7 @@ function dsTimeline(proj, out, opts) {
       : dsShort(t.date);
 
     var mark = '  ';
-    if (end < today) mark = isDone(t.id) ? '✓ ' : '· ';
+    if (end < today) mark = !isDone ? '  ' : isDone(t.id) ? '✓ ' : '· ';
     else if (t.date <= today && end >= today) mark = '▸ ';
 
     var who = dsClean(t.person);
@@ -283,7 +285,7 @@ function dsNotes(proj, out, opts) {
 // an advisory pass would lean on hardest, and every line of it is computed.
 function dsDerived(proj, out, opts) {
   var today = opts.today;
-  var isDone = typeof opts.isTaskDone === 'function' ? opts.isTaskDone : function () { return false; };
+  var isDone = typeof opts.isTaskDone === 'function' ? opts.isTaskDone : null;
   var bits = [];
 
   var quiet = dsProjectQuietDays(proj, today);
@@ -294,7 +296,7 @@ function dsDerived(proj, out, opts) {
     }
   }
 
-  var overdueTasks = (proj.tasks || []).filter(function (t) {
+  var overdueTasks = !isDone ? 0 : (proj.tasks || []).filter(function (t) {
     if (!t || t.isDueDate || !t.date) return false;
     var end = t.endDate || t.date;
     return end < today && !isDone(t.id);
