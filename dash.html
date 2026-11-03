@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261103a';
+window.PREPRO_BUILD = '20261103b';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,25 +26,25 @@ window.PREPRO_BUILD = '20261103a';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20261103a"></script>
+<script type="module" src="./auth.js?v=20261103b"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261103a"></script>
+<script src="./whatsnew.js?v=20261103b"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and ops.html. -->
-<script src="./people.js?v=20261103a"></script>
+<script src="./people.js?v=20261103b"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261103a"></script>
+<script src="./commitments.js?v=20261103b"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261103a"></script>
+<script src="./dossier.js?v=20261103b"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261103a"></script>
+<script src="./prepro-llm.js?v=20261103b"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261103a"></script>
+<script src="./prepro-ai.js?v=20261103b"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -2882,7 +2882,7 @@ function renderTodaySection() {
 
     const header = document.createElement('div');
     header.className = 'today-card-header';
-    header.innerHTML = `<a class="today-card-project" href="team.html#project=${encodeURIComponent(projectId)}" target="_blank">${esc(name)}</a>` +
+    header.innerHTML = `<a class="today-card-project" href="team.html#project=${encodeURIComponent(projectId)}">${esc(name)}</a>` +
       roles.map(r => `<span class="role-tag" style="background:${getRoleColor(r)}">${esc(r)}</span>`).join('');
     header.appendChild(buildStatusSeg(projectId));
     card.appendChild(header);
@@ -3426,7 +3426,6 @@ function renderHeadsUpSection() {
     if (item.projectId) {
       const link = document.createElement('a');
       link.href = 'team.html#project=' + encodeURIComponent(item.projectId);
-      link.target = '_blank';
       link.textContent = item.title;
       titleDiv.appendChild(link);
     } else {
@@ -3744,7 +3743,6 @@ function pcStyleItem(el, it) {
   if (it.done) el.classList.add('pc-done');
   el.title = pcTooltip(it);
   el.href = pcProjectHref(it.proj);
-  el.target = '_blank';
 }
 
 // ── Timeline: a row per project, overlapping tasks stacked into lanes ──
@@ -3851,7 +3849,6 @@ function pcRenderTimeline(body, colors) {
     } else {
       name = document.createElement('a');
       name.href = pcProjectHref(g.proj);
-      name.target = '_blank';
       name.textContent = g.proj.name;
       name.title = g.proj.name;
     }
@@ -4102,7 +4099,6 @@ function renderMyProjectsPanel() {
     const nameLink = document.createElement('a');
     nameLink.className = 'mp-name';
     nameLink.href = 'team.html#project=' + encodeURIComponent(proj.id);
-    nameLink.target = '_blank';
     nameLink.textContent = proj.name;
     head.appendChild(nameLink);
 
@@ -4585,7 +4581,6 @@ function pgBuildRow(r, today, nextRowId) {
   const link = document.createElement('a');
   link.className = 'pg-name';
   link.href = 'team.html#project=' + encodeURIComponent(proj.id);
-  link.target = '_blank';
   link.textContent = proj.name;
   tdName.appendChild(link);
   tr.appendChild(tdName);
@@ -5007,7 +5002,6 @@ function renderOpenLoopsPanel() {
       link.className = 'ol-proj';
       link.textContent = projName(c.projectId);
       link.href = 'team.html#project=' + encodeURIComponent(c.projectId);
-      link.target = '_blank';
       link.title = 'Open in Team';
       meta.appendChild(link);
 
@@ -5388,7 +5382,6 @@ function renderLookbackPanel() {
     const link = document.createElement('a');
     link.className = 'lb-proj-name';
     link.href = 'team.html#project=' + encodeURIComponent(r.proj.id);
-    link.target = '_blank';
     link.textContent = r.proj.name;
     nameLine.appendChild(link);
     if (r.completed) {
