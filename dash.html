@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261103d';
+window.PREPRO_BUILD = '20261103e';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,25 +26,25 @@ window.PREPRO_BUILD = '20261103d';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20261103d"></script>
+<script type="module" src="./auth.js?v=20261103e"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261103d"></script>
+<script src="./whatsnew.js?v=20261103e"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and ops.html. -->
-<script src="./people.js?v=20261103d"></script>
+<script src="./people.js?v=20261103e"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261103d"></script>
+<script src="./commitments.js?v=20261103e"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261103d"></script>
+<script src="./dossier.js?v=20261103e"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261103d"></script>
+<script src="./prepro-llm.js?v=20261103e"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261103d"></script>
+<script src="./prepro-ai.js?v=20261103e"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -558,6 +558,7 @@ a.pg-name:hover { color: var(--accent); }
 .lb-tile-label { font-size: 9px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; margin-top: 3px; }
 
 .lb-sub-title { font-size: 10px; font-weight: 700; color: var(--dim); letter-spacing: .08em; text-transform: uppercase; margin: 0 0 8px; }
+.lb-sub-note { font-size: 11px; color: var(--dim); margin: -4px 0 8px; line-height: 1.4; }
 .lb-heatmap-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 18px; overflow-x: auto; }
 .lb-heatmap { display: flex; gap: 3px; }
 .lb-hm-week { display: flex; flex-direction: column; gap: 3px; }
@@ -5223,7 +5224,23 @@ function aggregateLookback(start, end) {
   const byMonth = new Array(12).fill(0);
   const byProject = new Map();       // projId -> { proj, pts, days, tasks, roles:Set, clipped, completed }
   const notes = [];
-  let taskCount = 0, totalPts = 0, reviewCount = 0, ptoDays = 0;
+  let taskCount = 0, totalPts = 0, reviewCount = 0;
+
+  // Weekdays this person was off. Scans EVERY project, ghosted and finished
+  // included: the Holidays project is routinely ghosted, and skipping it is why
+  // holidays never reached the PTO tile. A Set, so a holiday inside a PTO week
+  // is one day off, not two.
+  const offDays = new Set();
+  (state.projects || []).forEach(proj => (proj.tasks || []).forEach(t => {
+    if (!isTimeOffTask(t) || !t.date || !personOnTimeOff(t, selectedPerson)) return;
+    const e = t.endDate || t.date;
+    if (e < start || t.date > end) return;
+    for (let d = t.date < start ? start : t.date; d <= (e > end ? end : e); d = addDays(d, 1)) {
+      if (!isWeekend(d)) offDays.add(d);
+    }
+  }));
+  // The Ops effort rules: weekdays only, and only days they were here and not off.
+  const countsAsWork = d => !isWeekend(d) && !offDays.has(d) && personActiveOn(selectedPerson, d);
 
   (state.projects || []).filter(p => !p.ghost).forEach(proj => {
     let projPts = 0, projTasks = 0, projClipped = false;
@@ -5241,28 +5258,31 @@ function aggregateLookback(start, end) {
       const from = s < start ? start : s;
       const to   = e > end   ? end   : e;
 
-      if (t.isDueDate) {
-        // Milestones / time off carry no effort; count days out (PTO + holidays).
-        if (isTimeOffTask(t)) ptoDays += daysBetween(from, to) + 1;
-        return;
-      }
+      // Key dates carry no effort; time off is counted once, above.
+      if (t.isDueDate) return;
 
+      // Effort is counted on each workday the chip runs, so a 4-day Medium task
+      // is 8 pts here, not 2. Weekends and days off don't count, matching Ops —
+      // a Fri–Mon chip is 2 days of work, and nobody worked their PTO. Days
+      // outside the period aren't counted either; flag it so the row can say the
+      // total is only part of the job.
       const pts = loePts(t.loe);
-      taskCount++; projTasks++;
-      if (t.isReview) reviewCount++;
-      if (t.role) projRoles.add(t.role);
-      (t.attendees || []).forEach(a => { if (a.person === selectedPerson && a.role) projRoles.add(a.role); });
-
-      // Distribute effort across each spanned day (matches getDayWorkload semantics),
-      // so a 4-day Medium task is 8 pts here, not 2. Days outside the period are
-      // not counted — flag it so the row can say the total is only part of the job.
-      if (from !== s || to !== e) projClipped = true;
+      let worked = 0;
       for (let d = from; d <= to; d = addDays(d, 1)) {
+        if (!countsAsWork(d)) continue;
+        worked++;
         byDay[d] = (byDay[d] || 0) + pts;
         byMonth[new Date(d + 'T00:00:00').getMonth()] += pts;
         projDays.add(d);
         projPts += pts; totalPts += pts;
       }
+      // A chip that sat entirely on a weekend or inside their PTO wasn't work.
+      if (!worked) return;
+      taskCount++; projTasks++;
+      if (t.isReview) reviewCount++;
+      if (t.role) projRoles.add(t.role);
+      (t.attendees || []).forEach(a => { if (a.person === selectedPerson && a.role) projRoles.add(a.role); });
+      if (from !== s || to !== e) projClipped = true;
     });
 
     if (projTasks > 0) {
@@ -5280,7 +5300,7 @@ function aggregateLookback(start, end) {
 
   return {
     byDay, byMonth, byProject, notes,
-    taskCount, totalPts, reviewCount, ptoDays,
+    taskCount, totalPts, reviewCount, ptoDays: offDays.size, offDays,
     activeDays: Object.keys(byDay).length,
     busiestMonthIdx,
   };
@@ -5367,8 +5387,14 @@ function renderLookbackPanel() {
   // ── Top projects ──
   const projTitle = document.createElement('div');
   projTitle.className = 'lb-sub-title';
-  projTitle.textContent = 'Projects worked on — by effort';
+  projTitle.textContent = selectedPerson + '’s effort by project';
   section.appendChild(projTitle);
+  // It reads like the project's total unless it says otherwise.
+  const projNote = document.createElement('div');
+  projNote.className = 'lb-sub-note';
+  projNote.textContent = 'Only chips ' + selectedPerson + ' is on: each chip’s effort (low 1 · medium 2 · high 3) '
+    + 'for every workday it runs, skipping weekends and time off. Other people’s work on a project isn’t included.';
+  section.appendChild(projNote);
 
   const projRows = [...agg.byProject.values()].sort((a, b) => b.pts - a.pts || b.tasks - a.tasks);
   const maxPts = projRows.length ? projRows[0].pts : 1;
@@ -5421,9 +5447,9 @@ function renderLookbackPanel() {
     const pts = document.createElement('div');
     pts.className = 'lb-proj-pts';
     pts.textContent = r.pts + (r.pts === 1 ? ' pt' : ' pts');
-    pts.title = r.pts + ' effort points = each task’s level of effort counted once per day it runs'
-      + ' (low 1 · medium 2 · high 3), across ' + r.days + ' day' + (r.days === 1 ? '' : 's')
-      + ' in ' + lbShortLabel(range) + '.';
+    pts.title = r.pts + ' effort points — ' + selectedPerson + '’s share only: each of their chips’ level of effort'
+      + ' (low 1 · medium 2 · high 3) counted once per workday, across ' + r.days + ' day' + (r.days === 1 ? '' : 's')
+      + ' in ' + lbShortLabel(range) + '. Weekends and time off are not counted.';
     row.appendChild(pts);
 
     projList.appendChild(row);
@@ -5513,7 +5539,7 @@ function buildLookbackHeatmap(range, agg) {
           cell.style.background = workloadInfo(pts).color;
           cell.title = fmtDateShort(day) + ' · ' + pts + ' pt' + (pts === 1 ? '' : 's') + ' (' + workloadInfo(pts).label + ')';
         } else {
-          cell.title = fmtDateShort(day) + ' · no tracked work';
+          cell.title = fmtDateShort(day) + (agg.offDays.has(day) ? ' · time off' : ' · no tracked work');
         }
       }
       col.appendChild(cell);
@@ -5549,7 +5575,7 @@ function buildLookbackSummaryText(range, agg) {
   lines.push('  Reviews: ' + agg.reviewCount + '   PTO days: ' + agg.ptoDays);
   if (agg.busiestMonthIdx >= 0) lines.push('  Busiest month: ' + MONTH_ABBR[agg.busiestMonthIdx]);
   lines.push('');
-  lines.push('PROJECTS (by effort)');
+  lines.push('PROJECTS (by ' + selectedPerson + '’s effort: their chips only, per workday, excluding weekends and time off)');
   [...agg.byProject.values()].sort((a, b) => b.pts - a.pts).forEach(r => {
     const roleTxt = [...r.roles].sort().join(', ') || '—';
     lines.push('  • ' + r.proj.name + (r.completed ? ' [completed]' : '') + ' — ' + r.pts + ' pts, '

@@ -17,6 +17,21 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-11-03c',
+    title: 'Look Back: clearer effort, correct time off',
+    dateLabel: 'Nov 3, 2026',
+    groups: [
+      {
+        area: 'Dash · Look Back',
+        items: [
+          { tag: 'fix', text: 'The project list now says what its points are: your share only, from the chips you are on. Other people’s work on a project isn’t included.' },
+          { tag: 'fix', text: 'Effort now uses the same rules as Ops: weekends and days you were off don’t count. A chip from Friday to Monday is 2 days of work, not 4.' },
+          { tag: 'fix', text: 'PTO days now include holidays and count each day off once, even when a holiday falls inside your PTO. Holidays were being left out entirely.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-11-03b',
     title: 'Ops effort numbers now agree',
     dateLabel: 'Nov 3, 2026',
