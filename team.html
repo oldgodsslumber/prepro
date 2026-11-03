@@ -13,7 +13,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261027c';
+window.PREPRO_BUILD = '20261103a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -34,30 +34,30 @@ window.PREPRO_BUILD = '20261027c';
      @team markers are dropped from it, and each @local comment is unwrapped into
      it. Here in team.html the @local lines are inert comments. -->
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20261027c"></script>
+<script type="module" src="./auth.js?v=20261103a"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261027c"></script>
+<script src="./whatsnew.js?v=20261103a"></script>
 <!-- /@team -->
-<!-- @local <script src="./local-fb.js?v=20261027c"></script> -->
+<!-- @local <script src="./local-fb.js?v=20261103a"></script> -->
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20261027c"></script>
+<script src="./people.js?v=20261103a"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261027c"></script>
+<script src="./commitments.js?v=20261103a"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261027c"></script>
+<script src="./dossier.js?v=20261103a"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261027c"></script>
+<script src="./prepro-llm.js?v=20261103a"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261027c"></script>
+<script src="./prepro-ai.js?v=20261103a"></script>
 <!-- @team -->
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20261027c"></script>
+<script src="./xlsx.full.min.js?v=20261103a"></script>
 <!-- /@team -->
 <style>
 /* ── RESET ── */
@@ -547,7 +547,7 @@ table.xl-missing-table tr.xl-missing-row.xl-unchecked td { background: transpare
 .tl-task-bar.copying { opacity: .8; outline: 2px dashed var(--accent); outline-offset: 1px; cursor: copy; }
 .tl-task-bar.copying::after { content: '+'; position: absolute; top: -9px; right: -7px; width: 14px; height: 14px; line-height: 13px; text-align: center; font-size: 11px; font-weight: 700; color: #fff; background: var(--accent); border-radius: 50%; pointer-events: none; }
 .tl-task-bar.drag-accepting { outline: 2px solid var(--accent); outline-offset: 1px; }
-.tl-pto-bar { cursor: default; background: repeating-linear-gradient(45deg, #6e6e7b 0, #6e6e7b 6px, #56565f 6px, #56565f 12px); border: 1px solid #9a9aa6; }
+.tl-pto-bar { background: repeating-linear-gradient(45deg, #6e6e7b 0, #6e6e7b 6px, #56565f 6px, #56565f 12px); border: 1px solid #9a9aa6; }
 .tl-pto-bar .tl-bar-name { font-weight: 700; opacity: 1; }
 .tl-holiday-bar { cursor: default; background: repeating-linear-gradient(45deg, #b58017 0, #b58017 6px, #8f6410 6px, #8f6410 12px); border: 1px solid #f0b429; }
 .tl-holiday-bar .tl-bar-name { font-weight: 700; opacity: 1; }
@@ -6469,7 +6469,9 @@ function buildGanttBar(entry, row) {
   const label = entry.person ? entry.label : entry.projectLabel;
   bar.title = entry.projectName + ' — ' + entry.projectLabel
             + (entry.endDate !== entry.date ? '\n' + entry.date + ' → ' + entry.endDate : '\n' + entry.date)
-            + (entry.isPTO || entry.isHoliday ? '' : '\nDrag to move · Alt+drag to copy (drop on any row, any project)');
+            + (entry.isHoliday ? ''
+              : entry.isPTO ? '\nDrag to move · drag an edge to change the dates'
+              : '\nDrag to move · Alt+drag to copy (drop on any row, any project)');
 
   const inner = document.createElement('div');
   inner.className = 'tl-bar-inner';
@@ -6486,9 +6488,9 @@ function buildGanttBar(entry, row) {
   }
   bar.appendChild(inner);
 
-  // PTO and Holidays are read-only here — they belong to the Time Off project,
-  // not to this work.
-  if (entry.isPTO || entry.isHoliday) return bar;
+  // Holidays are read-only here — moving one shifts a company-wide day off. PTO
+  // slides and resizes like any bar (startTlDrag pins it to its own row).
+  if (entry.isHoliday) return bar;
 
   if (entry.endDate !== entry.date) {
     const lh = document.createElement('div');
@@ -6539,7 +6541,12 @@ function startTlDrag(e, entry, bar, row) {
     }
     return null;
   };
+  // PTO only slides in time. Its people are attendees, not task.person, and it
+  // lives in the Time Off project — reassigning or copying it elsewhere would
+  // write a person onto a key date or plant PTO in a work project.
+  const pinned = entry.isPTO;
   const legalTarget = y => {
+    if (pinned) return null;
     const r = targetRowAt(y);
     if (!r || r.dataset.projectId !== entry.projectId) return null;
     if (r.dataset.person === (entry.person || '')) return null;
@@ -6551,6 +6558,7 @@ function startTlDrag(e, entry, bar, row) {
   // bar's own row is excluded, since a copy dropped there is just the plain
   // shifted-in-place case (no reassign, no project change).
   const copyTarget = y => {
+    if (pinned) return null;
     const r = targetRowAt(y);
     if (!r) return null;
     if (r.dataset.projectId === entry.projectId && r.dataset.person === (entry.person || '')) return null;
