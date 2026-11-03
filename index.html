@@ -14,7 +14,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261103e';
+window.PREPRO_BUILD = '20261103f';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -30,22 +30,22 @@ window.PREPRO_BUILD = '20261103e';
 })();
 </script>
 
-<script src="./local-fb.js?v=20261103e"></script>
+<script src="./local-fb.js?v=20261103f"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20261103e"></script>
+<script src="./people.js?v=20261103f"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261103e"></script>
+<script src="./commitments.js?v=20261103f"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261103e"></script>
+<script src="./dossier.js?v=20261103f"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261103e"></script>
+<script src="./prepro-llm.js?v=20261103f"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261103e"></script>
+<script src="./prepro-ai.js?v=20261103f"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -6593,11 +6593,8 @@ function startTlDrag(e, entry, bar, row) {
       const copy = Object.assign({}, task, { id: genId() });
       if (colShift !== 0) {
         copy.date = shiftByCols(task.date, colShift);
-        if (task.endDate && task.endDate !== task.date) {
-          const durMs = new Date(task.endDate + 'T00:00:00') - new Date(task.date + 'T00:00:00');
-          const newEndD = new Date(new Date(copy.date + 'T00:00:00').getTime() + durMs);
-          copy.endDate = fmtDate(newEndD.getFullYear(), newEndD.getMonth() + 1, newEndD.getDate());
-        }
+        const newEnd = movedSpanEnd(task.date, task.endDate, copy.date);
+        if (newEnd) copy.endDate = newEnd; else delete copy.endDate;
       }
       if (copy.attendees) copy.attendees = copy.attendees.map(a => Object.assign({}, a, { id: genId() }));
       const target = copyTarget(ev.clientY);
@@ -6611,11 +6608,8 @@ function startTlDrag(e, entry, bar, row) {
     const colShift = colShiftFrom(ev);
     if (colShift !== 0) {
       const newStart = shiftByCols(task.date, colShift);
-      if (task.endDate && task.endDate !== task.date) {
-        const durMs = new Date(task.endDate + 'T00:00:00') - new Date(task.date + 'T00:00:00');
-        const newEndD = new Date(new Date(newStart + 'T00:00:00').getTime() + durMs);
-        task.endDate = fmtDate(newEndD.getFullYear(), newEndD.getMonth() + 1, newEndD.getDate());
-      }
+      const newEnd = movedSpanEnd(task.date, task.endDate, newStart);
+      if (newEnd) task.endDate = newEnd; else delete task.endDate;
       task.date = newStart;
     }
 
@@ -7599,32 +7593,9 @@ function moveTask(taskId, dropDate, grabDate) {
   const task = proj.tasks.find(t => t.id === taskId);
   if (!task) return;
 
-  const endDate    = task.endDate || task.date;
-  const taskStartD = new Date(task.date   + 'T00:00:00');
-  const taskEndD   = new Date(endDate      + 'T00:00:00');
-  const grabD      = new Date((grabDate || task.date) + 'T00:00:00');
-  const dropD      = new Date(dropDate + 'T00:00:00');
-
-  // Offset from grab point to start of task (in ms)
-  const offsetToStart = taskStartD - grabD; // negative if grab was after start
-  const durMs         = taskEndD   - taskStartD;
-
-  // New start = drop position shifted by the offset
-  let newStartD = new Date(dropD.getTime() + offsetToStart);
-
-  // If weekends hidden, snap start to a workday
-  if (!showWeekends) newStartD = skipToWorkday(newStartD);
-
-  const newStartStr = fmtDate(newStartD.getFullYear(), newStartD.getMonth() + 1, newStartD.getDate());
-
-  if (task.endDate && task.endDate !== task.date) {
-    // Preserve calendar duration, but skip weekends if hidden
-    const newEndD = !showWeekends
-      ? addBusinessDays(newStartD, durMs)
-      : new Date(newStartD.getTime() + durMs);
-    task.endDate = fmtDate(newEndD.getFullYear(), newEndD.getMonth() + 1, newEndD.getDate());
-  }
-
+  const newStartStr = movedSpanStart(task.date, grabDate, dropDate);
+  const newEnd = movedSpanEnd(task.date, task.endDate, newStartStr);
+  if (newEnd) task.endDate = newEnd; else delete task.endDate;
   task.date = newStartStr;
   saveState();
   renderCalendar();
@@ -7637,24 +7608,10 @@ function copyTask(taskId, dropDate, grabDate) {
   const orig = proj.tasks.find(t => t.id === taskId);
   if (!orig) return;
 
-  const origEndDate = orig.endDate || orig.date;
-  const origStartD  = new Date(orig.date    + 'T00:00:00');
-  const origEndD    = new Date(origEndDate   + 'T00:00:00');
-  const grabD       = new Date((grabDate || orig.date) + 'T00:00:00');
-  const dropD       = new Date(dropDate + 'T00:00:00');
-  const offsetToStart = origStartD - grabD;
-  let newStartD = new Date(dropD.getTime() + offsetToStart);
-  if (!showWeekends) newStartD = skipToWorkday(newStartD);
-  const newStartDate = fmtDate(newStartD.getFullYear(), newStartD.getMonth() + 1, newStartD.getDate());
-
+  const newStartDate = movedSpanStart(orig.date, grabDate, dropDate);
   const copy = Object.assign({}, orig, { id: genId(), date: newStartDate });
-  if (orig.endDate && orig.endDate !== orig.date) {
-    const durMs = origEndD - origStartD;
-    const newEndD = !showWeekends ? addBusinessDays(newStartD, durMs) : new Date(newStartD.getTime() + durMs);
-    copy.endDate = fmtDate(newEndD.getFullYear(), newEndD.getMonth() + 1, newEndD.getDate());
-  } else {
-    delete copy.endDate;
-  }
+  const newEnd = movedSpanEnd(orig.date, orig.endDate, newStartDate);
+  if (newEnd) copy.endDate = newEnd; else delete copy.endDate;
   if (orig.attendees) {
     copy.attendees = orig.attendees.map(a => Object.assign({}, a, { id: genId() }));
   }
@@ -7695,25 +7652,52 @@ function setPanelDateRange(task) {
 }
 
 // ── WEEKEND SKIP ──
-// Given a start date and a duration in ms, compute end date skipping weekends if they're hidden
-function addBusinessDays(startDate, durationMs) {
-  if (showWeekends || durationMs <= 0) {
-    return new Date(startDate.getTime() + durationMs);
-  }
-  // Count calendar days in duration, then add extra days for each weekend crossed
-  const calDays = Math.round(durationMs / 86400000);
-  let d = new Date(startDate);
-  let remaining = calDays;
-  while (remaining > 0) {
-    d.setDate(d.getDate() + 1);
-    if (!isWeekend(d.getDay())) remaining--;
-  }
+// With weekends hidden a chip is measured in WORKDAYS, so a move keeps that
+// count. The old version took the calendar length — weekend included — and
+// laid that many workdays down from the new start, so a Thu–Tue chip (4 days)
+// came back as 6 and grew by two more every time it crossed another weekend.
+// With weekends shown, the Sat/Sun cells are on screen and the chip keeps its
+// calendar length, which is what you see.
+function isWeekendStr(ds) { return isWeekend(new Date(ds + 'T00:00:00').getDay()); }
+function calShift(ds, n) {
+  const d = new Date(ds + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+}
+// Workdays in [from, to], both ends included.
+function countWorkdays(from, to) {
+  let n = 0;
+  for (let d = from; d <= to; d = calShift(d, 1)) if (!isWeekendStr(d)) n++;
+  return n;
+}
+// Step n workdays from ds (n may be negative); n = 0 returns ds unchanged.
+function addWorkdays(ds, n) {
+  const dir = n < 0 ? -1 : 1;
+  let left = Math.abs(n), d = ds;
+  while (left > 0) { d = calShift(d, dir); if (!isWeekendStr(d)) left--; }
   return d;
 }
-function skipToWorkday(d) {
-  // If d lands on a weekend, advance to Monday
-  while (isWeekend(d.getDay())) d.setDate(d.getDate() + 1);
-  return d;
+// Where a span's start lands when the day the user grabbed is dropped on
+// dropDate — the grab keeps its place inside the chip.
+function movedSpanStart(start, grabDate, dropDate) {
+  const grab = grabDate || start;
+  if (!showWeekends) {
+    const back = Math.max(0, countWorkdays(start, grab) - (isWeekendStr(grab) ? 0 : 1));
+    let s = addWorkdays(dropDate, -back);
+    while (isWeekendStr(s)) s = calShift(s, 1);
+    return s;
+  }
+  const offset = Math.round((new Date(start + 'T00:00:00') - new Date(grab + 'T00:00:00')) / 864e5);
+  return calShift(dropDate, offset);
+}
+// End date for a span [start, end] moved to newStart, or null for a one-day chip.
+function movedSpanEnd(start, end, newStart) {
+  if (!end || end === start) return null;
+  let e;
+  const wd = showWeekends ? 0 : countWorkdays(start, end);
+  if (wd > 0) e = addWorkdays(newStart, wd - 1);
+  else e = calShift(newStart, Math.round((new Date(end + 'T00:00:00') - new Date(start + 'T00:00:00')) / 864e5));
+  return e === newStart ? null : e;
 }
 
 // Effort dots — selection state lives on the container's data-value.

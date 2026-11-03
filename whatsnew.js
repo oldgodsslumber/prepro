@@ -17,6 +17,20 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-11-03d',
+    title: 'Moving chips across weekends',
+    dateLabel: 'Nov 3, 2026',
+    groups: [
+      {
+        area: 'Team · Calendar & Gantt',
+        items: [
+          { tag: 'fix', text: 'Moving or copying a chip that runs over a weekend no longer makes it longer. With weekends hidden, a 4-day chip stays 4 workdays wherever you drop it. It used to gain 2 days every time it crossed a weekend.' },
+          { tag: 'fix', text: 'When you drag a multi-day chip by one of its later days, the day you grabbed now lands on the day you drop it, even when a weekend is in between.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-11-03c',
     title: 'Look Back: clearer effort, correct time off',
     dateLabel: 'Nov 3, 2026',
