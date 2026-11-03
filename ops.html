@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261103b';
+window.PREPRO_BUILD = '20261103c';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,25 +26,25 @@ window.PREPRO_BUILD = '20261103b';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20261103b"></script>
+<script type="module" src="./auth.js?v=20261103c"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261103b"></script>
+<script src="./whatsnew.js?v=20261103c"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20261103b"></script>
+<script src="./people.js?v=20261103c"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261103b"></script>
+<script src="./commitments.js?v=20261103c"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261103b"></script>
+<script src="./dossier.js?v=20261103c"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261103b"></script>
+<script src="./prepro-llm.js?v=20261103c"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261103b"></script>
+<script src="./prepro-ai.js?v=20261103c"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -738,8 +738,8 @@ function isStudioLabel(label) {
 // ── TASK TYPE DISPLAY (mirrors team.html) ──
 // Keep these in step with team.html's MILESTONE_DISPLAY / TYPE_ABBR. Ops reads
 // the same data, so a type team.html can create has to be legible here too.
-const MILESTONE_LABEL = { milestone: 'Milestone', delivery: 'Delivery', pto: 'PTO', holiday: 'Holiday', 'due-date': 'Project Due Date' };
-const MILESTONE_EMOJI = { milestone: '🎯', delivery: '📦', pto: '🏖', holiday: '🎆', 'due-date': '🏁' };
+const MILESTONE_LABEL = { milestone: 'Milestone', delivery: 'Delivery', 'offline-review': 'Offline Review', pto: 'PTO', holiday: 'Holiday', 'due-date': 'Project Due Date' };
+const MILESTONE_EMOJI = { milestone: '🎯', delivery: '📦', 'offline-review': '📝', pto: '🏖', holiday: '🎆', 'due-date': '🏁' };
 function milestoneLabel(type) { return MILESTONE_LABEL[type] || MILESTONE_LABEL['due-date']; }
 // Holidays behave like PTO everywhere in Ops: nobody is working, and they are
 // not a project deliverable. Anything that used to test milestoneType === 'pto'
@@ -756,6 +756,7 @@ const TYPE_ABBR = {
   'Project Due Date':  'DUE',
   'Milestone':         'MLS',
   'Delivery':          'DEL',
+  'Offline Review':    'REV',
   'PTO':               'PTO',
   'Holiday':           'HOL',
 };
@@ -4450,7 +4451,7 @@ function computeRecapStats(start, end) {
 // past a planned Delivery / Due Date.
 // ══════════════════════════════════════════════════════════════════
 const PM_MS_EMOJI = MILESTONE_EMOJI;
-const PM_MS_LABEL = { milestone: 'Milestone', delivery: 'Delivery', pto: 'PTO', holiday: 'Holiday', 'due-date': 'Due Date' };
+const PM_MS_LABEL = { milestone: 'Milestone', delivery: 'Delivery', 'offline-review': 'Offline Review', pto: 'PTO', holiday: 'Holiday', 'due-date': 'Due Date' };
 const PM_NOTE_EMOJI = { update: '📋', delay: '⏳', direction: '🔀', feedback: '💬', blocker: '🚧', decision: '✅', team: '👥' };
 const PM_NOTE_LABEL = { update: 'Update', delay: 'Delay', direction: 'Change in Direction', feedback: 'Feedback', blocker: 'Blocker', decision: 'Decision', team: 'Team Change' };
 const PM_MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -4827,7 +4828,7 @@ function renderProjectMetricsPanel() {
   legend.appendChild(notesLeg);
   const msLeg = document.createElement('div');
   msLeg.className = 'pm-legend-item';
-  msLeg.textContent = '🎯📦🏁🎬 = milestone / delivery / due date / review';
+  msLeg.textContent = '🎯📦🏁📝🎬 = milestone / delivery / due date / offline review / review';
   legend.appendChild(msLeg);
   chart.appendChild(legend);
 

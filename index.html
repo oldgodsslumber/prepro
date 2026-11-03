@@ -14,7 +14,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261103b';
+window.PREPRO_BUILD = '20261103c';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -30,22 +30,22 @@ window.PREPRO_BUILD = '20261103b';
 })();
 </script>
 
-<script src="./local-fb.js?v=20261103b"></script>
+<script src="./local-fb.js?v=20261103c"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20261103b"></script>
+<script src="./people.js?v=20261103c"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261103b"></script>
+<script src="./commitments.js?v=20261103c"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261103b"></script>
+<script src="./dossier.js?v=20261103c"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261103b"></script>
+<script src="./prepro-llm.js?v=20261103c"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261103b"></script>
+<script src="./prepro-ai.js?v=20261103c"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1341,6 +1341,7 @@ const TYPE_ABBR = {
   'Project Due Date':  'DUE',
   'Milestone':         'MLS',
   'Delivery':          'DEL',
+  'Offline Review':    'REV',   // the 3-letter fallback reads "OFF", i.e. time off
   'PTO':               'PTO',
   'Holiday':           'HOL',
 };
@@ -1509,6 +1510,8 @@ function projectCountries(proj) {
 const MILESTONE_DISPLAY = {
   'milestone': { emoji: '🎯', label: 'Milestone' },
   'delivery':  { emoji: '📦', label: 'Delivery' },
+  // Never plain "Review": convertTask reads that label as the sunset meeting type.
+  'offline-review': { emoji: '📝', label: 'Offline Review' },
   'pto':       { emoji: '🏖', label: 'PTO' },
   'holiday':   { emoji: '🎆', label: 'Holiday' },
   'due-date':  { emoji: '🏁', label: 'Project Due Date' },
@@ -5270,6 +5273,9 @@ function renderPalette() {
   keyGrp.appendChild(mkDueChip('Project Due Date', '🏁', 'Project Due Date'));
   keyGrp.appendChild(mkDueChip('Milestone', '🎯', 'Milestone'));
   keyGrp.appendChild(mkDueChip('Delivery', '📦', 'Delivery'));
+  // Someone reviewing on their own time — no effort, no invite. An online review
+  // is a Meeting.
+  keyGrp.appendChild(mkDueChip('Offline Review', '📝', 'Offline Review'));
   // (PTO lives only inside PTO / Time-Off projects — handled at the top of this function)
   pal.appendChild(keyGrp);
 
@@ -6190,15 +6196,29 @@ function getFolderEntries() {
         isReview: !!task.isReview, isDueDate: !!task.isDueDate,
         isPTO: !!(task.isDueDate && task.milestoneType === 'pto'),
         isHoliday: isHolidayTask(task),
+        isOfflineReview: isOfflineReviewTask(task),
       };
-      // Key dates stay on the project row even when they carry attendees — they
-      // are project facts, not somebody's workload.
-      if (task.isDueDate) { out.push({ ...base, person: '', attIdx: null }); return; }
-
-      const people = [];
       // Date-aware: isSunset flips the moment a last day is recorded, which
       // dropped people still working here for another three weeks.
       const _t = todayISOStr();
+      // Key dates stay on the project row even when they carry attendees — they
+      // are project facts, not somebody's workload. An offline review is both: a
+      // project date AND something its reviewers are doing, so it also lands on
+      // each reviewer's row.
+      if (task.isDueDate) {
+        out.push({ ...base, person: '', attIdx: null });
+        if (base.isOfflineReview) {
+          const seen = new Set();
+          (task.attendees || []).forEach((a, attIdx) => {
+            if (!a.person || seen.has(a.person) || !personCapacityOn(a.person, _t)) return;
+            seen.add(a.person);
+            out.push({ ...base, person: a.person, attIdx });
+          });
+        }
+        return;
+      }
+
+      const people = [];
       if (task.person && personCapacityOn(task.person, _t)) people.push({ person: task.person, attIdx: null });
       (task.attendees || []).forEach((a, attIdx) => {
         if (!a.person || !personCapacityOn(a.person, _t)) return;
@@ -6426,7 +6446,7 @@ function buildGanttBar(entry, row) {
   bar.title = entry.projectName + ' — ' + entry.projectLabel
             + (entry.endDate !== entry.date ? '\n' + entry.date + ' → ' + entry.endDate : '\n' + entry.date)
             + (entry.isHoliday ? ''
-              : entry.isPTO ? '\nDrag to move · drag an edge to change the dates'
+              : (entry.isPTO || entry.isOfflineReview) ? '\nDrag to move · drag an edge to change the dates'
               : '\nDrag to move · Alt+drag to copy (drop on any row, any project)');
 
   const inner = document.createElement('div');
@@ -6499,8 +6519,9 @@ function startTlDrag(e, entry, bar, row) {
   };
   // PTO only slides in time. Its people are attendees, not task.person, and it
   // lives in the Time Off project — reassigning or copying it elsewhere would
-  // write a person onto a key date or plant PTO in a work project.
-  const pinned = entry.isPTO;
+  // write a person onto a key date or plant PTO in a work project. An offline
+  // review is a key date too: reviewers are added by dropping a person chip on it.
+  const pinned = entry.isPTO || entry.isOfflineReview;
   const legalTarget = y => {
     if (pinned) return null;
     const r = targetRowAt(y);
@@ -7999,6 +8020,7 @@ const TYPE_SWITCHER_DEFS = [
   { label: 'Project Due Date',  dot: '#555' },
   { label: 'Milestone',         dot: '#555' },
   { label: 'Delivery',          dot: '#555' },
+  { label: 'Offline Review',    dot: '#555' },
   { label: 'PTO',               dot: '#555' },
   { label: 'Holiday',           dot: 'var(--holiday)' },
 ];
@@ -8716,8 +8738,12 @@ function renderRosterInto(content) {
 
 /* ── ICS / INVITE HELPERS ── */
 const MEETING_KEYWORDS = ['kickoff','kick-off','kick off','discovery','planning session','brainstorm','review','studio shoot','on-location shoot'];
+function isOfflineReviewTask(t) { return !!(t && t.isDueDate && t.milestoneType === 'offline-review'); }
 function isMeetingTask(t) {
   if (t.isReview) return true;
+  // Its name is "Offline Review", which the 'review' keyword would catch — and
+  // the whole point of it is that nobody meets.
+  if (isOfflineReviewTask(t)) return false;
   const name = (t.taskName || '').toLowerCase();
   return MEETING_KEYWORDS.some(kw => name.includes(kw));
 }

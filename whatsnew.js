@@ -17,6 +17,32 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-11-03a',
+    title: 'Offline reviews, movable PTO, fewer tabs',
+    dateLabel: 'Nov 3, 2026',
+    groups: [
+      {
+        area: 'Team · Key Dates',
+        items: [
+          { tag: 'new', text: 'New 📝 Offline Review key date, for when someone reviews something on their own time. Drop the reviewers onto it like PTO. It adds no effort to anyone’s workload and never turns into a meeting invite. If the review happens live, use a Meeting instead.' },
+          { tag: 'new', text: 'On the folder Gantt an offline review shows on the project’s dates row and on each reviewer’s row.' }
+        ]
+      },
+      {
+        area: 'Team · Folder Gantt',
+        items: [
+          { tag: 'fix', text: 'PTO can now be dragged to new dates and resized on the Gantt, the same as on the calendar. It stays on its own row.' }
+        ]
+      },
+      {
+        area: 'Everywhere',
+        items: [
+          { tag: 'fix', text: 'Moving between Team, Ops and Dash, including clicking a project name, now stays in the same tab instead of opening a new one.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-10-19a',
     title: 'My Calendar: all your work, and only yours',
     dateLabel: 'Oct 19, 2026',
