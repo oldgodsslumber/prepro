@@ -17,6 +17,22 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-11-03b',
+    title: 'Ops effort numbers now agree',
+    dateLabel: 'Nov 3, 2026',
+    groups: [
+      {
+        area: 'Ops',
+        items: [
+          { tag: 'fix', text: 'Recap’s Hours Produced counts every person on a chip, for every workday it runs, and includes Admin work. It used to count each chip once, so expect the number to go up.' },
+          { tag: 'fix', text: 'Project map effort no longer multiplies a chip by its stakeholders, vendors or client attendees, or counts weekends. Everyone on a chip now gets their own lane, not just the first person, so People and task counts are right.' },
+          { tag: 'fix', text: 'The PTO heads-up now sees work on chips you were dropped onto. It warns when someone is Busy or worse in the days before they leave.' },
+          { tag: 'fix', text: 'Category Mix uses the same rules as the effort chart beside it: unfilled slots and PTO days no longer count.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-11-03a',
     title: 'Offline reviews, movable PTO, fewer tabs',
     dateLabel: 'Nov 3, 2026',

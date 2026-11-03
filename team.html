@@ -13,7 +13,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261103c';
+window.PREPRO_BUILD = '20261103d';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -34,30 +34,30 @@ window.PREPRO_BUILD = '20261103c';
      @team markers are dropped from it, and each @local comment is unwrapped into
      it. Here in team.html the @local lines are inert comments. -->
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20261103c"></script>
+<script type="module" src="./auth.js?v=20261103d"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261103c"></script>
+<script src="./whatsnew.js?v=20261103d"></script>
 <!-- /@team -->
-<!-- @local <script src="./local-fb.js?v=20261103c"></script> -->
+<!-- @local <script src="./local-fb.js?v=20261103d"></script> -->
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20261103c"></script>
+<script src="./people.js?v=20261103d"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261103c"></script>
+<script src="./commitments.js?v=20261103d"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261103c"></script>
+<script src="./dossier.js?v=20261103d"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261103c"></script>
+<script src="./prepro-llm.js?v=20261103d"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261103c"></script>
+<script src="./prepro-ai.js?v=20261103d"></script>
 <!-- @team -->
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20261103c"></script>
+<script src="./xlsx.full.min.js?v=20261103d"></script>
 <!-- /@team -->
 <style>
 /* ── RESET ── */

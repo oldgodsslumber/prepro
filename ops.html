@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261103c';
+window.PREPRO_BUILD = '20261103d';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,25 +26,25 @@ window.PREPRO_BUILD = '20261103c';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20261103c"></script>
+<script type="module" src="./auth.js?v=20261103d"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261103c"></script>
+<script src="./whatsnew.js?v=20261103d"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20261103c"></script>
+<script src="./people.js?v=20261103d"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261103c"></script>
+<script src="./commitments.js?v=20261103d"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261103c"></script>
+<script src="./dossier.js?v=20261103d"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261103c"></script>
+<script src="./prepro-llm.js?v=20261103d"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261103c"></script>
+<script src="./prepro-ai.js?v=20261103d"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -1445,10 +1445,15 @@ function opsTaskTitle(task) {
 // project — but the effort charts are a record of work that actually happened,
 // and dropping a project the day it ships rewrites their history. Only the
 // effort path passes this; see getEffortEntries.
+//
+// opts.projects scores exactly those projects, whatever their status — the
+// project map reads one project's own effort, ghosted or finished.
 function getOpsEntries(opts) {
   const includeInactive = !!(opts && opts.includeInactive);
   const entries = [];
-  (state.projects || []).filter(p => (includeInactive || !isInactive(p)) && !p.ghost).forEach(proj => {
+  const source = (opts && opts.projects)
+    || (state.projects || []).filter(p => (includeInactive || !isInactive(p)) && !p.ghost);
+  source.forEach(proj => {
     (proj.tasks || []).forEach(task => {
       if (task.isDueDate) return;
       const loe = task.loe || 'low';
@@ -1596,6 +1601,31 @@ function movePerson(person, dir) {
 // has never had one set. It used to score Medium, so a task the UI called
 // Low was quietly counted as 2 points.
 function loePts(loe) { return LOE_PTS[loe] || LOE_PTS.low; }
+
+// Every day an ops entry counts as effort inside [from, to]: weekdays only, and
+// for a named person only days they were here and not off. These are the effort
+// chart's rules. Recap, the PTO heads-up, Category Mix and the project map each
+// used to carry their own, and each disagreed with the chips a different way.
+// offOn is a memoised isPersonPTO from makeOffOn — it scans every project.
+function forEachEffortDay(e, from, to, offOn, fn) {
+  const a = e.date > from ? e.date : from;
+  const b = e.endDate < to ? e.endDate : to;
+  if (!a || !b || a > b) return;
+  for (let d = a; d <= b; d = addDays(d, 1)) {
+    const dow = new Date(d + 'T00:00:00').getDay();
+    if (dow === 0 || dow === 6) continue;
+    if (!e.unassigned && e.person && (!personActiveOn(e.person, d) || offOn(e.person, d))) continue;
+    fn(d);
+  }
+}
+function makeOffOn() {
+  const memo = new Map();
+  return (person, d) => {
+    const k = person + '|' + d;
+    if (!memo.has(k)) memo.set(k, isPersonPTO(person, d));
+    return memo.get(k);
+  };
+}
 
 // Returns the total effort score for a single day
 function getDayWorkload(person, dateStr) {
@@ -2978,8 +3008,20 @@ function getTeamHeadsUp() {
         if (!peopleProjects.has(t.person)) peopleProjects.set(t.person, new Set());
         peopleProjects.get(t.person).add(proj.id);
       }
+      // People dropped onto a chip are attendees, not t.person — without this,
+      // anyone staffed that way and missing from the roster got no PTO heads-up.
+      if (t.isDueDate) return;
+      (t.attendees || []).forEach(a => {
+        if (!a.person || isSunset(a.person)) return;
+        if (a.category !== 'Internal Team' && !isAdminRole(a.role)) return;
+        if (!peopleProjects.has(a.person)) peopleProjects.set(a.person, new Set());
+        peopleProjects.get(a.person).add(proj.id);
+      });
     });
   });
+  // Scored once for every PTO below, the same way the workload panels score chips.
+  const opsEntries = getOpsEntries();
+  const offOn = makeOffOn();
 
   (state.projects || []).filter(p => !isInactive(p) && !p.ghost).forEach(proj => {
     const producer = getPrimaryProducer(proj);
@@ -3035,14 +3077,16 @@ function getTeamHeadsUp() {
           const theirProjects = peopleProjects.get(a.person);
           if (!theirProjects || !theirProjects.size) return;
 
-          // Calculate their workload before PTO
-          let totalPts = 0;
-          (state.projects || []).filter(p => theirProjects.has(p.id) && !isInactive(p) && !p.ghost).forEach(p => {
-            (p.tasks || []).forEach(t => {
-              if (t.isDueDate || t.person !== a.person) return;
-              const tEnd = t.endDate || t.date;
-              if (t.date <= cutoff && tEnd >= today) totalPts += loePts(t.loe);
-            });
+          // Their workload between now and the day they leave. This read only
+          // t.person (so chip attendees scored 0) and counted each task once
+          // however many days it ran.
+          let totalPts = 0, leadDays = 0;
+          const leadEnd = addDays(start, -1) < cutoff ? addDays(start, -1) : cutoff;
+          const lead = { date: today, endDate: leadEnd, person: a.person };
+          forEachEffortDay(lead, today, leadEnd, offOn, () => { leadDays++; });
+          opsEntries.forEach(e => {
+            if (e.person !== a.person || e.unassigned) return;
+            forEachEffortDay(e, today, leadEnd, offOn, () => { totalPts += loePts(e.loe); });
           });
 
           const role = a.role || '';
@@ -3057,7 +3101,8 @@ function getTeamHeadsUp() {
             people: [a.person],
             teammateName: a.person,
             teammateRole: role,
-            workloadPts: totalPts
+            workloadPts: totalPts,
+            leadDays
           });
         });
       }
@@ -3120,7 +3165,10 @@ function getOpsHeadsUpPrompt(item) {
 
     const name = item.teammateName;
     const role = (item.teammateRole || '').toLowerCase();
-    const heavy = item.workloadPts >= 4;
+    // Busy or worse on average across the workdays left before they go (the
+    // workloadInfo bands). A flat ≥4 total stopped meaning "a lot" once points
+    // counted per day — one Low chip all week would have tripped it.
+    const heavy = item.leadDays > 0 && item.workloadPts / item.leadDays >= 2.5;
 
     if (role === 'producer') {
       const start = new Date(item.date + 'T00:00:00');
@@ -4390,6 +4438,15 @@ function computeRecapStats(start, end) {
   let reviewsHeld = 0;
   const studioDays = new Set();
 
+  // Effort: the effort chart's total over the same window — per person, per
+  // workday. This used to score each Producer/Editor/Animator task once however
+  // many people were on it, count chips nobody was on, and leave Admin out.
+  const offOn = makeOffOn();
+  getEffortEntries().forEach(e => {
+    if (!effortRoleOf(e) || e.unassigned || !e.person || personGoneEntirely(e.person)) return;
+    forEachEffortDay(e, start, cap, offOn, () => { totalPts += loePts(e.loe); });
+  });
+
   (state.projects || []).forEach(proj => {
     if (proj.ghost) return;
     const tasks = proj.tasks || [];
@@ -4407,17 +4464,6 @@ function computeRecapStats(start, end) {
       if (!t.date) return;
       const tStart = t.date;
       const tEnd = t.endDate || t.date;
-
-      // Effort: internal team work tasks overlapping the window (cap at today)
-      if (!t.isReview && !t.isDueDate && ['Producer', 'Editor', 'Animator'].includes(t.role)) {
-        let cur = tStart < start ? start : tStart;
-        const last = tEnd > cap ? cap : tEnd;
-        while (cur <= last) {
-          const dow = new Date(cur + 'T00:00:00').getDay();
-          if (dow !== 0 && dow !== 6) totalPts += loePts(t.loe);
-          cur = addDays(cur, 1);
-        }
-      }
 
       // Reviews held in the window
       if (t.isReview && tStart >= start && tStart <= cap) {
@@ -4520,23 +4566,31 @@ function buildProjectMetrics(proj) {
       return;
     }
 
-    const contributors = (t.person ? 1 : 0) + (t.attendees ? t.attendees.length : 0);
-    const pts = loePts(t.loe);
-    for (let d = s; d <= e; d = addDays(d, 1)) {
-      perDay[d] = (perDay[d] || 0) + pts * Math.max(contributors, 1);
-      if (d === e) break;
-    }
-
     if (t.isReview) {
       reviewCount++;
       markers.push({ date: s, kind: 'review', emoji: '🎬', label: t.reviewLabel || t.taskName || 'Review' });
-    } else if (t.person) {
-      workTasks++;
-      const L = lane(t.person);
-      if (t.role) L.roles.add(t.role);
-      L.segments.push({ start: s, end: e, kind: 'work', role: t.role || '', label: t.taskName || 'Task', loe: t.loe });
     }
   });
+
+  // Effort and lanes come from the same per-person entries as every other Ops
+  // panel. This multiplied each task by ALL its people — stakeholders, vendors,
+  // a meeting's client list — counted weekends, and drew lanes only from
+  // t.person, so a chip staffed through attendees (the normal case) had no lane.
+  // A role slot on a chip with nobody named in it yet still counts here: it is
+  // this project's planned effort, even though it is nobody's workload yet.
+  const offOn = makeOffOn();
+  const workIds = new Set();
+  getOpsEntries({ projects: [proj] }).forEach(en => {
+    const pts = loePts(en.loe);
+    forEachEffortDay(en, en.date, en.endDate, offOn, d => { perDay[d] = (perDay[d] || 0) + pts; });
+    if (en.isReview) return;
+    workIds.add(en.taskId);
+    if (en.unassigned || !en.person) return;
+    const L = lane(en.person);
+    if (en.role) L.roles.add(en.role);
+    L.segments.push({ start: en.date, end: en.endDate, kind: 'work', role: en.role || '', label: en.taskName || 'Task', loe: en.loe });
+  });
+  workTasks = workIds.size;
 
   Object.values(perDay).forEach(v => { totalPts += v; });
 
@@ -5093,18 +5147,12 @@ function renderCategoryMix() {
   // Completed projects included, like the effort charts above and the Recap
   // below. This was the last panel here still reading active projects only, so
   // finishing something erased the work that produced it from the mix.
+  // Same day rules as the effort chart beside it: an unfilled slot isn't work
+  // anyone did, and nobody worked their PTO.
+  const offOn = makeOffOn();
   getEffortEntries().forEach(e => {
-    if (e.endDate < start || e.date > today) return;
-    if (!e.cat) return;
-    let cur = e.date < start ? start : e.date;
-    const last = e.endDate > today ? today : e.endDate;
-    while (cur <= last) {
-      const dow = new Date(cur + 'T00:00:00').getDay();
-      if (dow !== 0 && dow !== 6) {
-        buckets[e.cat] = (buckets[e.cat] || 0) + loePts(e.loe);
-      }
-      cur = addDays(cur, 1);
-    }
+    if (!e.cat || e.unassigned || !e.person || personGoneEntirely(e.person)) return;
+    forEachEffortDay(e, start, today, offOn, () => { buckets[e.cat] = (buckets[e.cat] || 0) + loePts(e.loe); });
   });
 
   const total = Object.values(buckets).reduce((a, b) => a + b, 0);
