@@ -108,10 +108,31 @@ var PP_EXTRACT_SCHEMA = {
           owner:     { type: 'string', description: 'Person who owes it. Empty string if genuinely unclear.' },
           direction: { type: 'string', enum: ['mine', 'theirs'], description: '"theirs" when somebody else owes it to us.' },
           due:       { type: 'string', description: 'YYYY-MM-DD, or empty string if no date was stated.' },
+          dateOptions: { type: 'array', items: { type: 'string' }, description: 'Only when the due date could genuinely mean two days: both, as YYYY-MM-DD. Otherwise empty.' },
           quote:     { type: 'string', description: 'The sentence from the text this came from.' },
           uncertain: { type: 'string', description: 'If something here could not be worked out from the text, one short question asking the reader. Empty string when everything was clear.' }
         },
         required: ['text', 'direction']
+      }
+    },
+    schedule: {
+      type: 'array',
+      description: 'Things that belong on the project calendar.',
+      items: {
+        type: 'object',
+        properties: {
+          kind:        { type: 'string', enum: ['work', 'meeting', 'studio-shoot', 'location-shoot', 'studio-work', 'delivery', 'milestone', 'due-date', 'offline-review', 'pto'] },
+          title:       { type: 'string', description: 'A short name for it, under about 6 words. Empty string if the kind says it all.' },
+          role:        { type: 'string', description: 'kind "work" only: Producer, Editor, Animator, Copywriter, Designer, External Vendor or Other. Empty if not stated.' },
+          people:      { type: 'array', items: { type: 'string' }, description: 'Who is on it, written exactly as the text gives them.' },
+          start:       { type: 'string', description: 'YYYY-MM-DD.' },
+          end:         { type: 'string', description: 'YYYY-MM-DD for something spanning several days, else empty.' },
+          dateOptions: { type: 'array', items: { type: 'string' }, description: 'Only when the date could genuinely mean two days: both, as YYYY-MM-DD. Otherwise empty.' },
+          replaces:    { type: 'string', description: 'The id (like S3) of the calendar item this moves or reschedules, else empty.' },
+          quote:       { type: 'string', description: 'The sentence from the text this came from.' },
+          uncertain:   { type: 'string', description: 'One short question for the reader if something could not be worked out, else empty.' }
+        },
+        required: ['kind', 'start']
       }
     },
     note: {
@@ -126,7 +147,9 @@ var PP_EXTRACT_SCHEMA = {
       required: ['type', 'summary']
     }
   },
-  required: ['commitments', 'note']
+  // schedule is required for the same reason the advisory's lists are: left
+  // optional, a model simply omits it. An empty array is a fine answer.
+  required: ['commitments', 'note', 'schedule']
 };
 
 var PP_EXTRACT_SYSTEM = [
@@ -156,16 +179,175 @@ var PP_EXTRACT_SYSTEM = [
   '    decision  — something was settled',
   '    team      — staffing or availability',
   '    update    — general progress, and the right answer when none of the others clearly fit',
-  '- note.from: who the thread is from, if the text makes it obvious. Empty string if not.'
+  '- note.from: who the thread is from, if the text makes it obvious. Empty string if not.',
+  '',
+  'You also pull out anything that belongs on the project calendar (schedule):',
+  '- Only things that occupy a date: a meeting or call, a shoot, a block of work ("Kevin edits the week of the 10th"), a delivery or due date, an offline review, or someone being out (pto).',
+  '- Something owed with a deadline ("send the cut by Friday") is an open loop, not a calendar item — unless the text calls it a delivery or due date.',
+  '- kind: work = a block of someone\'s production time; meeting = any call, review or check-in held together; studio-shoot / location-shoot = filming; studio-work = set build, strike, studio maintenance; delivery, milestone, due-date = key dates; offline-review = someone reviewing on their own time; pto = someone out.',
+  '- start and end: YYYY-MM-DD, resolved against the stated today. "Thursday" means the next Thursday after today unless the text says otherwise. "The week of the 10th" is that Monday to Friday. end only for something spanning several days.',
+  '- dateOptions: only when a date genuinely could mean two days ("next Friday" said on a Wednesday). Give both, and put the likelier one in start.',
+  '- people: same name rule as owner — exactly as much of the name as the text gives.',
+  '- replaces: when the text moves or reschedules something already on the calendar (listed with ids like S3), give that id. A reschedule is a replaces, never a second item.',
+  '- Skip anything already on the calendar for the same date.',
+  '- uncertain: one short question, only when the answer changes what would be saved. At most one per item.',
+  '- Returning an empty schedule is a correct answer.'
 ].join('\n');
+
+// ── CALENDAR KINDS ──
+// What a schedule proposal can become, and the task shape each one maps onto.
+// `review` = an isReview chip with that label; `milestone` = an isDueDate key
+// date of that type; neither = a role chip. `range` = may span several days.
+var PP_SCHED_KINDS = {
+  'work':           { label: 'Work',              range: true },
+  'meeting':        { label: 'Meeting',           review: 'Meeting' },
+  'studio-shoot':   { label: 'Studio Shoot',      review: 'Studio Shoot',      range: true },
+  'location-shoot': { label: 'On-Location Shoot', review: 'On-Location Shoot', range: true },
+  'studio-work':    { label: 'Studio Work',       review: 'Studio Work',       range: true },
+  'delivery':       { label: 'Delivery',          milestone: 'delivery' },
+  'milestone':      { label: 'Milestone',         milestone: 'milestone' },
+  'due-date':       { label: 'Project Due Date',  milestone: 'due-date' },
+  'offline-review': { label: 'Offline Review',    milestone: 'offline-review' },
+  'pto':            { label: 'PTO',               milestone: 'pto', range: true }
+};
+var PP_WORK_ROLES = ['Producer', 'Editor', 'Animator', 'Copywriter', 'Designer', 'External Vendor', 'Administrative', 'Other'];
+// A project has one due date and usually one delivery. A second one arriving
+// from a thread is almost always the first one moving, so these always ask.
+var PP_SINGLETON_KINDS = { 'due-date': true, 'delivery': true };
+
+// Which kind an existing task is, so the calendar context and the duplicate /
+// move checks speak the same vocabulary as the proposals.
+function ppTaskKind(t) {
+  if (!t) return '';
+  if (t.isReview) {
+    var lbl = t.reviewLabel || 'Review';
+    var k = Object.keys(PP_SCHED_KINDS).filter(function (key) { return PP_SCHED_KINDS[key].review === lbl; })[0];
+    return k || 'meeting';            // the retired Review chip was a meeting
+  }
+  if (t.isDueDate) {
+    var m = Object.keys(PP_SCHED_KINDS).filter(function (key) { return PP_SCHED_KINDS[key].milestone === t.milestoneType; })[0];
+    return m || '';                   // holidays and unknown types are not ours to move
+  }
+  return 'work';
+}
+function ppTaskPeople(t) {
+  var seen = {}, out = [];
+  [t && t.person].concat(((t && t.attendees) || []).map(function (a) { return a && a.person; }))
+    .forEach(function (n) { if (n && !seen[n]) { seen[n] = true; out.push(n); } });
+  return out;
+}
+
+// ── DATES ──
+var PP_DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+var PP_DOW_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+var PP_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function ppIsoDow(iso) { return new Date(iso + 'T00:00:00').getDay(); }
+function ppShiftIso(iso, n) {
+  var d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function ppDaysApart(a, b) { return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 864e5); }
+// "Thu Nov 6" — every date in a question is written like this, so the weekday
+// is always on screen when someone is deciding which Thursday was meant.
+function ppFmtDay(iso) {
+  if (!ppValidIsoDate(iso)) return iso || '';
+  var d = new Date(iso + 'T00:00:00');
+  return PP_DOW[d.getDay()] + ' ' + PP_MON[d.getMonth()] + ' ' + d.getDate();
+}
+function ppFmtSpan(start, end) { return ppFmtDay(start) + (end && end !== start ? ' – ' + ppFmtDay(end) : ''); }
+
+// ── QUESTIONS ──
+// Anything the review cannot settle on its own becomes a question with real
+// answers to click, never a free-text box. Each option is a patch applied to
+// the proposal row, so answering costs no second model request — that budget
+// is about twenty a day.
+//
+//   { text, about, options: [{ label, patch?, swapPerson?: [from, to],
+//                              dropPerson?, skip? }], answer: null | index }
+//
+// `about` names the field the question is about, so editing that field by hand
+// answers it: a reviewer who just types the right date has answered "which
+// Thursday?".
+function ppQuestion(text, about, options) {
+  return { text: text, about: about || 'general', options: options, answer: null };
+}
+function ppGeneralQuestion(text) {
+  return ppQuestion(text, 'general', [{ label: 'Looks right' }, { label: 'Leave it out', skip: true }]);
+}
+function ppOpenQuestions(row) {
+  return ((row && row.questions) || []).filter(function (q) { return q.answer == null; });
+}
+// Applies one answer to its row. A row whose every question has been answered
+// (without "leave it out") is accepted: answering IS deciding.
+function ppApplyAnswer(row, q, idx) {
+  var opt = q && q.options && q.options[idx];
+  if (!row || !opt) return row;
+  q.answer = idx;
+  if (opt.patch) Object.keys(opt.patch).forEach(function (k) { row[k] = opt.patch[k]; });
+  if (opt.swapPerson) {
+    var from = opt.swapPerson[0], to = opt.swapPerson[1];
+    if (Array.isArray(row.people)) {
+      row.people = row.people.map(function (n) { return n === from ? to : n; })
+        .filter(function (n, i, all) { return all.indexOf(n) === i; });
+    }
+    if (row.owner === from) row.owner = to;
+  }
+  if (opt.dropPerson && Array.isArray(row.people)) {
+    row.people = row.people.filter(function (n) { return n !== opt.dropPerson; });
+  }
+  if (opt.skip) { row.skipped = true; row.accept = false; return row; }
+  if (!row.skipped && !ppOpenQuestions(row).length) row.accept = true;
+  return row;
+}
+// A hand edit to a field settles the questions about that field.
+function ppSettleQuestionsAbout(row, about) {
+  ((row && row.questions) || []).forEach(function (q) {
+    if (q.answer == null && q.about === about) q.answer = -1;
+  });
+  if (row && !row.skipped && !ppOpenQuestions(row).length) row.accept = true;
+}
+function ppDateQuestion(dates, startField, endValue) {
+  return ppQuestion('Which date?', startField, dates.map(function (d) {
+    var patch = {};
+    patch[startField] = d;
+    if (endValue && endValue.start && endValue.end) patch.end = ppShiftIso(endValue.end, ppDaysApart(endValue.start, d));
+    return { label: ppFmtDay(d), patch: patch };
+  }));
+}
 
 // Context, not the whole dossier: extraction needs the cast list and what is
 // already tracked, and nothing else. Sending the full dossier here would cost
 // tokens to make the model worse at a narrow job.
-function ppBuildExtractContext(proj) {
+// The calendar the model may refer to when something moves. Each item gets a
+// short id (S1, S2…) for `replaces`; the real task id never leaves the browser
+// and the map back is kept on our side. Only recent and upcoming items: a
+// thread rescheduling something from three months ago is not a reschedule.
+var PP_SCHED_CONTEXT_MAX = 40;
+function ppScheduleContext(proj, today) {
+  var from = ppShiftIso(today || ppAiToday(), -7);
+  var items = ((proj && proj.tasks) || []).filter(function (t) {
+    return t && t.date && ppTaskKind(t) && (t.endDate || t.date) >= from;
+  }).sort(function (a, b) { return a.date.localeCompare(b.date); }).slice(0, PP_SCHED_CONTEXT_MAX);
+  var refs = {}, lines = [];
+  items.forEach(function (t, i) {
+    var ref = 'S' + (i + 1);
+    var kind = ppTaskKind(t);
+    var label = kind === 'work' ? ((t.role || 'Work') + ' work') : PP_SCHED_KINDS[kind].label;
+    var people = ppTaskPeople(t);
+    refs[ref] = { id: t.id, kind: kind, start: t.date, end: t.endDate || '', title: t.taskName || '', label: label, role: t.role || '' };
+    lines.push('  ' + ref + ' · ' + label + (t.taskName ? ' "' + t.taskName + '"' : '') + ' · ' +
+               ppFmtSpan(t.date, t.endDate) + ' (' + t.date + (t.endDate && t.endDate !== t.date ? ' to ' + t.endDate : '') + ')' +
+               (people.length ? ' · ' + people.join(', ') : ''));
+  });
+  return { refs: refs, lines: lines };
+}
+
+function ppBuildExtractContext(proj, sched) {
   var today = ppAiToday();
   var lines = [
-    'Today is ' + today + '.',
+    // The weekday matters: "Thursday" and "next Friday" are resolved against it.
+    'Today is ' + today + ' (' + PP_DOW_LONG[ppIsoDow(today)] + ').',
     'Project: ' + ((proj && proj.name) || 'Untitled') + '.'
   ];
   var names = ppKnownNames(proj);
@@ -178,18 +360,25 @@ function ppBuildExtractContext(proj) {
       open.forEach(function (c) { lines.push('  - ' + c.text + (c.waitingOn ? ' (waiting on ' + c.waitingOn + ')' : '')); });
     }
   }
+  var cal = sched || ppScheduleContext(proj, today);
+  if (cal.lines.length) {
+    lines.push('Already on the calendar (use these ids in "replaces"):');
+    cal.lines.forEach(function (l) { lines.push(l); });
+  } else {
+    lines.push('Nothing is on the calendar yet.');
+  }
   return lines.join('\n');
 }
 
-function ppBuildExtractPrompt(proj, text) {
+function ppBuildExtractPrompt(proj, text, sched) {
   return [
-    ppBuildExtractContext(proj),
+    ppBuildExtractContext(proj, sched),
     '',
     '--- PASTED TEXT BEGINS ---',
     String(text || '').trim(),
     '--- PASTED TEXT ENDS ---',
     '',
-    'Return {"commitments": [...]} following the schema. An empty array is fine.'
+    'Return {"commitments": [...], "note": {...}, "schedule": [...]} following the schema. Empty arrays are fine.'
   ].join('\n');
 }
 
@@ -450,7 +639,8 @@ function ppNormalizeExtracted(raw, proj, opts) {
 
     var quote = String(item.quote || '').trim();
     var owner = ppResolveOwner(ppUnexpandOwner(String(item.owner || '').trim(), quote, proj), proj);
-    var due = ppValidIsoDate(item.due);
+    var dueOptions = ppDistinctDates(item.dateOptions);
+    var due = ppValidIsoDate(item.due) || dueOptions[0] || '';
 
     var direction = ppCoherentDirection(owner, item.direction, me);
 
@@ -458,6 +648,7 @@ function ppNormalizeExtracted(raw, proj, opts) {
     // out ourselves from the roster; the second only the model can know.
     var match = ppOwnerMatches(owner, proj);
     var ask = String(item.uncertain || '').trim();
+    var askKind = ask ? 'model' : '';
 
     // "Marcus — I owe you the runtime estimate" names Marcus, but the person
     // who owes it is whoever wrote the line. The prompt says so explicitly and
@@ -471,18 +662,38 @@ function ppNormalizeExtracted(raw, proj, opts) {
         !/\byou(?:'ll| will)?\s+(?:owe|send|get|do|need)\b/i.test(quote)) {
       var meKey = me && typeof normalizePersonKey === 'function' ? normalizePersonKey(me) : '';
       var ownerKey = typeof normalizePersonKey === 'function' ? normalizePersonKey(owner) : '';
-      if (!meKey || meKey !== ownerKey) {
-        ask = ask || ('The text says "I" — is this you, or ' + owner + '?');
+      if ((!meKey || meKey !== ownerKey) && !ask) {
+        ask = 'The text says "I" — is this you, or ' + owner + '?';
+        askKind = 'speaker';
       }
     }
 
     if (match.kind === 'ambiguous') {
       ask = 'Which ' + owner + '?';
+      askKind = 'ambiguous';
     } else if (!ask && owner && match.kind === 'unknown' && direction === 'theirs') {
       // Waiting on somebody nobody on the project has heard of is worth a look:
       // it is usually a first name we cannot place, or an external contact.
       ask = 'Nobody on this project is called "' + owner + '" — is that right?';
+      askKind = 'unknown';
     }
+
+    // The same doubts, as questions with answers to click.
+    var questions = [];
+    if (askKind === 'ambiguous') {
+      questions.push(ppQuestion(ask, 'owner', match.candidates.map(function (c) {
+        return { label: c, patch: { owner: c, ownerResolved: true } };
+      }).concat([{ label: 'Neither — keep "' + owner + '"', patch: { ownerResolved: true } }])));
+    } else if (askKind === 'speaker') {
+      questions.push(ppQuestion(ask, 'owner', me
+        ? [{ label: 'Me (' + me + ')', patch: { owner: me } }, { label: owner }, { label: 'Leave it out', skip: true }]
+        : [{ label: owner }, { label: 'Leave it out', skip: true }]));
+    } else if (askKind === 'unknown') {
+      questions.push(ppQuestion(ask, 'owner', [{ label: 'Yes, keep ' + owner }, { label: 'Leave it out', skip: true }]));
+    } else if (askKind === 'model') {
+      questions.push(ppGeneralQuestion(ask));
+    }
+    if (dueOptions.length > 1) questions.push(ppDateQuestion(dueOptions, 'due'));
 
     out.push({
       text: text,
@@ -492,9 +703,160 @@ function ppNormalizeExtracted(raw, proj, opts) {
       quote: quote,
       uncertain: ask,
       ownerOptions: match.kind === 'ambiguous' ? match.candidates : [],
+      questions: questions,
       // A row we are unsure about is NOT pre-ticked. Everything else is: the
       // reviewer confirms the guess rather than re-entering it.
-      accept: !ask
+      accept: !questions.length
+    });
+  });
+  return out;
+}
+
+function ppDistinctDates(list) {
+  var out = [];
+  (Array.isArray(list) ? list : []).forEach(function (v) {
+    var d = ppValidIsoDate(v);
+    if (d && out.indexOf(d) < 0) out.push(d);
+  });
+  return out;
+}
+
+// Calendar proposals. Same contract as the loops: nothing here is trusted
+// until it has been checked against the project, and anything this cannot
+// settle becomes a question rather than a guess.
+//
+// opts: { me, today, refs (from ppScheduleContext), roleFor(name) → role }
+function ppNormalizeSchedule(raw, proj, opts) {
+  opts = opts || {};
+  var out = [];
+  var list = (raw && raw.schedule) || [];
+  if (!Array.isArray(list)) return out;
+  var refs = opts.refs || {};
+  var tasks = (proj && proj.tasks) || [];
+
+  list.forEach(function (item, i) {
+    if (!item) return;
+    var kind = PP_SCHED_KINDS[item.kind] ? item.kind : '';
+    if (!kind) return;
+    var K = PP_SCHED_KINDS[kind];
+
+    var dateOptions = ppDistinctDates(item.dateOptions);
+    var start = ppValidIsoDate(item.start) || dateOptions[0] || '';
+    if (!start) return;                       // a calendar item with no date is nothing
+    var end = K.range ? ppValidIsoDate(item.end) : '';
+    if (end && end <= start) end = '';
+
+    var quote = String(item.quote || '').trim();
+    var title = String(item.title || '').trim().slice(0, 80);
+    var questions = [];
+
+    // People: the loop rules, per name. A name prepro knows from the person
+    // records but not from this project is fine — they get added to it.
+    var people = [];
+    (Array.isArray(item.people) ? item.people : []).forEach(function (rawName) {
+      var nm = ppResolveOwner(ppUnexpandOwner(String(rawName || '').trim(), quote, proj), proj);
+      if (!nm || people.indexOf(nm) >= 0) return;
+      var m = ppOwnerMatches(nm, proj);
+      if (m.kind === 'unknown' && typeof resolvePersonName === 'function') {
+        var rec = resolvePersonName(nm);
+        if (rec) { if (people.indexOf(rec) < 0) people.push(rec); return; }
+      }
+      people.push(nm);
+      if (m.kind === 'ambiguous') {
+        questions.push(ppQuestion('Which ' + nm + '?', 'people', m.candidates.map(function (c) {
+          return { label: c, swapPerson: [nm, c] };
+        }).concat([{ label: 'Neither — keep "' + nm + '"' }])));
+      } else if (m.kind === 'unknown') {
+        questions.push(ppQuestion('Nobody prepro knows is called "' + nm + '". Put them on it anyway?', 'people',
+          [{ label: 'Yes, keep ' + nm }, { label: 'Leave ' + nm + ' off', dropPerson: nm }]));
+      }
+    });
+    if (kind === 'pto' && !people.length) return;   // out — but who?
+
+    var role = '';
+    if (kind === 'work') {
+      role = PP_WORK_ROLES.indexOf(item.role) >= 0 ? item.role : '';
+      if (!role && people.length && typeof opts.roleFor === 'function') role = opts.roleFor(people[0]) || '';
+      if (PP_WORK_ROLES.indexOf(role) < 0) role = 'Producer';
+    }
+
+    // Already there: same kind on the same day (and for work, the same role).
+    var sameKind = tasks.filter(function (t) {
+      return ppTaskKind(t) === kind && (kind !== 'work' || (t.role || '') === role);
+    });
+    // Two different meetings can share a day, and Liz's edit day is not Kevin's,
+    // so "same" also needs the name (when both have one) or the people to agree.
+    var isDup = function (t) {
+      if (t.date !== start) return false;
+      if (kind === 'work') {
+        var tp = ppTaskPeople(t);
+        return !people.length || people.some(function (n) { return tp.indexOf(n) >= 0; });
+      }
+      if (PP_SINGLETON_KINDS[kind] || !title || !t.taskName) return true;
+      return ppSameLoop(title, t.taskName);
+    };
+    if (sameKind.some(isDup) && !item.replaces) return;
+
+    // Is this something already on the calendar, moving? The model says so via
+    // `replaces`; we also check ourselves for the cases it misses — a second
+    // due date, or a meeting with the same name on a different day.
+    var moveOf = null;
+    var ref = refs[String(item.replaces || '').trim()];
+    if (ref && ref.kind === kind) moveOf = ref;
+    if (!moveOf) {
+      var hit = sameKind.filter(function (t) {
+        if (t.date === start || (t.endDate || t.date) < ppShiftIso(opts.today || ppAiToday(), -7)) return false;
+        if (PP_SINGLETON_KINDS[kind]) return true;
+        return kind !== 'work' && title && t.taskName && ppSameLoop(title, t.taskName);
+      })[0];
+      if (hit) moveOf = { id: hit.id, kind: kind, start: hit.date, end: hit.endDate || '', title: hit.taskName || '', label: PP_SCHED_KINDS[kind].label };
+    }
+    if (moveOf && moveOf.start === start) return;    // "moved" to where it already is
+
+    if (moveOf) {
+      var what = (moveOf.title ? '"' + moveOf.title + '"' : 'the ' + moveOf.label) + ' on ' + ppFmtSpan(moveOf.start, moveOf.end);
+      questions.unshift(ppQuestion('Is this ' + what + ' moving to ' + ppFmtDay(start) + '?', 'move', [
+        { label: 'Yes — move it', patch: { movesId: moveOf.id } },
+        { label: 'No — add a new one', patch: { movesId: '' } }
+      ]));
+    }
+
+    if (dateOptions.length > 1) {
+      questions.push(ppDateQuestion(dateOptions, 'start', { start: start, end: end }));
+    } else if (kind !== 'pto' && (ppIsoDow(start) === 0 || ppIsoDow(start) === 6)) {
+      // A weekend chip is invisible with weekends hidden, and almost always a
+      // misread "Saturday" rather than intended weekend work. Ask, with the
+      // nearest workdays as the answers.
+      var fri = ppShiftIso(start, ppIsoDow(start) === 6 ? -1 : -2);
+      var mon = ppShiftIso(start, ppIsoDow(start) === 6 ? 2 : 1);
+      var shift = function (d) {
+        var p = { start: d };
+        if (end) p.end = ppShiftIso(end, ppDaysApart(start, d));
+        return p;
+      };
+      questions.push(ppQuestion('That lands on a ' + PP_DOW_LONG[ppIsoDow(start)] + '.', 'start', [
+        { label: ppFmtDay(fri), patch: shift(fri) },
+        { label: ppFmtDay(mon), patch: shift(mon) },
+        { label: 'Keep ' + ppFmtDay(start) }
+      ]));
+    }
+
+    var ask = String(item.uncertain || '').trim();
+    if (ask) questions.push(ppGeneralQuestion(ask));
+
+    out.push({
+      id: 'cal' + i,
+      kind: kind,
+      title: title,
+      role: role,
+      people: people,
+      start: start,
+      end: end,
+      quote: quote,
+      movesId: '',
+      moveOf: moveOf,
+      questions: questions,
+      accept: !questions.length
     });
   });
   return out;
@@ -561,7 +923,7 @@ function ppReadThread(proj, text, opts) {
   var body = String(text || '').trim();
   // Same shape as a real result, always. Returning a bare array here made an
   // empty paste throw on `result.commitments` at every call site.
-  if (!body) return Promise.resolve({ commitments: [], note: null });
+  if (!body) return Promise.resolve({ commitments: [], note: null, schedule: [] });
   // A 200KB paste is ~50k tokens against a daily budget of about twenty
   // requests, and the reply then reliably dies on MAX_TOKENS — a charged
   // request that can never succeed. Refuse before spending it.
@@ -571,16 +933,19 @@ function ppReadThread(proj, text, opts) {
       Math.round(PP_PASTE_MAX / 1000) + 'KB). Paste the part of the thread that matters.'));
   }
 
+  var today = ppAiToday();
+  var sched = ppScheduleContext(proj, today);
   return ppCallLLMJson({
     system: PP_EXTRACT_SYSTEM,
-    user: ppBuildExtractPrompt(proj, body),
+    user: ppBuildExtractPrompt(proj, body, sched),
     schema: PP_EXTRACT_SCHEMA,
     temperature: 0,
     signal: opts.signal
   }).then(function (raw) {
     return {
       commitments: ppNormalizeExtracted(raw, proj, { me: opts.me }),
-      note: ppNormalizeThreadNote(raw, body)
+      note: ppNormalizeThreadNote(raw, body),
+      schedule: ppNormalizeSchedule(raw, proj, { me: opts.me, today: today, refs: sched.refs, roleFor: opts.roleFor })
     };
   });
 }

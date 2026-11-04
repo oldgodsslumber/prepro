@@ -738,3 +738,39 @@ an ambiguous name, because resolving it would hide the question.
 **Bug found while testing:** `ppReadThread('')` returned a bare array rather than
 `{commitments, note}`, so an empty paste would have thrown on
 `result.commitments` at every call site.
+
+---
+
+## Addendum (2026-11-04) — the thread reader schedules, and asks
+
+The same single extraction request now returns a third list, `schedule`:
+calendar proposals of ten kinds (`PP_SCHED_KINDS` in prepro-ai.js — work,
+meeting, the two shoots, studio work, delivery, milestone, due date, offline
+review, PTO), each mapping onto a task shape team.html already writes. No
+second request; the schema just grew.
+
+- **Calendar context.** The prompt now carries today's weekday and the recent
+  and upcoming chips as `S1…S40`. The model may answer `replaces: "S3"`; the map
+  back to real task ids stays in the browser. `ppNormalizeSchedule` also detects
+  moves itself — a second due date or delivery, or a same-named meeting on a
+  new day — because a reschedule is the common case in email and add-only
+  would have meant duplicate meetings.
+- **Questions are clickable, never typed.** Every doubt — ambiguous or unknown
+  person, "I"-speaker, which of two dates, a weekend date, move-or-new, the
+  model's own `uncertain` — is `{ text, about, options[{label, patch, …}] }`.
+  `ppApplyAnswer` applies the patch, so an answer costs no second request;
+  answering every question on a row ticks it. A hand edit to the field a
+  question is `about` settles it (`ppSettleQuestionsAbout`).
+- **One place to answer.** Pressing Add with questions still open shows a panel
+  listing only those. Whatever stays unanswered is left in the review list
+  rather than guessed at or dropped. Inline answers still work, so the panel
+  never appears for someone who answers as they go.
+- **Writes keep the slice order.** All task changes, one `saveState`, then name
+  history, then loops — the root-listener revert rule from the people work.
+  Moves keep the chip's length (`movedSpanEnd`) and leave a system note.
+
+*Verified:* 28 unit tests on the schedule normaliser and question model, and a
+headless-Chrome run of the whole flow on the local edition with Gemini stubbed
+at `ppCallLLMJson`: move answered in the panel moved the chip without
+duplicating it, the weekend answer landed the shoot on Friday, the unanswered
+row stayed for later, no page errors. Not yet run against the live model.

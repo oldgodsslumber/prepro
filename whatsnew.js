@@ -17,6 +17,22 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-11-04b',
+    title: 'Read a thread: it schedules too',
+    dateLabel: 'Nov 4, 2026',
+    groups: [
+      {
+        area: 'Team · Plan',
+        items: [
+          { tag: 'new', text: 'Read a thread now pulls out calendar items as well as open loops: meetings, shoots, blocks of work, deliveries, due dates, offline reviews and PTO. They appear under "On the calendar" for you to check, and nothing is added until you press Add.' },
+          { tag: 'new', text: 'When a thread moves something that’s already on the calendar ("push the client review to Friday"), it offers to move that chip rather than add a second one. The move is logged as a project note.' },
+          { tag: 'new', text: 'Anything prepro can’t work out becomes a question with answers to click, like "Which Liz?", "Which Thursday?" or "That lands on a Saturday". If any are still open when you press Add, one panel lists them all. Anything you leave unanswered stays in the list for later.' },
+          { tag: 'new', text: 'An open loop can be turned into a calendar item, and a calendar item into an open loop, with one click.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-11-04a',
     title: 'Video Team views, closing tickets, Gemini',
     dateLabel: 'Nov 4, 2026',

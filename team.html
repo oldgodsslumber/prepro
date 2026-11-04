@@ -13,7 +13,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261104b';
+window.PREPRO_BUILD = '20261104d';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -34,30 +34,30 @@ window.PREPRO_BUILD = '20261104b';
      @team markers are dropped from it, and each @local comment is unwrapped into
      it. Here in team.html the @local lines are inert comments. -->
 <!-- Firebase + auth gate -->
-<script type="module" src="./auth.js?v=20261104b"></script>
+<script type="module" src="./auth.js?v=20261104d"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261104b"></script>
+<script src="./whatsnew.js?v=20261104d"></script>
 <!-- /@team -->
-<!-- @local <script src="./local-fb.js?v=20261104b"></script> -->
+<!-- @local <script src="./local-fb.js?v=20261104d"></script> -->
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20261104b"></script>
+<script src="./people.js?v=20261104d"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261104b"></script>
+<script src="./commitments.js?v=20261104d"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261104b"></script>
+<script src="./dossier.js?v=20261104d"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261104b"></script>
+<script src="./prepro-llm.js?v=20261104d"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261104b"></script>
+<script src="./prepro-ai.js?v=20261104d"></script>
 <!-- @team -->
 <!-- SheetJS (Excel import) — classic script, exposes global XLSX -->
-<script src="./xlsx.full.min.js?v=20261104b"></script>
+<script src="./xlsx.full.min.js?v=20261104d"></script>
 <!-- /@team -->
 <style>
 /* ── RESET ── */
@@ -860,6 +860,18 @@ textarea.pi-edit { resize: vertical; min-height: 46px; white-space: pre-wrap; }
 .ai-prop-ask { font-size: 10px; color: #e0a33a; margin-top: 3px; line-height: 1.4; }
 .ai-prop-pick { border-color: #e0a33a; }
 .ai-prop-blocked { background: rgba(224,163,58,.06); border-radius: 5px; }
+/* Questions from a pasted thread: the doubt, then its answers as buttons. */
+.ai-q { font-size: 10px; color: #e0a33a; margin-top: 4px; line-height: 1.4; }
+.ai-q-opts { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
+.ai-q-opt { font: inherit; font-size: 10px; color: var(--text); background: var(--card); border: 1px solid #e0a33a; border-radius: 4px; padding: 2px 8px; cursor: pointer; }
+.ai-q-opt:hover { background: rgba(224,163,58,.18); }
+.ai-prop-move { font-size: 10px; color: var(--accent); margin-top: 4px; line-height: 1.4; }
+.ai-prop-act { font: inherit; font-size: 10px; color: var(--dim); background: none; border: none; padding: 0; margin-top: 4px; cursor: pointer; text-decoration: underline; }
+.ai-prop-act:hover { color: var(--text); }
+.ai-prop-skipped { opacity: .55; font-size: 11px; color: var(--dim); align-items: center; }
+.ai-prop-skipped .ai-prop-act { margin-top: 0; }
+.ai-clarify-card { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; margin-top: 8px; background: var(--card); }
+.ai-clarify-what { font-size: 12px; color: var(--text); font-weight: 600; line-height: 1.4; }
 .thread-card { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; margin: 6px 0; background: var(--card); }
 .thread-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .thread-type { font-size: 10px; font-weight: 700; color: var(--text); }
@@ -2592,7 +2604,7 @@ function renderAiSettings(c) {
 
   const intro = document.createElement('div');
   intro.className = 'settings-hint';
-  intro.textContent = 'Nothing in prepro needs this. Every nudge, every open loop and the whole dossier are worked out on your machine with no model involved. A key only adds the ability to turn pasted text — an email thread, meeting notes — into open loops you review before they land.';
+  intro.textContent = 'Nothing in prepro needs this. Every nudge, every open loop and the whole dossier are worked out on your machine with no model involved. A key only adds the ability to turn pasted text — an email thread, meeting notes — into open loops and calendar items you review before they land.';
   c.appendChild(intro);
 
   const keyRow = document.createElement('div');
@@ -10216,7 +10228,12 @@ function pasteProposalsFor(projectId) {
 function pasteNoteFor(projectId) {
   return (_pasteProposals && _pasteProposals.projectId === projectId) ? (_pasteProposals.note || null) : null;
 }
+function pasteScheduleFor(projectId) {
+  return (_pasteProposals && _pasteProposals.projectId === projectId) ? (_pasteProposals.schedule || null) : null;
+}
 let _pasteBusy = false;
+// One line saying what the last "Add" actually did, shown once on the next render.
+let _pasteDone = null;
 
 function renderPasteBox(content, proj, me, refresh) {
   const title = document.createElement('div');
@@ -10238,7 +10255,11 @@ function renderPasteBox(content, proj, me, refresh) {
   go.disabled = _pasteBusy;
   const status = document.createElement('span');
   status.className = 'export-note';
-  status.textContent = 'Files the thread as a note, and pulls out anything owed. Nothing is saved until you tick it.';
+  status.textContent = 'Files the thread as a note, and pulls out anything owed and anything for the calendar. Nothing is saved until you add it.';
+  if (_pasteDone && _pasteDone.projectId === proj.id) {
+    status.textContent = '✓ ' + _pasteDone.text;
+    _pasteDone = null;
+  }
 
   go.addEventListener('click', () => {
     const text = ta.value.trim();
@@ -10247,14 +10268,16 @@ function renderPasteBox(content, proj, me, refresh) {
     go.disabled = true;
     go.textContent = 'Reading…';
     status.textContent = 'Asking Gemini…';
-    ppReadThread(proj, text, { me: me })
+    // The role a person lands on a chip as, same as dragging their name chip.
+    const roleFor = name => rosterRoleFor(name, personTeamOrDerived(name));
+    ppReadThread(proj, text, { me: me, roleFor })
       .then(result => {
         _pasteBusy = false;
-        _pasteProposals = { projectId: proj.id, list: result.commitments, note: result.note };
+        _pasteProposals = { projectId: proj.id, list: result.commitments, note: result.note, schedule: result.schedule || [] };
         // A thread with no actions in it is still worth filing — "legal are
         // still stuck" is a note even though nobody owes anything new.
-        if (!result.commitments.length && !(result.note && result.note.summary)) {
-          status.textContent = 'Nothing found in that — no open loops and nothing worth noting.';
+        if (!result.commitments.length && !(result.schedule || []).length && !(result.note && result.note.summary)) {
+          status.textContent = 'Nothing found in that — no open loops, nothing for the calendar, nothing worth noting.';
           go.disabled = false; go.textContent = 'Read it';
           return;
         }
@@ -10263,7 +10286,7 @@ function renderPasteBox(content, proj, me, refresh) {
       .catch(err => {
         _pasteBusy = false;
         go.disabled = false;
-        go.textContent = 'Find open loops';
+        go.textContent = 'Read it';
         status.textContent = (err && err.message) || String(err);
         status.classList.add('ai-spent');
       });
@@ -10274,7 +10297,8 @@ function renderPasteBox(content, proj, me, refresh) {
 
   const proposals = pasteProposalsFor(proj.id);
   const threadNote = pasteNoteFor(proj.id);
-  if ((!proposals || !proposals.length) && !threadNote) return;
+  const schedule = pasteScheduleFor(proj.id);
+  if ((!proposals || !proposals.length) && (!schedule || !schedule.length) && !threadNote) return;
 
   // ── The thread itself, as a note ──
   // Pasting used to read a thread, pull the loops out and throw the thread
@@ -10355,147 +10379,28 @@ function renderPasteBox(content, proj, me, refresh) {
     content.appendChild(nRow);
   }
 
-  if (!proposals || !proposals.length) {
+  const loops = proposals || [];
+  const cal = schedule || [];
+  if (!loops.length && !cal.length) {
     const none = document.createElement('div');
     none.className = 'plan-empty';
-    none.textContent = 'No open loops in that thread.';
+    none.textContent = 'Nothing owed and nothing for the calendar in that thread.';
     content.appendChild(none);
   }
 
-  // ── Review list ──
+  // ── Review lists ──
   // Same shape as the Excel import review: proposed rows, editable, ticked in
-  // or out, nothing written until confirmed.
-  if (proposals && proposals.length) {
-    const rTitle = document.createElement('div');
-    rTitle.className = 'plan-group-title';
-    const needing = proposals.filter(x => (x.ownerOptions && x.ownerOptions.length > 1 && !x.ownerResolved) || x.uncertain).length;
-    rTitle.textContent = 'Open loops · ' + proposals.length +
-      (needing ? ' — ' + needing + ' need' + (needing === 1 ? 's' : '') + ' a decision' : ' — untick anything wrong');
-    content.appendChild(rTitle);
+  // or out, nothing written until confirmed. Loops and calendar items are two
+  // lists because they become two different things, but either can be turned
+  // into the other — "send the cut by Friday" is honestly both.
+  if (loops.length) {
+    content.appendChild(pasteGroupTitle('Open loops', loops));
+    loops.forEach(p => content.appendChild(pasteLoopRow(p, me, refresh)));
   }
-
-  (proposals || []).forEach((p, i) => {
-    const row = document.createElement('div');
-    row.className = 'plan-row';
-
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    // A row whose ambiguity is unresolved cannot be ticked at all. Everything
-    // else arrives ticked — the reviewer confirms a guess rather than re-typing
-    // it — but a coin-flip owner is not a guess worth defaulting to yes.
-    const blocked = !!(p.ownerOptions && p.ownerOptions.length > 1 && !p.ownerResolved);
-    cb.disabled = blocked;
-    cb.checked = !blocked && p.accept !== false;
-    cb.className = 'ai-prop-check';
-    cb.title = blocked ? 'Say which person this is first' : '';
-    cb.addEventListener('change', () => { p.accept = cb.checked; });
-    row.appendChild(cb);
-    if (blocked) row.classList.add('ai-prop-blocked');
-
-    const main = document.createElement('div');
-    main.className = 'plan-main';
-
-    const txt = document.createElement('input');
-    txt.type = 'text';
-    txt.className = 'ai-prop-text';
-    txt.value = p.text;
-    txt.addEventListener('change', () => { p.text = txt.value.trim(); });
-    main.appendChild(txt);
-
-    const meta = document.createElement('div');
-    meta.className = 'ai-prop-meta';
-
-    // Two Lizzes on the project and a thread that just says "Liz" is not a name
-    // we can resolve, and picking one silently files the loop against the wrong
-    // person — where it looks perfectly fine and never reaches whoever actually
-    // owes it. So it becomes a choice rather than a guess.
-    if (p.ownerOptions && p.ownerOptions.length > 1) {
-      const pick = document.createElement('select');
-      pick.className = 'ai-prop-input ai-prop-pick';
-      const blank = document.createElement('option');
-      blank.value = '';
-      blank.textContent = 'Which ' + p.owner + '?';
-      pick.appendChild(blank);
-      p.ownerOptions.forEach(name => {
-        const o = document.createElement('option');
-        o.value = name;
-        o.textContent = name;
-        pick.appendChild(o);
-      });
-      const asWritten = document.createElement('option');
-      asWritten.value = '__keep_as_written__';
-      asWritten.textContent = 'Neither — keep "' + p.owner + '"';
-      pick.appendChild(asWritten);
-      // Nothing chosen yet, so the row stays unticked until it is.
-      pick.value = '';
-      pick.addEventListener('change', () => {
-        if (pick.value === '__keep_as_written__') {
-          p.ownerResolved = true;
-          p.accept = true;
-        } else if (pick.value) {
-          p.owner = pick.value;
-          p.ownerResolved = true;
-          // Answering the question IS accepting the row. Leaving accept alone
-          // meant the row re-rendered unticked and Save skipped it — the one
-          // interaction this whole feature exists for lost the loop.
-          p.accept = true;
-        } else {
-          p.ownerResolved = false;
-          p.accept = false;
-        }
-        refresh();
-      });
-      meta.appendChild(pick);
-    } else {
-      const own = document.createElement('input');
-      own.type = 'text';
-      own.className = 'ai-prop-input';
-      own.placeholder = 'Owner';
-      own.value = p.owner || '';
-      own.setAttribute('list', 'planPeople');
-      own.addEventListener('change', () => { p.owner = own.value.trim(); });
-      meta.appendChild(own);
-    }
-
-    const dir = document.createElement('select');
-    dir.className = 'ai-prop-input';
-    [['theirs', 'waiting on them'], ['mine', 'on me']].forEach(([v, l]) => {
-      const o = document.createElement('option');
-      o.value = v; o.textContent = l; o.selected = p.direction === v;
-      dir.appendChild(o);
-    });
-    dir.addEventListener('change', () => { p.direction = dir.value; });
-    meta.appendChild(dir);
-
-    const due = document.createElement('input');
-    due.type = 'date';
-    due.className = 'ai-prop-input ai-prop-date';
-    due.value = p.due || '';
-    due.addEventListener('change', () => { p.due = due.value; });
-    meta.appendChild(due);
-    main.appendChild(meta);
-
-    // What it could not work out. Shown at the point of the field it is about,
-    // rather than as a wizard afterwards — the reviewer is already reading this
-    // row, and a question they answer here costs them nothing extra.
-    if (p.uncertain && !p.ownerResolved) {
-      const q = document.createElement('div');
-      q.className = 'ai-prop-ask';
-      q.textContent = '⚠ ' + p.uncertain;
-      main.appendChild(q);
-    }
-
-    // The receipt. A proposal you cannot trace back to a sentence is one you
-    // should not accept, so the sentence is always on screen.
-    if (p.quote) {
-      const q = document.createElement('div');
-      q.className = 'ai-prop-quote';
-      q.textContent = '“' + p.quote + '”';
-      main.appendChild(q);
-    }
-    row.appendChild(main);
-    content.appendChild(row);
-  });
+  if (cal.length) {
+    content.appendChild(pasteGroupTitle('On the calendar', cal));
+    cal.forEach(s => content.appendChild(pasteCalRow(s, proj, me, refresh)));
+  }
 
   const confirmBar = document.createElement('div');
   confirmBar.className = 'export-actions';
@@ -10503,54 +10408,12 @@ function renderPasteBox(content, proj, me, refresh) {
   add.className = 'settings-btn primary';
   add.textContent = 'Add ticked';
   add.addEventListener('click', () => {
-    const picked = (proposals || []).filter(p => p.accept !== false && p.text);
-    const today = cmTodayStr();
-
-    // File the thread first so the loops can point at it — the same
-    // source/sourceId link a note-promoted loop gets, which is what lets
-    // patternOpenBlocker tell a live blocker from a stale one.
-    let noteId = '';
-    if (threadNote && threadNote.accept !== false && threadNote.summary) {
-      // A guessed sender is not an author. If the thread never named anybody,
-      // the note is filed under whoever pasted it — attributing it to a real
-      // colleague who did not write it is worse than a slightly vague author.
-      const author = (threadNote.from && !threadNote.fromGuessed) ? threadNote.from : (me || NO_AUTHOR);
-      const note = addNote(activeProjectId, threadNote.type, threadNote.summary, author);
-      if (note) {
-        noteId = note.id;
-        // The thread verbatim, kept but not rendered in the feed: a 40-line
-        // email chain would drown both the notes list and the dossier, and the
-        // summary is what a reader actually wants. Available behind a toggle.
-        note.sourceText = threadNote.sourceText || '';
-        note.sourceKind = 'thread';
-        saveState();
-      }
-    }
-
-    picked.forEach(p => {
-      // ppCoherentDirection refuses a wait with nobody to wait on, and a wait
-      // on yourself. Same rule the manual add box has always applied.
-      const dir = ppCoherentDirection(p.owner, p.direction, me);
-      const theirs = dir === 'theirs';
-      createCommitment({
-        projectId: proj.id,
-        text: p.text,
-        owner: p.owner || me,
-        direction: dir,
-        state: theirs ? 'waiting' : 'open',
-        waitingOn: theirs ? p.owner : '',
-        waitingSince: theirs ? today : null,
-        due: p.due || null,
-        // Filed against the note when we made one, so the loop has a traceable
-        // origin like every other kind does.
-        source: noteId ? 'note' : 'llm',
-        sourceId: noteId || null,
-        createdBy: me,
-        createdAt: today
-      });
-    });
-    _pasteProposals = null;
-    refresh();
+    // Anything still unanswered gets one place to answer it, at the moment it
+    // matters. The inline questions stay too — answer as you go and this never
+    // appears.
+    const open = [...loops, ...cal].filter(r => !r.skipped && ppOpenQuestions(r).length);
+    if (open.length) openPasteClarify(proj, me, refresh);
+    else applyPasteProposals(proj, me, refresh);
   });
   const drop = document.createElement('button');
   drop.className = 'settings-btn';
@@ -10559,6 +10422,570 @@ function renderPasteBox(content, proj, me, refresh) {
   confirmBar.appendChild(add);
   confirmBar.appendChild(drop);
   content.appendChild(confirmBar);
+}
+
+function pasteIsOpen(row) { return !row.skipped && ppOpenQuestions(row).length > 0; }
+
+function pasteGroupTitle(label, rows) {
+  const t = document.createElement('div');
+  t.className = 'plan-group-title';
+  const needing = rows.filter(pasteIsOpen).length;
+  t.textContent = label + ' · ' + rows.length +
+    (needing ? ' — ' + needing + ' need' + (needing === 1 ? 's' : '') + ' a decision' : ' — untick anything wrong');
+  return t;
+}
+
+// The open questions on one row, each as a line of clickable answers. Shown at
+// the field it is about, and again in the clarify panel.
+function pasteQuestionBlock(row, onAnswer) {
+  const wrap = document.createElement('div');
+  ppOpenQuestions(row).forEach(q => {
+    const box = document.createElement('div');
+    box.className = 'ai-q';
+    box.textContent = '⚠ ' + q.text;
+    const opts = document.createElement('div');
+    opts.className = 'ai-q-opts';
+    q.options.forEach((o, i) => {
+      const b = document.createElement('button');
+      b.className = 'ai-q-opt';
+      b.textContent = o.label;
+      b.addEventListener('click', e => { e.stopPropagation(); ppApplyAnswer(row, q, i); onAnswer(); });
+      opts.appendChild(b);
+    });
+    box.appendChild(opts);
+    wrap.appendChild(box);
+  });
+  return wrap;
+}
+
+// The checkbox every row starts with. A row with an open question cannot be
+// ticked: answering it is how it gets ticked.
+function pasteRowCheck(row, blockedWhy) {
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.className = 'ai-prop-check';
+  cb.disabled = !!blockedWhy;
+  cb.checked = !blockedWhy && row.accept !== false;
+  cb.title = blockedWhy || '';
+  cb.addEventListener('change', () => { row.accept = cb.checked; });
+  return cb;
+}
+
+// A row the reviewer said to leave out, with a way back.
+function pasteSkippedRow(row, label, refresh) {
+  const el = document.createElement('div');
+  el.className = 'plan-row ai-prop-skipped';
+  const txt = document.createElement('div');
+  txt.className = 'plan-main';
+  txt.textContent = 'Left out — ' + label;
+  const back = document.createElement('button');
+  back.className = 'ai-prop-act';
+  back.textContent = 'Put it back';
+  back.addEventListener('click', () => {
+    row.skipped = false;
+    (row.questions || []).forEach(q => { if (q.answer != null && q.answer >= 0 && q.options[q.answer] && q.options[q.answer].skip) q.answer = null; });
+    row.accept = !ppOpenQuestions(row).length;
+    refresh();
+  });
+  el.appendChild(txt);
+  el.appendChild(back);
+  return el;
+}
+
+// A committed text edit re-renders the list, but the panel refuses to rebuild
+// under a focused field (Enter commits without blurring), so let go first.
+function pasteCommit(el, refresh) {
+  if (document.activeElement === el) el.blur();
+  refresh();
+}
+
+function pasteLoopRow(p, me, refresh) {
+  if (p.skipped) return pasteSkippedRow(p, p.text, refresh);
+  const row = document.createElement('div');
+  row.className = 'plan-row';
+  const open = pasteIsOpen(p);
+  if (open) row.classList.add('ai-prop-blocked');
+  row.appendChild(pasteRowCheck(p, open ? 'Answer the question below first' : ''));
+
+  const main = document.createElement('div');
+  main.className = 'plan-main';
+
+  const txt = document.createElement('input');
+  txt.type = 'text';
+  txt.className = 'ai-prop-text';
+  txt.value = p.text;
+  txt.addEventListener('change', () => { p.text = txt.value.trim(); });
+  main.appendChild(txt);
+
+  const meta = document.createElement('div');
+  meta.className = 'ai-prop-meta';
+  const own = document.createElement('input');
+  own.type = 'text';
+  own.className = 'ai-prop-input';
+  own.placeholder = 'Owner';
+  own.value = p.owner || '';
+  own.setAttribute('list', 'planPeople');
+  own.addEventListener('change', () => {
+    p.owner = own.value.trim();
+    p.ownerResolved = true;
+    ppSettleQuestionsAbout(p, 'owner');
+    pasteCommit(own, refresh);
+  });
+  meta.appendChild(own);
+
+  const dir = document.createElement('select');
+  dir.className = 'ai-prop-input';
+  [['theirs', 'waiting on them'], ['mine', 'on me']].forEach(([v, l]) => {
+    const o = document.createElement('option');
+    o.value = v; o.textContent = l; o.selected = p.direction === v;
+    dir.appendChild(o);
+  });
+  dir.addEventListener('change', () => { p.direction = dir.value; });
+  meta.appendChild(dir);
+
+  const due = document.createElement('input');
+  due.type = 'date';
+  due.className = 'ai-prop-input ai-prop-date';
+  due.value = p.due || '';
+  due.addEventListener('change', () => { p.due = due.value; ppSettleQuestionsAbout(p, 'due'); refresh(); });
+  meta.appendChild(due);
+  main.appendChild(meta);
+
+  main.appendChild(pasteQuestionBlock(p, refresh));
+
+  // The receipt. A proposal you cannot trace back to a sentence is one you
+  // should not accept, so the sentence is always on screen.
+  if (p.quote) {
+    const q = document.createElement('div');
+    q.className = 'ai-prop-quote';
+    q.textContent = '“' + p.quote + '”';
+    main.appendChild(q);
+  }
+
+  const act = document.createElement('button');
+  act.className = 'ai-prop-act';
+  act.textContent = '📅 Put it on the calendar instead';
+  act.title = 'Turn this into a key date (you can change the type)';
+  act.addEventListener('click', () => {
+    const b = _pasteProposals;
+    if (!b) return;
+    b.list = (b.list || []).filter(x => x !== p);
+    if (!b.schedule) b.schedule = [];
+    b.schedule.push({
+      id: 'cal' + genId(), kind: 'milestone', title: p.text.slice(0, 80), role: '',
+      people: p.owner ? [p.owner] : [], start: p.due || '', end: '', quote: p.quote || '',
+      movesId: '', moveOf: null, questions: [], accept: !!p.due
+    });
+    refresh();
+  });
+  main.appendChild(act);
+
+  row.appendChild(main);
+  return row;
+}
+
+function pasteCalRow(s, proj, me, refresh) {
+  const K = PP_SCHED_KINDS[s.kind] || PP_SCHED_KINDS.meeting;
+  if (s.skipped) return pasteSkippedRow(s, (s.title || K.label) + ' · ' + ppFmtSpan(s.start, s.end), refresh);
+  const row = document.createElement('div');
+  row.className = 'plan-row';
+  const open = pasteIsOpen(s);
+  const why = open ? 'Answer the question below first' : (!s.start ? 'Give it a date first' : '');
+  if (why) row.classList.add('ai-prop-blocked');
+  row.appendChild(pasteRowCheck(s, why));
+
+  const main = document.createElement('div');
+  main.className = 'plan-main';
+
+  // Kind + name
+  const head = document.createElement('div');
+  head.className = 'ai-prop-meta';
+  head.style.marginTop = '0';
+  const kind = document.createElement('select');
+  kind.className = 'ai-prop-input';
+  Object.keys(PP_SCHED_KINDS).forEach(k => {
+    const o = document.createElement('option');
+    o.value = k; o.textContent = PP_SCHED_KINDS[k].label; o.selected = k === s.kind;
+    kind.appendChild(o);
+  });
+  kind.addEventListener('change', () => {
+    s.kind = kind.value;
+    if (!PP_SCHED_KINDS[s.kind].range) s.end = '';
+    if (s.kind === 'work' && !s.role) s.role = (s.people[0] && rosterRoleFor(s.people[0], personTeamOrDerived(s.people[0]))) || 'Producer';
+    // A move only ever pairs like with like.
+    if (s.movesId && (!s.moveOf || s.moveOf.kind !== s.kind)) s.movesId = '';
+    refresh();
+  });
+  head.appendChild(kind);
+  const title = document.createElement('input');
+  title.type = 'text';
+  title.className = 'ai-prop-text';
+  title.style.flex = '1 1 160px';
+  title.placeholder = K.label;
+  title.value = s.title || '';
+  title.addEventListener('change', () => { s.title = title.value.trim(); });
+  head.appendChild(title);
+  main.appendChild(head);
+
+  // Role, people, dates
+  const meta = document.createElement('div');
+  meta.className = 'ai-prop-meta';
+  if (s.kind === 'work') {
+    const role = document.createElement('select');
+    role.className = 'ai-prop-input';
+    PP_WORK_ROLES.forEach(r => {
+      const o = document.createElement('option');
+      o.value = r; o.textContent = r; o.selected = r === s.role;
+      role.appendChild(o);
+    });
+    role.addEventListener('change', () => { s.role = role.value; });
+    meta.appendChild(role);
+  }
+  const ppl = document.createElement('input');
+  ppl.type = 'text';
+  ppl.className = 'ai-prop-input';
+  ppl.style.flex = '1 1 150px';
+  ppl.placeholder = s.kind === 'pto' ? 'Who is out' : "Who's on it (comma-separated)";
+  ppl.value = (s.people || []).join(', ');
+  ppl.title = 'Comma-separated';
+  ppl.addEventListener('change', () => {
+    s.people = [...new Set(ppl.value.split(',').map(x => x.trim()).filter(Boolean))];
+    ppSettleQuestionsAbout(s, 'people');
+    pasteCommit(ppl, refresh);
+  });
+  meta.appendChild(ppl);
+  const start = document.createElement('input');
+  start.type = 'date';
+  start.className = 'ai-prop-input ai-prop-date';
+  start.value = s.start || '';
+  start.title = K.range ? 'Starts' : 'Date';
+  start.addEventListener('change', () => {
+    s.start = start.value;
+    if (s.end && s.end <= s.start) s.end = '';
+    ppSettleQuestionsAbout(s, 'start');
+    refresh();
+  });
+  meta.appendChild(start);
+  if (K.range) {
+    const end = document.createElement('input');
+    end.type = 'date';
+    end.className = 'ai-prop-input ai-prop-date';
+    end.value = s.end || '';
+    end.title = 'Ends (leave empty for one day)';
+    end.addEventListener('change', () => { s.end = end.value && end.value > s.start ? end.value : ''; refresh(); });
+    meta.appendChild(end);
+  }
+  main.appendChild(meta);
+
+  if (s.movesId && s.moveOf) {
+    const mv = document.createElement('div');
+    mv.className = 'ai-prop-move';
+    mv.textContent = '↪ Moves ' + (s.moveOf.title ? '"' + s.moveOf.title + '"' : 'the ' + s.moveOf.label) +
+      ' from ' + ppFmtSpan(s.moveOf.start, s.moveOf.end) + ' — it is not added a second time.';
+    const undo = document.createElement('button');
+    undo.className = 'ai-prop-act';
+    undo.style.marginLeft = '6px';
+    undo.textContent = 'Add as new instead';
+    undo.addEventListener('click', () => { s.movesId = ''; refresh(); });
+    mv.appendChild(undo);
+    main.appendChild(mv);
+  }
+
+  main.appendChild(pasteQuestionBlock(s, refresh));
+
+  if (s.quote) {
+    const q = document.createElement('div');
+    q.className = 'ai-prop-quote';
+    q.textContent = '“' + s.quote + '”';
+    main.appendChild(q);
+  }
+
+  const act = document.createElement('button');
+  act.className = 'ai-prop-act';
+  act.textContent = '↺ Make it an open loop instead';
+  act.addEventListener('click', () => {
+    const b = _pasteProposals;
+    if (!b) return;
+    b.schedule = (b.schedule || []).filter(x => x !== s);
+    const owner = (s.people || [])[0] || '';
+    (b.list = b.list || []).push({
+      text: s.title || K.label, owner, direction: ppCoherentDirection(owner, '', me),
+      due: s.start || '', quote: s.quote || '', uncertain: '', ownerOptions: [], questions: [], accept: true
+    });
+    refresh();
+  });
+  main.appendChild(act);
+
+  row.appendChild(main);
+  return row;
+}
+
+// The rows that would go in if "Add" were pressed now.
+function pasteReadyRows(bundle) {
+  const ok = r => r.accept !== false && !r.skipped && !ppOpenQuestions(r).length;
+  return {
+    loops: ((bundle && bundle.list) || []).filter(p => ok(p) && p.text),
+    cal:   ((bundle && bundle.schedule) || []).filter(s => ok(s) && s.start && PP_SCHED_KINDS[s.kind])
+  };
+}
+
+// Every unanswered question from the thread, in one place, at the moment you
+// go to add. Answers are clicks; whatever is still open when you press Add is
+// left in the review list for later rather than guessed at or thrown away.
+function openPasteClarify(proj, me, refresh) {
+  const bundle = _pasteProposals;
+  if (!bundle || bundle.projectId !== proj.id) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'settings-overlay';
+  overlay.style.zIndex = '10001';
+  const modal = document.createElement('div');
+  modal.className = 'settings-modal';
+  modal.style.cssText = 'width:min(640px,95vw); max-height:85vh;';
+  overlay.appendChild(modal);
+
+  const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); refresh(); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+
+  const header = document.createElement('div');
+  header.className = 'settings-header';
+  header.innerHTML = '<span class="settings-title">A few things to check</span>';
+  const closeX = document.createElement('button');
+  closeX.className = 'settings-close'; closeX.textContent = '✕';
+  closeX.addEventListener('click', close);
+  header.appendChild(closeX);
+  modal.appendChild(header);
+
+  const body = document.createElement('div');
+  body.className = 'settings-content';
+  modal.appendChild(body);
+
+  const footer = document.createElement('div');
+  footer.className = 'xl-review-footer';
+  footer.style.alignItems = 'center';
+  const info = document.createElement('span');
+  info.className = 'export-note';
+  info.style.marginRight = 'auto';
+  const back = document.createElement('button');
+  back.className = 'settings-btn';
+  back.textContent = 'Back to the list';
+  back.addEventListener('click', close);
+  const go = document.createElement('button');
+  go.className = 'settings-btn primary';
+  go.addEventListener('click', () => {
+    overlay.remove();
+    document.removeEventListener('keydown', onKey);
+    applyPasteProposals(proj, me, refresh);
+  });
+  footer.appendChild(info); footer.appendChild(back); footer.appendChild(go);
+  modal.appendChild(footer);
+
+  const describe = r => {
+    if (r.text !== undefined && !r.kind) return '◻ ' + r.text + (r.owner ? ' — ' + r.owner : '') + (r.due ? ' · ' + ppFmtDay(r.due) : '');
+    const K = PP_SCHED_KINDS[r.kind] || PP_SCHED_KINDS.meeting;
+    return '📅 ' + K.label + (r.title ? ' "' + r.title + '"' : '') + ' · ' + ppFmtSpan(r.start, r.end) +
+      ((r.people || []).length ? ' · ' + r.people.join(', ') : '');
+  };
+
+  const draw = () => {
+    body.innerHTML = '';
+    const intro = document.createElement('div');
+    intro.className = 'settings-hint';
+    intro.textContent = 'prepro could not settle these from the thread on its own. Click an answer. Anything you leave unanswered stays in the list for later — it is not guessed at, and it is not thrown away.';
+    body.appendChild(intro);
+
+    const rows = [...(bundle.list || []), ...(bundle.schedule || [])].filter(pasteIsOpen);
+    rows.forEach(r => {
+      const card = document.createElement('div');
+      card.className = 'ai-clarify-card';
+      const what = document.createElement('div');
+      what.className = 'ai-clarify-what';
+      what.textContent = describe(r);
+      card.appendChild(what);
+      if (r.quote) {
+        const q = document.createElement('div');
+        q.className = 'ai-prop-quote';
+        q.textContent = '“' + r.quote + '”';
+        card.appendChild(q);
+      }
+      card.appendChild(pasteQuestionBlock(r, draw));
+      body.appendChild(card);
+    });
+    if (!rows.length) {
+      const done = document.createElement('div');
+      done.className = 'ai-clarify-what';
+      done.style.marginTop = '10px';
+      done.textContent = '✓ All answered.';
+      body.appendChild(done);
+    }
+
+    const ready = pasteReadyRows(bundle);
+    const n = ready.loops.length + ready.cal.length;
+    info.textContent = rows.length ? rows.length + ' still open' : '';
+    go.textContent = rows.length
+      ? (n ? 'Add ' + n + ', leave ' + rows.length + ' for later' : 'Nothing ready to add yet')
+      : 'Add ' + n;
+    const noteReady = !!(bundle.note && bundle.note.accept !== false && bundle.note.summary && !bundle.note.filed);
+    go.disabled = !n && !noteReady;
+  };
+  draw();
+  document.body.appendChild(overlay);
+}
+
+// Writes what was accepted. Order matters: every save fires team.html's root
+// listener synchronously, and a slice saved while another has unsaved edits
+// makes it adopt the stale copy — so all task changes, then ONE state save,
+// then name history, then the loops (their own slice).
+function applyPasteProposals(proj, me, refresh) {
+  const bundle = _pasteProposals;
+  if (!bundle || bundle.projectId !== proj.id) return;
+  const { loops, cal } = pasteReadyRows(bundle);
+  const threadNote = bundle.note;
+  const today = cmTodayStr();
+
+  // File the thread first so the loops can point at it — the same
+  // source/sourceId link a note-promoted loop gets, which is what lets
+  // patternOpenBlocker tell a live blocker from a stale one.
+  let noteId = '';
+  if (threadNote && threadNote.accept !== false && threadNote.summary && !threadNote.filed) {
+    // A guessed sender is not an author. If the thread never named anybody,
+    // the note is filed under whoever pasted it — attributing it to a real
+    // colleague who did not write it is worse than a slightly vague author.
+    const author = (threadNote.from && !threadNote.fromGuessed) ? threadNote.from : (me || NO_AUTHOR);
+    const note = addNote(proj.id, threadNote.type, threadNote.summary, author);
+    if (note) {
+      noteId = note.id;
+      threadNote.filed = true;
+      // The thread verbatim, kept but not rendered in the feed: a 40-line
+      // email chain would drown both the notes list and the dossier, and the
+      // summary is what a reader actually wants. Available behind a toggle.
+      note.sourceText = threadNote.sourceText || '';
+      note.sourceKind = 'thread';
+      saveState();
+    }
+  }
+
+  const names = [], moved = [];
+  let added = 0;
+  cal.forEach(s => { if (applyScheduleProposal(proj, s, names, moved)) added++; });
+  if (cal.length) saveState();
+  moved.forEach(m => addSystemNote(proj.id, m));
+  names.forEach(([role, n]) => recordNameHistory(role, n));
+
+  loops.forEach(p => {
+    // ppCoherentDirection refuses a wait with nobody to wait on, and a wait
+    // on yourself. Same rule the manual add box has always applied.
+    const dir = ppCoherentDirection(p.owner, p.direction, me);
+    const theirs = dir === 'theirs';
+    createCommitment({
+      projectId: proj.id,
+      text: p.text,
+      owner: p.owner || me,
+      direction: dir,
+      state: theirs ? 'waiting' : 'open',
+      waitingOn: theirs ? p.owner : '',
+      waitingSince: theirs ? today : null,
+      due: p.due || null,
+      // Filed against the note when we made one, so the loop has a traceable
+      // origin like every other kind does.
+      source: noteId ? 'note' : 'llm',
+      sourceId: noteId || null,
+      createdBy: me,
+      createdAt: today
+    });
+  });
+
+  // Rows still waiting on an answer stay for later. Everything else — added,
+  // unticked, or left out — is done with.
+  const leftLoops = (bundle.list || []).filter(p => !loops.includes(p) && pasteIsOpen(p));
+  const leftCal = (bundle.schedule || []).filter(s => !cal.includes(s) && pasteIsOpen(s));
+  _pasteProposals = (leftLoops.length || leftCal.length)
+    ? { projectId: proj.id, list: leftLoops, schedule: leftCal, note: null }
+    : null;
+
+  const parts = [];
+  if (loops.length) parts.push(loops.length + ' open loop' + (loops.length === 1 ? '' : 's'));
+  if (added) parts.push(added + ' calendar item' + (added === 1 ? '' : 's'));
+  if (moved.length) parts.push(moved.length + ' moved');
+  const left = leftLoops.length + leftCal.length;
+  _pasteDone = { projectId: proj.id, text: (parts.length ? 'Added ' + parts.join(', ') : (noteId ? 'Filed the note' : 'Nothing added')) +
+    (left ? ' — ' + left + ' left below for later.' : '.') };
+
+  if (cal.length) { renderCalendar(); renderPalette(); }
+  refresh();
+}
+
+// One calendar proposal → one task (or a move of an existing one). Mutates
+// state without saving; the caller saves once. Returns true for a NEW task.
+function applyScheduleProposal(proj, s, names, moved) {
+  const K = PP_SCHED_KINDS[s.kind];
+  if (!K) return false;
+  const people = (s.people || []).filter(Boolean);
+  const end = K.range && s.end && s.end > s.start ? s.end : null;
+  const roleOf = name => rosterRoleFor(name, personTeamOrDerived(name));
+  const att = (name, role) => {
+    const r = role || roleOf(name);
+    return { id: genId(), person: name, role: r, category: catLabelForRole(r), color: colorForRole(r) };
+  };
+  // Same as dropping a person on a chip: they join the project's roster too.
+  const onRoster = (role, name) => {
+    if (!role || !name) return;
+    if (!proj.roster) proj.roster = {};
+    if (!Array.isArray(proj.roster[role])) proj.roster[role] = [];
+    if (!proj.roster[role].includes(name)) proj.roster[role].push(name);
+    names.push([role, name]);
+  };
+  const workRole = s.kind === 'work' ? (s.role || (people[0] ? roleOf(people[0]) : 'Producer')) : '';
+
+  if (s.movesId) {
+    const t = (proj.tasks || []).find(x => x.id === s.movesId);
+    if (t) {
+      const from = t.date, fromEnd = t.endDate || '';
+      // No end in the thread: the chip keeps its length, the way a drag does.
+      const newEnd = end || movedSpanEnd(t.date, t.endDate, s.start);
+      t.date = s.start;
+      if (newEnd && newEnd !== s.start) t.endDate = newEnd; else delete t.endDate;
+      if (s.title && !t.taskName) t.taskName = s.title;
+      const have = new Set(ppTaskPeople(t));
+      people.forEach(n => {
+        if (have.has(n)) return;
+        if (!t.attendees) t.attendees = [];
+        const a = att(n, t.isReview || t.isDueDate ? '' : t.role);
+        t.attendees.push(a);
+        if (s.kind !== 'pto') onRoster(a.role, n);
+      });
+      const what = t.taskName ? '"' + t.taskName + '"' : K.label;
+      moved.push('Moved ' + what + ' from ' + ppFmtSpan(from, fromEnd) + ' to ' + ppFmtSpan(t.date, t.endDate) + ' — from a pasted thread.');
+      return false;
+    }
+    // The chip it meant is gone (deleted since the read). Add it instead.
+  }
+
+  let task;
+  if (K.review) {
+    task = { id: genId(), date: s.start, isReview: true, reviewLabel: K.review, taskName: s.title || null,
+      loe: 'low', color: REVIEW_COLOR, attendees: people.map(n => att(n)) };
+    if (end) task.endDate = end;
+    task.attendees.forEach(a => onRoster(a.role, a.person));
+  } else if (K.milestone) {
+    task = newDueDateTask(s.start, K.label);
+    if (s.title) task.taskName = s.title;
+    if (end) task.endDate = end;
+    task.attendees = people.map(n => att(n));
+    // Time off is not being on the project; reviewers are.
+    if (s.kind !== 'pto') task.attendees.forEach(a => onRoster(a.role, a.person));
+  } else {
+    const lead = people[0] || (workRole === 'Producer' ? (proj.leadProducer || null) : null);
+    task = { id: genId(), date: s.start, role: workRole, roleCategory: catLabelForRole(workRole), color: colorForRole(workRole),
+      person: lead, taskName: s.title || null, loe: 'low', attendees: people.slice(1).map(n => att(n, workRole)) };
+    if (end) task.endDate = end;
+    people.forEach(n => onRoster(workRole, n));
+    maybeAutoLeadProducer(proj, workRole, lead);
+  }
+  if (!proj.tasks) proj.tasks = [];
+  proj.tasks.push(task);
+  return true;
 }
 
 // Phase 8 — the whole-project read, cached against the dossier hash.
