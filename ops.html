@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261104d';
+window.PREPRO_BUILD = '20261104e';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,25 +26,25 @@ window.PREPRO_BUILD = '20261104d';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20261104d"></script>
+<script type="module" src="./auth.js?v=20261104e"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261104d"></script>
+<script src="./whatsnew.js?v=20261104e"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20261104d"></script>
+<script src="./people.js?v=20261104e"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261104d"></script>
+<script src="./commitments.js?v=20261104e"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261104d"></script>
+<script src="./dossier.js?v=20261104e"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261104d"></script>
+<script src="./prepro-llm.js?v=20261104e"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261104d"></script>
+<script src="./prepro-ai.js?v=20261104e"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -384,7 +384,7 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .m-chart-svg-wrap { height: 200px; border-left: 1px solid var(--border); border-bottom: 1px solid var(--border); position: relative; }
 .m-chart-svg { width: 100%; height: 100%; display: block; }
 .m-chart-x { display: flex; padding: 4px 0 0; font-size: 9px; color: var(--dim); }
-.m-chart-x > div { flex: 1; min-width: 8px; text-align: center; white-space: nowrap; overflow: hidden; }
+.m-chart-x > div { flex: 1; min-width: 0; text-align: center; white-space: nowrap; overflow: visible; }
 .m-chart-x > div.today { color: #6c63ff; font-weight: 700; }
 .m-chart-x > div.month { color: var(--text); font-weight: 700; }
 
@@ -803,6 +803,23 @@ let viewMode = (() => {
   return VALID_VIEW_MODES.includes(saved) ? saved : 'headsup';
 })();
 let metricsRecapRange = 'quarter'; // '30d' | 'quarter' | '6mo' | 'ytd'
+// Projected Effort window, in workdays. Five per week, since the chart only
+// plots weekdays; 15 (three weeks) was the hardcoded value before it was a pick.
+const EFFORT_NEXT_SPANS = [
+  { days: 5,  label: 'Next week' },
+  { days: 10, label: 'Next 2 weeks' },
+  { days: 15, label: 'Next 3 weeks' },
+  { days: 20, label: 'Next 4 weeks' },
+  { days: 30, label: 'Next 6 weeks' },
+  { days: 40, label: 'Next 8 weeks' },
+  { days: 60, label: 'Next 12 weeks' }
+];
+let effortNextDays = (() => {
+  try {
+    const v = Number(localStorage.getItem('ops_effort_next_days'));
+    return EFFORT_NEXT_SPANS.some(s => s.days === v) ? v : 15;
+  } catch (_) { return 15; }
+})();
 let pmProjectId = (() => { try { return localStorage.getItem('ops_projmetrics') || null; } catch (_) { return null; } })();
 function saveProjMetrics() {
   if (pmProjectId) localStorage.setItem('ops_projmetrics', pmProjectId);
@@ -3258,7 +3275,7 @@ const METRICS_PANELS = [
   { id: 'categoryMix',  label: 'Category Mix',          render: renderCategoryMix },
   { id: 'quarterRecap', label: 'Quarter Recap',         render: renderQuarterRecap },
   { id: 'effortPast',   label: 'Effort · Last 30 Days', render: () => renderEffortChart('past', 22) },
-  { id: 'effortNext',   label: 'Effort · Next 21 Days', render: () => renderEffortChart('next', 15) },
+  { id: 'effortNext',   label: 'Effort · Projected',    render: () => renderEffortChart('next', effortNextDays) },
   { id: 'projectGantt', label: 'Project Timeline',      render: renderProjectGantt },
   { id: 'health',       label: 'Project Health',        render: renderProjectHealth },
   { id: 'projRetro',    label: 'Project Retrospective', render: renderProjectMetricsPanel },
@@ -4146,10 +4163,29 @@ function getEffortEntries() { return getOpsEntries({ includeInactive: true }); }
 function renderEffortChart(direction, daySpan) {
   const section = document.createElement('div');
   section.className = 'm-section';
-  const titleTxt = direction === 'past'
-    ? 'Team Effort by Role · Last 30 Days'
-    : 'Projected Effort by Role · Next 21 Days';
-  section.appendChild(mkSectionTitle(titleTxt));
+  if (direction === 'past') {
+    section.appendChild(mkSectionTitle('Team Effort by Role · Last 30 Days'));
+  } else {
+    const head = document.createElement('div');
+    head.className = 'm-recap-head';
+    head.appendChild(mkSectionTitle('Projected Effort by Role'));
+    const select = document.createElement('select');
+    select.className = 'm-recap-range';
+    select.title = 'How far ahead to project. Weekdays only.';
+    EFFORT_NEXT_SPANS.forEach(s => {
+      const o = document.createElement('option');
+      o.value = s.days; o.textContent = s.label;
+      if (s.days === daySpan) o.selected = true;
+      select.appendChild(o);
+    });
+    select.addEventListener('change', () => {
+      effortNextDays = Number(select.value);
+      try { localStorage.setItem('ops_effort_next_days', String(effortNextDays)); } catch (_) {}
+      section.replaceWith(renderEffortChart('next', effortNextDays));
+    });
+    head.appendChild(select);
+    section.appendChild(head);
+  }
 
   const today = todayStr();
   const days = [];
@@ -4350,11 +4386,17 @@ function renderEffortChart(direction, daySpan) {
   // X-axis labels (one slot per day, centre-aligned to match polyline points)
   const xAxis = document.createElement('div');
   xAxis.className = 'm-chart-x';
+  // A month label is wider than one day's slot once the window runs to weeks, so
+  // labels may overflow their slot; a Monday right beside a month start would
+  // then print on top of it, so that one Monday goes unlabelled.
+  const monthAt = days.map((d, i) => i === 0 || new Date(d + 'T00:00:00').getDate() === 1 ||
+    new Date(d + 'T00:00:00').getMonth() !== new Date(days[i - 1] + 'T00:00:00').getMonth());
   days.forEach((d, i) => {
     const day = new Date(d + 'T00:00:00');
     const lab = document.createElement('div');
-    const isMonth = day.getDate() === 1 || i === 0;
-    const showLabel = isMonth || d === today || day.getDay() === 1; // Mondays + month starts + today
+    const isMonth = monthAt[i];
+    const nearMonth = days.length > 20 && [-2, -1, 1, 2].some(k => monthAt[i + k]);
+    const showLabel = isMonth || d === today || (day.getDay() === 1 && !nearMonth); // Mondays + month starts + today
     if (d === today) lab.classList.add('today');
     if (isMonth) lab.classList.add('month');
     if (showLabel) {
