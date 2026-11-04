@@ -17,6 +17,24 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-11-04c',
+    title: 'Projected Effort: who has room, and when',
+    dateLabel: 'Nov 4, 2026',
+    groups: [
+      {
+        area: 'Ops · Metrics',
+        items: [
+          { tag: 'new', text: 'Projected Effort can look ahead anywhere from 1 to 12 weeks. Longer windows switch to weekly averages automatically, or pick Days or Weeks yourself.' },
+          { tag: 'new', text: 'Group it by role, person, project or phase. "By person" lists the whole Video Team, including people with nothing booked, so you can see who has room.' },
+          { tag: 'new', text: 'Grid view: people (or roles or projects) down the side and days or weeks across, with each cell coloured from Light to Overloaded.' },
+          { tag: 'new', text: 'Click any day, week or grid cell to see the chips behind that number, with links to their projects.' },
+          { tag: 'new', text: 'Unstaffed work, meaning chips with a role but nobody on them yet, now shows as a dashed line (or its own row). The chart used to leave it out completely.' },
+          { tag: 'fix', text: 'By role, the work is now shared across everyone on the Video Team who holds that role. It used to count only the people already booked, so one busy editor made Editing look overloaded even when the others had room. The old way is still under "Divide by".' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-11-04b',
     title: 'Read a thread: it schedules too',
     dateLabel: 'Nov 4, 2026',

@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261104e';
+window.PREPRO_BUILD = '20261104f';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,25 +26,25 @@ window.PREPRO_BUILD = '20261104e';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20261104e"></script>
+<script type="module" src="./auth.js?v=20261104f"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261104e"></script>
+<script src="./whatsnew.js?v=20261104f"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20261104e"></script>
+<script src="./people.js?v=20261104f"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261104e"></script>
+<script src="./commitments.js?v=20261104f"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261104e"></script>
+<script src="./dossier.js?v=20261104f"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261104e"></script>
+<script src="./prepro-llm.js?v=20261104f"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261104e"></script>
+<script src="./prepro-ai.js?v=20261104f"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -391,6 +391,28 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .m-recap-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .m-recap-head .m-section-title { margin-bottom: 0; }
 .m-recap-range { background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; font-size: 11px; }
+/* Projected Effort: controls, grid view and the chips-behind-a-number panel. */
+.m-effort-ctrls { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 0 0 12px; font-size: 11px; color: var(--dim); }
+.m-effort-ctrls label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+.m-effort-ctrls .m-recap-range { padding: 3px 6px; }
+.m-effort-hint { font-size: 10px; color: var(--dim); margin-top: 8px; line-height: 1.5; }
+.m-effort-grid-wrap { overflow-x: auto; }
+.m-effort-grid { border-collapse: collapse; width: 100%; font-size: 11px; font-variant-numeric: tabular-nums; }
+.m-effort-grid th { font-weight: 600; color: var(--dim); font-size: 10px; padding: 3px 4px; text-align: center; white-space: nowrap; cursor: pointer; }
+.m-effort-grid th.row, .m-effort-grid td.row { text-align: left; white-space: nowrap; padding: 3px 12px 3px 0; color: var(--text); cursor: default; }
+.m-effort-grid td.cell { text-align: center; padding: 4px 3px; border: 1px solid var(--bg); cursor: pointer; color: var(--text); min-width: 34px; }
+.m-effort-grid td.cell:hover { outline: 1px solid var(--dim); outline-offset: -1px; }
+.m-effort-grid td.cell.off { color: var(--dim); font-style: italic; }
+.m-effort-grid .sel { outline: 2px solid #6c63ff !important; outline-offset: -2px; }
+.m-effort-grid tr.unst td { font-style: italic; color: var(--dim); font-size: 10px; }
+.m-effort-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.m-effort-drill { margin-top: 12px; border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; background: var(--card); }
+.m-effort-drill-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+.m-effort-drill table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 6px; }
+.m-effort-drill th { text-align: left; color: var(--dim); font-weight: 600; font-size: 10px; padding: 3px 6px; border-bottom: 1px solid var(--border); }
+.m-effort-drill td { padding: 3px 6px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+.m-effort-drill a { color: var(--text); }
+.m-effort-drill a:hover { color: #6c63ff; }
 
 .m-gantt { display: flex; flex-direction: column; gap: 4px; }
 .m-gantt-row { display: grid; grid-template-columns: 200px 1fr; gap: 8px; align-items: center; font-size: 11px; }
@@ -3275,7 +3297,7 @@ const METRICS_PANELS = [
   { id: 'categoryMix',  label: 'Category Mix',          render: renderCategoryMix },
   { id: 'quarterRecap', label: 'Quarter Recap',         render: renderQuarterRecap },
   { id: 'effortPast',   label: 'Effort · Last 30 Days', render: () => renderEffortChart('past', 22) },
-  { id: 'effortNext',   label: 'Effort · Projected',    render: () => renderEffortChart('next', effortNextDays) },
+  { id: 'effortNext',   label: 'Effort · Projected',    render: () => renderProjectedEffort(effortNextDays) },
   { id: 'projectGantt', label: 'Project Timeline',      render: renderProjectGantt },
   { id: 'health',       label: 'Project Health',        render: renderProjectHealth },
   { id: 'projRetro',    label: 'Project Retrospective', render: renderProjectMetricsPanel },
@@ -4163,29 +4185,11 @@ function getEffortEntries() { return getOpsEntries({ includeInactive: true }); }
 function renderEffortChart(direction, daySpan) {
   const section = document.createElement('div');
   section.className = 'm-section';
-  if (direction === 'past') {
-    section.appendChild(mkSectionTitle('Team Effort by Role · Last 30 Days'));
-  } else {
-    const head = document.createElement('div');
-    head.className = 'm-recap-head';
-    head.appendChild(mkSectionTitle('Projected Effort by Role'));
-    const select = document.createElement('select');
-    select.className = 'm-recap-range';
-    select.title = 'How far ahead to project. Weekdays only.';
-    EFFORT_NEXT_SPANS.forEach(s => {
-      const o = document.createElement('option');
-      o.value = s.days; o.textContent = s.label;
-      if (s.days === daySpan) o.selected = true;
-      select.appendChild(o);
-    });
-    select.addEventListener('change', () => {
-      effortNextDays = Number(select.value);
-      try { localStorage.setItem('ops_effort_next_days', String(effortNextDays)); } catch (_) {}
-      section.replaceWith(renderEffortChart('next', effortNextDays));
-    });
-    head.appendChild(select);
-    section.appendChild(head);
-  }
+  // The projection has its own renderer now (renderProjectedEffort); 'next'
+  // is still handled below so this keeps working if it is ever called with it.
+  section.appendChild(mkSectionTitle(direction === 'past'
+    ? 'Team Effort by Role · Last 30 Days'
+    : 'Projected Effort by Role'));
 
   const today = todayStr();
   const days = [];
@@ -4433,6 +4437,623 @@ function renderEffortChart(direction, daySpan) {
   section.appendChild(legend);
 
   return section;
+}
+
+/* ── PROJECTED EFFORT ────────────────────────────────────────────────────────
+ * The look-ahead, with the choices that make it a planning tool:
+ *
+ *  - Group by role / person / project / phase.
+ *  - Divide by everyone who holds the role, not only whoever is already booked.
+ *    Booked-only was the old rule, and looking ahead it hid spare capacity:
+ *    one editor booked solid and three with nothing read as Editing
+ *    "Overloaded". It is still offered, because "how stretched are the people
+ *    already on it?" is a real question too.
+ *  - Unstaffed work: role slots with nobody in them. Looking ahead that is the
+ *    work most worth seeing, and it was dropped entirely. Drawn as a dashed
+ *    companion ("if the team we have picks it up"), or its own series when
+ *    grouped by person, since it has no person to sit on.
+ *  - Day or week buckets; lines or a grid; click any day/week (or grid cell)
+ *    to list the chips behind the number.
+ *
+ * Only the Video Team counts as capacity, as in the Gantt and Team Workload,
+ * and only active projects: on-hold or cancelled work is not coming. (The
+ * 30-day look back keeps inactive projects — that work happened.)
+ * ─────────────────────────────────────────────────────────────────────────── */
+const EFFORT_OPTS_KEY = 'ops_effort_next_opts';
+const EFFORT_OPT_CHOICES = {
+  groupBy:   [['role', 'Role'], ['person', 'Person'], ['project', 'Project'], ['phase', 'Phase']],
+  divide:    [['everyone', 'Everyone who holds the role'], ['booked', 'People already booked']],
+  bucket:    [['auto', 'Auto'], ['day', 'Days'], ['week', 'Weeks']],
+  view:      [['lines', 'Lines'], ['grid', 'Grid']]
+};
+const EFFORT_OPT_DEFAULTS = { groupBy: 'role', divide: 'everyone', bucket: 'auto', view: 'lines', unstaffed: true };
+let effortOpts = (() => {
+  let s = {};
+  try { s = JSON.parse(localStorage.getItem(EFFORT_OPTS_KEY) || '{}') || {}; } catch (_) {}
+  const o = Object.assign({}, EFFORT_OPT_DEFAULTS);
+  Object.keys(EFFORT_OPT_CHOICES).forEach(k => { if (EFFORT_OPT_CHOICES[k].some(c => c[0] === s[k])) o[k] = s[k]; });
+  if (typeof s.unstaffed === 'boolean') o.unstaffed = s.unstaffed;
+  return o;
+})();
+function saveEffortOpts() { try { localStorage.setItem(EFFORT_OPTS_KEY, JSON.stringify(effortOpts)); } catch (_) {} }
+// The day/week (and series) whose chips are listed under the chart. Tied to the
+// settings it was picked under, so changing a setting never leaves it pointing
+// at a bucket that no longer means the same thing.
+let effortDrill = null; // { sig, b, key }
+const effortSig = days => JSON.stringify([days, effortOpts]);
+
+const PHASE_ORDER = ['Pre-Production', 'Producing', 'Production', 'Post-Producing', 'Editing', 'Animation', 'Administrative'];
+// Who could carry a phase's work, for "divide by everyone".
+const PHASE_ROLE = {
+  'Pre-Production': 'Producer', 'Producing': 'Producer', 'Post-Producing': 'Producer', 'Production': 'Producer',
+  'Editing': 'Editor', 'Animation': 'Animator', 'Administrative': 'Administrative'
+};
+const SERIES_PALETTE = ['#6c63ff', '#4cba6a', '#e07b39', '#4a90d9', '#c0394f', '#7c5cbf', '#c14b9a', '#d9a83a', '#4aa9a0', '#9ab84c', '#e05c8a', '#8c6d5a'];
+const UNSTAFFED_KEY = '__unstaffed';
+const OTHER_PROJECTS_KEY = '__other';
+const EFFORT_PROJECT_LINES = 8;
+
+function computeProjectedEffort(daySpan, o) {
+  const today = todayStr();
+  const days = [];
+  for (let c = addDays(today, 1); days.length < daySpan; c = addDays(c, 1)) {
+    const w = new Date(c + 'T00:00:00').getDay();
+    if (w !== 0 && w !== 6) days.push(c);
+  }
+  const dayIdx = new Map(days.map((d, i) => [d, i]));
+  const first = days[0], last = days[days.length - 1];
+  const offOn = makeOffOn();
+  const here = (p, d) => personActiveOn(p, d) && !offOn(p, d);
+  const mode = o.groupBy === 'project' ? 'points' : 'tier';
+
+  const groups = new Map();
+  const group = (key, label, color, order) => {
+    if (!groups.has(key)) groups.set(key, { key, label, color, order: order == null ? 999 : order,
+      pts: days.map(() => 0), unst: days.map(() => 0), booked: new Set() });
+    return groups.get(key);
+  };
+  // Stable lines: every role is drawn even on a quiet stretch, as before.
+  if (o.groupBy === 'role') EFFORT_ROLES.forEach((r, i) => group(r, r, ROLE_COLOR[r], i));
+  // Everyone on the team gets a row, booked or not — an idle person is the
+  // answer to "who has room?", and they used to be invisible.
+  const videoTeam = hasPeopleRecords()
+    ? Object.keys(peopleRecords).filter(n => peopleRecords[n].team === 'video' && personCapacityOn(n, today))
+    : [];
+  if (o.groupBy === 'person') videoTeam.forEach(n => group(n, n, null));
+
+  // getOpsEntries only builds entries from named people and attendee slots, so
+  // a role chip nobody has been put on yet — the usual unstaffed case — never
+  // reaches it. Same test the Unassigned Work panel uses: no person, and no
+  // attendee with one.
+  const entries = getOpsEntries();
+  if (o.unstaffed) {
+    (state.projects || []).filter(p => !isInactive(p) && !p.ghost).forEach(proj => (proj.tasks || []).forEach(t => {
+      if (t.isDueDate || t.isReview || !t.date || t.person) return;
+      if ((t.attendees || []).some(a => a.person)) return;
+      if ((t.attendees || []).length) return;               // its empty slots are already entries
+      if (!effortRoleOf({ role: t.role })) return;
+      entries.push({ date: t.date, endDate: t.endDate || t.date, person: null, role: t.role, unassigned: true,
+        cat: getRoleCat(t.role, t.taskName), loe: t.loe || 'low', taskName: t.taskName || roleVerb(t.role),
+        projectName: proj.name, projectId: proj.id, taskId: t.id });
+    }));
+  }
+
+  const contrib = [];   // { i, key, e, pts, unstaffed } — one per entry per day, for the drill-down
+  entries.forEach(e => {
+    const role = effortRoleOf(e);
+    if (!role) return;
+    const unstaffed = !!(e.unassigned || !e.person);
+    if (unstaffed && !o.unstaffed) return;
+    if (!unstaffed && (personGoneEntirely(e.person) || !onGanttTeam(e.person))) return;
+    let g;
+    if (o.groupBy === 'role') g = group(role, role, ROLE_COLOR[role], EFFORT_ROLES.indexOf(role));
+    else if (o.groupBy === 'phase') { if (!e.cat) return; g = group(e.cat, e.cat, CAT_COLORS[e.cat] || '#8a8aa8', PHASE_ORDER.indexOf(e.cat)); }
+    else if (o.groupBy === 'project') g = group(e.projectId, e.projectName || 'Untitled', null);
+    else g = unstaffed ? group(UNSTAFFED_KEY, 'Unstaffed', '#8a8aa8', 9999) : group(e.person, e.person, null);
+    const from = e.date > first ? e.date : first;
+    const to   = e.endDate < last ? e.endDate : last;
+    if (!from || !to || from > to) return;
+    const pts = loePts(e.loe);
+    for (let d = from; d <= to; d = addDays(d, 1)) {
+      const i = dayIdx.get(d);
+      if (i === undefined) continue;                       // weekend
+      if (!unstaffed && !here(e.person, d)) continue;      // out, or gone by then
+      // Grouped by person, unstaffed work is its own series of plain points.
+      if (unstaffed && o.groupBy !== 'person') g.unst[i] += pts; else g.pts[i] += pts;
+      if (!unstaffed) g.booked.add(e.person);
+      contrib.push({ i, key: g.key, e, pts, unstaffed });
+    }
+  });
+
+  // Projects: the busiest few get lines, the rest share one, or the chart is
+  // thirty tangled lines.
+  if (o.groupBy === 'project' && groups.size > EFFORT_PROJECT_LINES + 1) {
+    const total = g => g.pts.reduce((a, c) => a + c, 0) + g.unst.reduce((a, c) => a + c, 0);
+    const ranked = [...groups.values()].sort((a, b) => total(b) - total(a));
+    const rest = ranked.slice(EFFORT_PROJECT_LINES);
+    const other = { key: OTHER_PROJECTS_KEY, label: 'Other projects (' + rest.length + ')', color: '#8a8aa8', order: 9999,
+      pts: days.map(() => 0), unst: days.map(() => 0), booked: new Set() };
+    rest.forEach(g => {
+      g.pts.forEach((v, i) => { other.pts[i] += v; });
+      g.unst.forEach((v, i) => { other.unst[i] += v; });
+      g.booked.forEach(p => other.booked.add(p));
+      groups.delete(g.key);
+    });
+    const restKeys = new Set(rest.map(g => g.key));
+    contrib.forEach(c => { if (restKeys.has(c.key)) c.key = OTHER_PROJECTS_KEY; });
+    groups.set(OTHER_PROJECTS_KEY, other);
+  }
+
+  // Who could carry this line's work: the Video Team people whose record says
+  // they hold the role. Someone with two roles counts on both lines — each line
+  // asks "if this work went to everyone who can do it".
+  const capacityFor = key => {
+    const role = o.groupBy === 'role' ? key : o.groupBy === 'phase' ? PHASE_ROLE[key] : null;
+    if (!role || o.divide !== 'everyone') return [];
+    return videoTeam.filter(n => {
+      const r = peopleRecords[n] || {};
+      return (r.roles || []).includes(role) || r.defaultRole === role;
+    });
+  };
+
+  const series = [...groups.values()].map(g => {
+    g.pool = new Set([...g.booked, ...capacityFor(g.key)]);
+    g.heads = days.map(d => {
+      if (mode === 'points' || g.key === UNSTAFFED_KEY) return 1;
+      if (o.groupBy === 'person') return here(g.key, d) ? 1 : 0;
+      let n = 0;
+      g.pool.forEach(p => { if (here(p, d)) n++; });
+      return n;
+    });
+    g.val = days.map((d, i) => g.heads[i] ? g.pts[i] / g.heads[i] : null);
+    // With the unstaffed work added. When nobody holds the role at all it still
+    // shows, as if one person took it — "work coming and no one to do it" must
+    // not vanish. When people hold it but are all out (a holiday), it is a gap
+    // like the solid line, not a spike.
+    g.withUnst = days.map((d, i) => {
+      if (!g.unst[i]) return g.val[i];
+      if (g.heads[i]) return (g.pts[i] + g.unst[i]) / g.heads[i];
+      return g.pool.size ? null : g.unst[i];
+    });
+    g.hasUnst = g.unst.some(v => v > 0);
+    return g;
+  // A person with nothing booked stays: that row IS the spare capacity.
+  }).filter(g => (o.groupBy === 'person' && g.key !== UNSTAFFED_KEY) || g.pool.size || g.pts.some(v => v > 0) || g.hasUnst);
+
+  series.sort((a, b) => (a.order - b.order) || (o.groupBy === 'project'
+    ? b.pts.reduce((x, y) => x + y, 0) - a.pts.reduce((x, y) => x + y, 0)
+    : a.label.localeCompare(b.label)));
+  let pi = 0;
+  series.forEach(s => { if (!s.color) s.color = SERIES_PALETTE[pi++ % SERIES_PALETTE.length]; });
+
+  const bucketed = o.bucket === 'week' || (o.bucket === 'auto' && daySpan > 20);
+  const buckets = [];
+  days.forEach((d, i) => {
+    const key = bucketed ? getWeekStart(d) : d;
+    let b = buckets[buckets.length - 1];
+    if (!b || b.key !== key) { b = { key, start: d, end: d, idx: [] }; buckets.push(b); }
+    b.end = d;
+    b.idx.push(i);
+  });
+  // A bucket's value is the average of its days, leaving out days nobody was
+  // there — those are "off", not "light".
+  const avg = (arr, b) => {
+    const xs = b.idx.map(i => arr[i]).filter(v => v != null);
+    return xs.length ? xs.reduce((a, c) => a + c, 0) / xs.length : null;
+  };
+  series.forEach(s => {
+    s.b = buckets.map(b => avg(s.val, b));
+    s.bUnst = buckets.map(b => avg(s.withUnst, b));
+    s.bHeads = buckets.map(b => Math.max(0, ...b.idx.map(i => s.heads[i])));
+  });
+
+  return { days, buckets, series, mode, contrib, bucketed };
+}
+
+function effortBucketLabel(b, bucketed) {
+  const d = new Date(b.start + 'T00:00:00');
+  return bucketed ? MONTHS[d.getMonth()].slice(0, 3) + ' ' + d.getDate() : fmtDateShort(b.start);
+}
+function effortValueText(v, mode) {
+  if (v == null) return '—';
+  return mode === 'points' ? v.toFixed(1) + ' pts/day' : v.toFixed(1) + ' (' + workloadInfo(v).label + ')';
+}
+
+function renderProjectedEffort(daySpan) {
+  const o = effortOpts;
+  const section = document.createElement('div');
+  section.className = 'm-section';
+  const redraw = () => section.replaceWith(renderProjectedEffort(effortNextDays));
+
+  const head = document.createElement('div');
+  head.className = 'm-recap-head';
+  head.appendChild(mkSectionTitle('Projected Effort'));
+  const span = document.createElement('select');
+  span.className = 'm-recap-range';
+  span.title = 'How far ahead to project. Weekdays only.';
+  EFFORT_NEXT_SPANS.forEach(s => {
+    const op = document.createElement('option');
+    op.value = s.days; op.textContent = s.label;
+    if (s.days === daySpan) op.selected = true;
+    span.appendChild(op);
+  });
+  span.addEventListener('change', () => {
+    effortNextDays = Number(span.value);
+    try { localStorage.setItem('ops_effort_next_days', String(effortNextDays)); } catch (_) {}
+    redraw();
+  });
+  head.appendChild(span);
+  section.appendChild(head);
+
+  // ── Controls ──
+  const ctrls = document.createElement('div');
+  ctrls.className = 'm-effort-ctrls';
+  const pick = (label, key, title) => {
+    const wrap = document.createElement('label');
+    wrap.title = title || '';
+    wrap.appendChild(document.createTextNode(label));
+    const sel = document.createElement('select');
+    sel.className = 'm-recap-range';
+    EFFORT_OPT_CHOICES[key].forEach(([v, l]) => {
+      const op = document.createElement('option');
+      op.value = v; op.textContent = l; op.selected = o[key] === v;
+      sel.appendChild(op);
+    });
+    sel.addEventListener('change', () => { o[key] = sel.value; saveEffortOpts(); redraw(); });
+    wrap.appendChild(sel);
+    ctrls.appendChild(wrap);
+  };
+  pick('Group by', 'groupBy');
+  if (o.groupBy === 'role' || o.groupBy === 'phase') {
+    pick('Divide by', 'divide', 'Whose capacity the work is shared across. "Everyone" uses the Video Team person records, so people with nothing booked count as room.');
+  }
+  pick('Show', 'bucket', 'Auto shows weeks once the window is longer than 4 weeks.');
+  pick('As', 'view');
+  const unst = document.createElement('label');
+  unst.title = 'Role slots on a chip that nobody is in yet';
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.checked = o.unstaffed;
+  cb.addEventListener('change', () => { o.unstaffed = cb.checked; saveEffortOpts(); redraw(); });
+  unst.appendChild(cb);
+  unst.appendChild(document.createTextNode('Unstaffed work'));
+  ctrls.appendChild(unst);
+  section.appendChild(ctrls);
+
+  const data = computeProjectedEffort(daySpan, o);
+  const anything = data.series.some(s => s.b.some(v => v > 0) || s.bUnst.some(v => v > 0));
+  if (!anything) {
+    section.appendChild(mkEmpty('No projected effort in this window.'));
+    return section;
+  }
+
+  const sig = effortSig(daySpan);
+  if (effortDrill && (effortDrill.sig !== sig || effortDrill.b >= data.buckets.length ||
+      (effortDrill.key && !data.series.some(s => s.key === effortDrill.key)))) effortDrill = null;
+  const onPick = (b, key) => {
+    const same = effortDrill && effortDrill.b === b && effortDrill.key === key;
+    effortDrill = same ? null : { sig, b, key };
+    redraw();
+  };
+
+  if (o.view === 'grid') section.appendChild(effortGrid(data, o, onPick));
+  else section.appendChild(effortLines(data, o, onPick));
+
+  // What the numbers mean, in this setup. Every option changes it.
+  const hint = document.createElement('div');
+  hint.className = 'm-effort-hint';
+  const unit = data.bucketed ? 'Weekly averages of each workday.' : 'One point per workday.';
+  const grid = o.view === 'grid';
+  const each = grid ? 'Each row' : 'Each line';
+  let how;
+  if (data.mode === 'points') how = each + ' is the project’s total effort points per day, across everyone on it.';
+  else if (o.groupBy === 'person') how = each + ' is that person’s own load. ' + (grid ? '"off" means' : 'Gaps are') + ' days they are out.';
+  else how = o.divide === 'everyone'
+    ? each + ' is the booked points shared across everyone on the Video Team who holds the role and is in that day.'
+    : each + ' is the booked points shared across the people already booked on it.';
+  const dashed = o.unstaffed
+    ? (o.groupBy === 'person' ? ' Unstaffed is the work in empty role slots, in points.'
+      : grid ? ' "↳ with unstaffed" rows add the unstaffed work, as if the same people picked it up.'
+             : ' Dashed lines add the unstaffed work, as if the same people picked it up.')
+    : '';
+  hint.textContent = how + dashed + ' ' + unit + ' Click a ' + (data.bucketed ? 'week' : 'day') + (o.view === 'grid' ? ' or a cell' : '') + ' to see the chips behind it.';
+  section.appendChild(hint);
+
+  if (effortDrill) section.appendChild(effortDrillPanel(data, o, () => { effortDrill = null; redraw(); }));
+  return section;
+}
+
+function effortLines(data, o, onPick) {
+  const { buckets, series, mode } = data;
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const showUnst = o.unstaffed && o.groupBy !== 'person';
+  let yMax = 5;
+  if (mode === 'points') {
+    const top = Math.max(1, ...series.map(s => Math.max(...s.b.map(v => v || 0), ...(showUnst ? s.bUnst.map(v => v || 0) : []))));
+    yMax = Math.ceil(top * 1.15);
+  }
+
+  const chart = document.createElement('div');
+  chart.className = 'm-chart';
+  const yAxis = document.createElement('div');
+  yAxis.className = 'm-chart-y';
+  const yLabels = mode === 'points'
+    ? [yMax, yMax / 2, 0].map(v => ({ v: v === yMax ? v * 0.97 : v, txt: (Math.round(v * 10) / 10) + ' pts' }))
+    : [{ v: 4.75, txt: '🚨 Overloaded' }, { v: 4, txt: '🔴 Very Busy' }, { v: 3, txt: '🟠 Busy' }, { v: 2, txt: '🟡 Manageable' }, { v: 0.75, txt: '🟢 Light' }];
+  yLabels.forEach(t => {
+    const lab = document.createElement('div');
+    lab.className = 'm-chart-y-label';
+    lab.textContent = t.txt;
+    lab.style.top = ((1 - t.v / yMax) * 100) + '%';
+    yAxis.appendChild(lab);
+  });
+  chart.appendChild(yAxis);
+
+  const area = document.createElement('div');
+  area.className = 'm-chart-area';
+  const svgWrap = document.createElement('div');
+  svgWrap.className = 'm-chart-svg-wrap';
+  const W = 100, H = 100, n = buckets.length;
+  const svg = document.createElementNS(SVGNS, 'svg');
+  svg.setAttribute('class', 'm-chart-svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('preserveAspectRatio', 'none');
+  const line = (x1, y1, x2, y2, stroke, dash) => {
+    const l = document.createElementNS(SVGNS, 'line');
+    l.setAttribute('x1', x1); l.setAttribute('x2', x2); l.setAttribute('y1', y1); l.setAttribute('y2', y2);
+    l.setAttribute('stroke', stroke); l.setAttribute('stroke-width', '0.5');
+    if (dash) l.setAttribute('stroke-dasharray', dash);
+    l.setAttribute('vector-effect', 'non-scaling-stroke');
+    svg.appendChild(l);
+  };
+  (mode === 'points' ? [yMax / 2] : [1.5, 2.5, 3.5, 4.5]).forEach(v => {
+    const y = (1 - v / yMax) * H;
+    line(0, y, W, y, '#2a2a3a', '1,1');
+  });
+  if (effortDrill) {
+    const x = ((effortDrill.b + 0.5) / n) * W;
+    line(x, 0, x, H, '#6c63ff');
+  }
+
+  const xy = (i, v) => [((i + 0.5) / n) * W, (1 - Math.min(v, yMax) / yMax) * H];
+  // A null (everyone off) breaks the line instead of diving to zero.
+  const plot = (vals, color, dashed, width) => {
+    let seg = [];
+    const flush = () => {
+      if (seg.length > 1) {
+        const p = document.createElementNS(SVGNS, 'polyline');
+        p.setAttribute('points', seg.map(([x, y]) => x.toFixed(2) + ',' + y.toFixed(2)).join(' '));
+        p.setAttribute('fill', 'none');
+        p.setAttribute('stroke', color);
+        p.setAttribute('stroke-width', width || '2');
+        p.setAttribute('stroke-linejoin', 'round');
+        p.setAttribute('stroke-linecap', 'round');
+        if (dashed) p.setAttribute('stroke-dasharray', '4,3');
+        p.setAttribute('vector-effect', 'non-scaling-stroke');
+        svg.appendChild(p);
+      }
+      seg = [];
+    };
+    vals.forEach((v, i) => { if (v == null) flush(); else seg.push(xy(i, v)); });
+    flush();
+  };
+  series.forEach(s => {
+    if (showUnst && s.hasUnst) plot(s.bUnst, s.color, true, '1.5');
+    plot(s.b, s.color, s.key === UNSTAFFED_KEY);
+  });
+  // Few points: dots, so a week-long window still shows something to read.
+  if (n <= 15) series.forEach(s => s.b.forEach((v, i) => {
+    if (v == null) return;
+    const [x, y] = xy(i, v);
+    const c = document.createElementNS(SVGNS, 'ellipse');
+    c.setAttribute('cx', x); c.setAttribute('cy', y);
+    c.setAttribute('rx', 0.6); c.setAttribute('ry', 1.2);
+    c.setAttribute('fill', s.color);
+    svg.appendChild(c);
+  }));
+
+  buckets.forEach((b, i) => {
+    const rect = document.createElementNS(SVGNS, 'rect');
+    rect.setAttribute('x', (i / n) * W); rect.setAttribute('y', 0);
+    rect.setAttribute('width', W / n); rect.setAttribute('height', H);
+    rect.setAttribute('fill', 'transparent');
+    rect.style.cursor = 'pointer';
+    const title = document.createElementNS(SVGNS, 'title');
+    title.textContent = (data.bucketed ? 'Week of ' : '') + fmtDateShort(b.start) + '\n' +
+      series.map(s => {
+        let t = s.label + ': ' + effortValueText(s.b[i], mode);
+        if (mode === 'tier' && o.groupBy !== 'person' && s.key !== UNSTAFFED_KEY && s.bHeads[i]) t += ' · ' + s.bHeads[i] + (s.bHeads[i] === 1 ? ' person' : ' people');
+        if (showUnst && s.hasUnst && s.bUnst[i] !== s.b[i]) t += ' → ' + (s.bUnst[i] == null ? '—' : s.bUnst[i].toFixed(1)) + ' with unstaffed';
+        return t;
+      }).join('\n') + '\n\nClick to see the chips';
+    rect.appendChild(title);
+    rect.addEventListener('click', () => onPick(i, null));
+    svg.appendChild(rect);
+  });
+  svgWrap.appendChild(svg);
+  area.appendChild(svgWrap);
+
+  const xAxis = document.createElement('div');
+  xAxis.className = 'm-chart-x';
+  const monthAt = buckets.map((b, i) => i === 0 ||
+    new Date(b.start + 'T00:00:00').getMonth() !== new Date(buckets[i - 1].start + 'T00:00:00').getMonth());
+  buckets.forEach((b, i) => {
+    const lab = document.createElement('div');
+    const day = new Date(b.start + 'T00:00:00');
+    if (monthAt[i]) lab.classList.add('month');
+    if (effortDrill && effortDrill.b === i) lab.classList.add('today');
+    const nearMonth = n > 20 && [-2, -1, 1, 2].some(k => monthAt[i + k]);
+    if (data.bucketed || monthAt[i] || (day.getDay() === 1 && !nearMonth)) {
+      lab.textContent = monthAt[i] || data.bucketed ? effortBucketLabel(b, true) : String(day.getDate());
+    }
+    lab.title = (data.bucketed ? 'Week of ' : '') + fmtDateShort(b.start);
+    xAxis.appendChild(lab);
+  });
+  area.appendChild(xAxis);
+  chart.appendChild(area);
+
+  const wrap = document.createElement('div');
+  wrap.appendChild(chart);
+  const legend = document.createElement('div');
+  legend.className = 'm-cat-legend';
+  legend.style.marginTop = '10px';
+  series.forEach(s => {
+    const item = document.createElement('div');
+    item.className = 'm-cat-legend-item';
+    const sw = document.createElement('div');
+    sw.className = 'm-cat-swatch';
+    sw.style.background = s.color;
+    item.appendChild(sw);
+    const lab = document.createElement('span');
+    const ppl = [...s.pool].sort();
+    lab.textContent = s.label + (mode === 'tier' && o.groupBy !== 'person' && s.key !== UNSTAFFED_KEY ? ' (' + ppl.length + ')' : '');
+    item.title = ppl.length ? s.label + ': ' + ppl.join(', ') : s.label;
+    item.appendChild(lab);
+    legend.appendChild(item);
+  });
+  wrap.appendChild(legend);
+  return wrap;
+}
+
+// People down the side, days or weeks across, each cell coloured by load. The
+// view that answers "who has room, and when?" at a glance.
+function effortGrid(data, o, onPick) {
+  const { buckets, series, mode } = data;
+  const showUnst = o.unstaffed && o.groupBy !== 'person';
+  const maxPts = mode === 'points' ? Math.max(1, ...series.map(s => Math.max(...s.b.map(v => v || 0)))) : 0;
+  const wrap = document.createElement('div');
+  wrap.className = 'm-effort-grid-wrap';
+  const table = document.createElement('table');
+  table.className = 'm-effort-grid';
+  const thead = table.createTHead().insertRow();
+  const corner = document.createElement('th');
+  corner.className = 'row';
+  thead.appendChild(corner);
+  buckets.forEach((b, i) => {
+    const th = document.createElement('th');
+    th.textContent = effortBucketLabel(b, data.bucketed);
+    th.title = (data.bucketed ? 'Week of ' : '') + fmtDateShort(b.start) + ' — click to see every chip';
+    if (effortDrill && effortDrill.b === i && !effortDrill.key) th.classList.add('sel');
+    th.addEventListener('click', () => onPick(i, null));
+    thead.appendChild(th);
+  });
+  const tbody = table.createTBody();
+  const addRow = (s, vals, unstRow) => {
+    const tr = tbody.insertRow();
+    if (unstRow) tr.className = 'unst';
+    const name = tr.insertCell();
+    name.className = 'row';
+    name.innerHTML = '<span class="m-effort-dot" style="background:' + s.color + '"></span>' +
+      esc(unstRow ? '↳ with unstaffed' : s.label);
+    if (!unstRow && mode === 'tier' && o.groupBy !== 'person' && s.key !== UNSTAFFED_KEY) {
+      name.title = s.label + ' — shared across: ' + ([...s.pool].sort().join(', ') || 'nobody');
+    }
+    vals.forEach((v, i) => {
+      const td = tr.insertCell();
+      td.className = 'cell';
+      if (effortDrill && effortDrill.b === i && effortDrill.key === s.key) td.classList.add('sel');
+      if (v == null) {
+        td.classList.add('off');
+        td.textContent = o.groupBy === 'person' ? 'off' : '—';
+      } else {
+        td.textContent = v ? v.toFixed(1) : '·';
+        if (s.key === UNSTAFFED_KEY || mode === 'points') {
+          const a = Math.round(Math.min(1, v / (maxPts || 5)) * 150 + 20).toString(16).padStart(2, '0');
+          td.style.background = (s.key === UNSTAFFED_KEY ? '#8a8aa8' : '#6c63ff') + a;
+        } else if (v > 0) {
+          td.style.background = workloadInfo(v).color + '66';
+        }
+      }
+      td.title = s.label + (unstRow ? ' with unstaffed' : '') + ' · ' + (data.bucketed ? 'week of ' : '') +
+        fmtDateShort(buckets[i].start) + '\n' + effortValueText(v, s.key === UNSTAFFED_KEY ? 'points' : mode) + '\nClick to see the chips';
+      td.addEventListener('click', () => onPick(i, s.key));
+    });
+  };
+  series.forEach(s => {
+    addRow(s, s.b, false);
+    if (showUnst && s.hasUnst) addRow(s, s.bUnst, true);
+  });
+  wrap.appendChild(table);
+  return wrap;
+}
+
+// The chips behind one day or week (and one line, when picked from a grid
+// cell). The number on the chart is only worth acting on if you can see what
+// it is made of.
+function effortDrillPanel(data, o, onClose) {
+  const d = effortDrill;
+  const b = data.buckets[d.b];
+  const inB = new Set(b.idx);
+  const s = d.key ? data.series.find(x => x.key === d.key) : null;
+  const rows = new Map();
+  data.contrib.forEach(c => {
+    if (!inB.has(c.i) || (d.key && c.key !== d.key)) return;
+    const k = c.e.taskId + '|' + (c.e.person || '') + '|' + (c.e.attIdx == null ? 'p' : c.e.attIdx);
+    if (!rows.has(k)) rows.set(k, { e: c.e, unstaffed: c.unstaffed, key: c.key, pts: 0, days: new Set() });
+    const r = rows.get(k);
+    r.pts += c.pts;
+    r.days.add(c.i);
+  });
+  const list = [...rows.values()].sort((a, b2) => b2.pts - a.pts || (a.e.projectName || '').localeCompare(b2.e.projectName || ''));
+  const total = list.reduce((a, r) => a + r.pts, 0);
+
+  const box = document.createElement('div');
+  box.className = 'm-effort-drill';
+  const head = document.createElement('div');
+  head.className = 'm-effort-drill-head';
+  const when = data.bucketed
+    ? 'Week of ' + fmtDateShort(b.start) + (b.end !== b.start ? ' – ' + fmtDateShort(b.end) : '')
+    : fmtDateShort(b.start);
+  const t = document.createElement('span');
+  t.textContent = when + (s ? ' · ' + s.label : '') + ' — ' + list.length + ' chip' + (list.length === 1 ? '' : 's') + ', ' + total + ' pts';
+  head.appendChild(t);
+  const x = document.createElement('button');
+  x.className = 'm-recap-range';
+  x.textContent = '✕';
+  x.title = 'Close';
+  x.addEventListener('click', onClose);
+  head.appendChild(x);
+  box.appendChild(head);
+
+  // Whose capacity the number is shared across, and who is out — the other
+  // half of the arithmetic.
+  if (s && data.mode === 'tier' && o.groupBy !== 'person' && s.key !== UNSTAFFED_KEY) {
+    const offOn = makeOffOn();
+    const inAll = [], out = [];
+    [...s.pool].sort().forEach(p => {
+      const present = b.idx.some(i => personActiveOn(p, data.days[i]) && !offOn(p, data.days[i]));
+      (present ? inAll : out).push(p);
+    });
+    const note = document.createElement('div');
+    note.className = 'm-effort-hint';
+    note.style.marginTop = '0';
+    note.textContent = 'Shared across ' + (inAll.length ? inAll.join(', ') : 'nobody') + (out.length ? ' · off: ' + out.join(', ') : '');
+    box.appendChild(note);
+  }
+
+  if (!list.length) {
+    const e = document.createElement('div');
+    e.className = 'm-effort-hint';
+    e.textContent = 'Nothing booked here.';
+    box.appendChild(e);
+    return box;
+  }
+  const table = document.createElement('table');
+  table.innerHTML = '<thead><tr><th>Who</th><th>Role</th><th>Project</th><th>Chip</th><th>' +
+    (data.bucketed ? 'Days' : '') + '</th><th>Pts</th></tr></thead>';
+  const tbody = document.createElement('tbody');
+  list.forEach(r => {
+    const tr = document.createElement('tr');
+    const who = r.unstaffed ? '<span style="color:#e0a33a">⚠ unstaffed</span>' : esc(r.e.person);
+    tr.innerHTML = '<td>' + who + '</td><td>' + esc(r.e.role || '') + '</td>' +
+      '<td><a href="team.html#project=' + encodeURIComponent(r.e.projectId) + '">' + esc(r.e.projectName || '') + '</a></td>' +
+      '<td>' + esc(r.e.taskName || '') + ' <span style="color:var(--dim)">' + esc(fmtDateShort(r.e.date) + (r.e.endDate && r.e.endDate !== r.e.date ? ' – ' + fmtDateShort(r.e.endDate) : '')) + '</span></td>' +
+      '<td>' + (data.bucketed ? r.days.size : '') + '</td><td>' + r.pts + '</td>';
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  box.appendChild(table);
+  return box;
 }
 
 function renderQuarterRecap() {
