@@ -39,26 +39,38 @@ var PP_LLM_REGISTRY_URL = './gemini-models.json';
 
 var PP_LLM_DEFAULTS = {
   apiKey: '',
-  model: 'gemini-3.7-flash',
-  temperature: 0.2,   // extraction, not prose — low and boring is correct
+  model: 'gemini-3.8-flash',
+  // Gemma only. Gemini 3.6+ ignores temperature (deprecated July 2026, slated
+  // to 400 in later generations), and below 1.0 it can send Gemini 3 into a
+  // loop that eats the whole output budget and comes back empty — which is
+  // exactly what the old 0.2 default did once 3.7 was re-routed to 3.8.
+  temperature: 0.2,
   enabled: true
 };
 
 // Baked-in fallback so the client still works if the registry file is missing
 // or a fetch fails. Deliberately minimal: the file is the source of truth.
 var PP_LLM_REGISTRY = {
-  defaults: { gemini: 'gemini-3.7-flash' },
+  defaults: { gemini: 'gemini-3.8-flash' },
   // gemini-2.5-flash is deliberately absent: it is grandfathered, so a key
   // created after its retirement 404s on it. Verified live 2026-08-31.
-  chain: ['gemini-3.7-flash', 'gemini-3.5-flash-lite', 'gemma-4-31b-it'],
-  retired: [],
+  chain: ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemma-4-31b-it'],
+  // Deprecated 2026-10-08 and silently answered by 3.8 / 3.6 — a saved choice of
+  // either is reset to the default rather than quietly running something else.
+  retired: ['gemini-3.7-flash', 'gemini-3.5-flash'],
   models: {
-    'gemini-3.7-flash':      { status: 'live', label: 'Gemini 3.7 Flash',      family: 'gemini', caps: { jsonMode: 'honored', thinking: 'thinkingLevel' } },
+    'gemini-3.8-flash':      { status: 'live', label: 'Gemini 3.8 Flash',      family: 'gemini', caps: { jsonMode: 'honored', thinking: 'thinkingLevel' } },
+    'gemini-3.6-flash':      { status: 'live', label: 'Gemini 3.6 Flash',      family: 'gemini', caps: { jsonMode: 'honored', thinking: 'thinkingLevel' } },
     'gemini-3.5-flash-lite': { status: 'live', label: 'Gemini 3.5 Flash Lite', family: 'gemini', caps: { jsonMode: 'honored', thinking: 'thinkingLevel' } },
     'gemini-2.5-flash':      { status: 'grandfathered', label: 'Gemini 2.5 Flash', family: 'gemini', caps: { thinking: 'thinkingBudget' } },
     'gemma-4-31b-it':        { status: 'live', label: 'Gemma 4 31B',           family: 'gemma',  caps: { jsonMode: 'ignored', thinking: 'none' } }
   }
 };
+
+// The model that actually answered the last successful call. After a 429/404
+// fall-through that is not the one in Settings, and "Test connection" should
+// say which model really works.
+var _ppLastModel = '';
 
 // Free-tier daily request budgets. Google no longer publishes per-model RPD, so
 // these are conservative guesses — the 429 fall-through is the real backstop
@@ -326,10 +338,15 @@ function ppGeminiError(status, errText, model) {
     return 'Rate limited' + (m ? ' — retry in about ' + m[1] + 's.' : '.') +
            '\n\nprepro will fall through to the next model automatically where it can.';
   }
-  if (status === 400 && /API key not valid/i.test(msg)) {
-    return 'That API key is not valid. Re-copy it from https://aistudio.google.com/app/api-keys — it starts with "AIza".';
+  if ((status === 400 || status === 401) && /API key|API_KEY|unauthenticated|credentials/i.test(msg)) {
+    return 'That API key is not valid. Re-copy it from https://aistudio.google.com/app/api-keys, or create a new one there.';
   }
-  if (status === 403) return 'Forbidden — this key may not have access to ' + ppModelLabel(model) + '.';
+  // Google revokes keys it finds published (a repo, a paste) and answers 403
+  // from then on, so a key that used to work and now 403s is usually that.
+  if (status === 403 && /leak|reported|revoked/i.test(msg)) {
+    return 'Google has blocked this key (it was reported as leaked). Delete it at https://aistudio.google.com/app/api-keys and create a new one.';
+  }
+  if (status === 403) return 'Forbidden — this key may not have access to ' + ppModelLabel(model) + '. If it used to work, create a new key at https://aistudio.google.com/app/api-keys.';
   if (status === 404) return 'Model "' + model + '" was not found for this key. Pick another in Settings.';
   if (status >= 500) return "Google's API is temporarily unavailable. This is their end, not yours — try again shortly.";
   return msg ? 'Gemini ' + status + ': ' + msg : 'Gemini ' + status + ': ' + String(errText).slice(0, 300);
@@ -523,8 +540,10 @@ function ppCallLLM(opts) {
 }
 
 function ppCallGemini(s, model, o) {
+  // The key rides in the x-goog-api-key header, not ?key= — the documented
+  // form, and it keeps the key out of URLs that end up in logs and history.
   var url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
-            encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(s.apiKey);
+            encodeURIComponent(model) + ':generateContent';
 
   var honorsJson = ppModelHonorsJson(model);
   var isGemma = ppModelFamily(model) === 'gemma';
@@ -532,8 +551,10 @@ function ppCallGemini(s, model, o) {
   var text = (isGemma && o.system) ? (o.system + '\n\n----\n\n' + o.user) : o.user;
   var body = {
     contents: [{ role: 'user', parts: [{ text: text }] }],
-    generationConfig: { temperature: o.temperature, maxOutputTokens: 8192 }
+    generationConfig: { maxOutputTokens: 8192 }
   };
+  // Temperature goes to Gemma only — see PP_LLM_DEFAULTS for why Gemini gets none.
+  if (isGemma && o.temperature != null) body.generationConfig.temperature = o.temperature;
   if (o.system && !isGemma) body.systemInstruction = { parts: [{ text: o.system }] };
 
   if (o.expectJson && honorsJson) {
@@ -560,7 +581,7 @@ function ppCallGemini(s, model, o) {
 
   return fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': s.apiKey },
     body: JSON.stringify(body),
     signal: o.signal
   }).then(function (resp) {
@@ -584,8 +605,12 @@ function ppCallGemini(s, model, o) {
   }).then(function (json) {
     var parts = json && json.candidates && json.candidates[0] &&
                 json.candidates[0].content && json.candidates[0].content.parts;
-    var out = parts ? parts.map(function (p) { return p.text || ''; }).join('') : '';
+    // Thinking models can return their reasoning as parts flagged `thought`.
+    // That is not the answer, and glued onto the JSON it breaks the parse.
+    var out = parts ? parts.filter(function (p) { return !p.thought; })
+                           .map(function (p) { return p.text || ''; }).join('') : '';
     if (!out) throw new Error(ppEmptyReplyMessage(json, model));
+    _ppLastModel = model;
     return out;
   });
 }
@@ -631,7 +656,11 @@ function ppTestConnection() {
     temperature: 0,
     timeoutMs: 30000
   }).then(function (obj) {
-    var s = ppLlmSettings();
-    return { ok: !!(obj && obj.ok), model: ppPickModel(s.model), said: (obj && obj.model) || '' };
+    return { ok: !!(obj && obj.ok), model: _ppLastModel || ppPickModel(ppLlmSettings().model), said: (obj && obj.model) || '' };
   });
 }
+
+// Nothing used to call this, so gemini-models.json was never read and every
+// page ran on the baked-in fallback above. Fire it once at load; a failure
+// (offline, file://) just leaves the fallback in charge.
+if (typeof fetch === 'function') ppLoadLlmRegistry();

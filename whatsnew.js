@@ -17,6 +17,34 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-11-04a',
+    title: 'Video Team views, closing tickets, Gemini',
+    dateLabel: 'Nov 4, 2026',
+    groups: [
+      {
+        area: 'Team',
+        items: [
+          { tag: 'new', text: 'Text Export: press Outlook, Webex or Plain and it copies for that destination straight away. The separate Copy button is gone.' },
+          { tag: 'new', text: 'Video Scheduler import: a ticket that dropped out of the export can now go to Completed, Cancelled or On Hold. Pick one in the Action column. A ticket you put On Hold this way won’t be asked about again unless it comes back and then leaves the export again.' },
+          { tag: 'fix', text: 'Setting a lead producer also adds them to the project’s Producer column.' },
+          { tag: 'fix', text: 'A multi-week chip now names everyone on it in every week, not just the first person.' },
+          { tag: 'fix', text: 'The Plan tab scrolls again, and keeps its place when you tick something off.' },
+          { tag: 'fix', text: 'Availability rows now only include people in the project’s team columns. Someone you take off the team no longer keeps a row because an old chip still has their name.' },
+          { tag: 'fix', text: 'Gemini works again. It now uses 3.8 Flash, because 3.7 Flash was retired. If you had picked a retired model, it resets on its own.' }
+        ]
+      },
+      {
+        area: 'Ops',
+        items: [
+          { tag: 'fix', text: 'The Gantt and Team Workload show only the Video Team. Stakeholders, vendors and Brand Creative people who were tagged Internal Team on a chip no longer get rows.' },
+          { tag: 'fix', text: 'Team Workload: Today doesn’t count weekends, and someone who is off shows as Off rather than as a score or a dash.' },
+          { tag: 'fix', text: 'Recap: Reviews now counts Offline Reviews (and older Review chips), and Meetings has its own tile. Reviews used to count every meeting, shoot and studio block.' },
+          { tag: 'fix', text: 'Project Retrospective shows every chip: copywriters, designers, stakeholders, vendors, reviews, meetings and shoots. Each role has its own colour.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-11-03d',
     title: 'Moving chips across weekends',
     dateLabel: 'Nov 3, 2026',

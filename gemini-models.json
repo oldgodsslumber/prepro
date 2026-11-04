@@ -1,14 +1,15 @@
 {
-  "generated": "2026-08-22T00:00:00Z",
-  "generatedBy": "hand-seeded from the 2026-08-21 audit; re-run index.html to replace | 2026-08-31: gemini-2.5-flash moved out of the chain after live 404 on a new key",
+  "generated": "2026-11-04T00:00:00Z",
+  "generatedBy": "hand-updated 2026-11-04 from the 2026-10-24 Gemini API audit (ai.google.dev): 3.7 Flash and 3.5 Flash were deprecated 2026-10-08 and silently re-routed to 3.8 / 3.6, so they are retired here; 3.8 Flash is the default; paid-only models are listed but never offered",
   "apiVersion": "v1beta",
-  "_note": "caps are recorded ONLY where the behaviour was actually observed against the live API. An absent cap means untested, not false — consumers must fall back to their own heuristic rather than assume.",
+  "_note": "caps are recorded ONLY where the behaviour was actually observed or documented. An absent cap means untested, not false — consumers must fall back to their own heuristic rather than assume. status 'paid' = exists but has no free tier; a free key gets a zero-quota 429, so these are never offered in the picker or used in the chain.",
   "defaults": {
-    "gemini": "gemini-3.7-flash",
+    "gemini": "gemini-3.8-flash",
     "gemma": "gemma-4-31b-it"
   },
   "chain": [
-    "gemini-3.7-flash",
+    "gemini-3.8-flash",
+    "gemini-3.6-flash",
     "gemini-3.5-flash-lite",
     "gemma-4-31b-it",
     "gemma-4-26b-a4b-it"
@@ -19,6 +20,8 @@
     "gemini-2.0-flash",
     "gemini-2.0-flash-lite",
     "gemini-3-pro-preview",
+    "gemini-3.5-flash",
+    "gemini-3.7-flash",
     "gemini-pro",
     "gemma-3-12b-it",
     "gemma-3-27b-it",
@@ -31,18 +34,19 @@
     "gemini-2.5-flash"
   ],
   "models": {
-    "gemini-3.7-flash": {
+    "gemini-3.8-flash": {
       "status": "live",
-      "label": "Gemini 3.7 Flash",
+      "label": "Gemini 3.8 Flash",
       "family": "gemini",
       "inputTokenLimit": 1048576,
       "outputTokenLimit": 65536,
       "caps": {
         "jsonMode": "honored",
         "thinking": "thinkingLevel",
-        "grounding": true
+        "minThinkingLevel": "low",
+        "temperature": "ignored"
       },
-      "lastVerified": "2026-08-21"
+      "lastVerified": "2026-10-24"
     },
     "gemini-3.6-flash": {
       "status": "live",
@@ -50,17 +54,12 @@
       "family": "gemini",
       "inputTokenLimit": 1048576,
       "outputTokenLimit": 65536,
-      "caps": {},
-      "lastVerified": "2026-08-21"
-    },
-    "gemini-3.5-flash": {
-      "status": "live",
-      "label": "Gemini 3.5 Flash",
-      "family": "gemini",
-      "inputTokenLimit": 1048576,
-      "outputTokenLimit": 65536,
-      "caps": {},
-      "lastVerified": "2026-08-21"
+      "caps": {
+        "jsonMode": "honored",
+        "thinking": "thinkingLevel",
+        "temperature": "ignored"
+      },
+      "lastVerified": "2026-10-24"
     },
     "gemini-3.5-flash-lite": {
       "status": "live",
@@ -69,39 +68,19 @@
       "caps": {
         "jsonMode": "honored",
         "thinking": "thinkingLevel",
-        "grounding": true
+        "temperature": "ignored"
       },
-      "lastVerified": "2026-08-21"
+      "lastVerified": "2026-10-24"
     },
     "gemini-3.1-flash-lite": {
       "status": "live",
       "label": "Gemini 3.1 Flash Lite",
       "family": "gemini",
-      "caps": {},
-      "lastVerified": "2026-08-21"
-    },
-    "gemini-3.1-flash-lite-preview": {
-      "status": "live",
-      "label": "Gemini 3.1 Flash Lite Preview",
-      "family": "gemini",
-      "inputTokenLimit": 1048576,
-      "outputTokenLimit": 65536,
-      "caps": {},
-      "lastVerified": "2026-08-21"
-    },
-    "gemini-3.1-pro-preview": {
-      "status": "live",
-      "label": "Gemini 3.1 Pro Preview",
-      "family": "gemini",
-      "caps": {},
-      "lastVerified": "2026-08-21"
-    },
-    "gemini-3-flash-preview": {
-      "status": "live",
-      "label": "Gemini 3 Flash Preview",
-      "family": "gemini",
-      "caps": {},
-      "lastVerified": "2026-08-21"
+      "caps": {
+        "thinking": "thinkingLevel"
+      },
+      "lastVerified": "2026-10-24",
+      "note": "shuts down 2027-05-07"
     },
     "gemini-flash-latest": {
       "status": "live",
@@ -110,7 +89,30 @@
       "inputTokenLimit": 1048576,
       "outputTokenLimit": 65536,
       "caps": {},
-      "lastVerified": "2026-08-21"
+      "lastVerified": "2026-08-21",
+      "note": "moving alias — whatever Google currently calls its Flash model"
+    },
+    "gemini-4-argon": {
+      "status": "paid",
+      "label": "Gemini 4 Argon",
+      "family": "gemini",
+      "caps": {
+        "thinking": "thinkingLevel",
+        "minThinkingLevel": "low"
+      },
+      "lastVerified": "2026-10-24",
+      "note": "GA 2026-10-13, paid tier only"
+    },
+    "gemini-3.1-pro-preview": {
+      "status": "paid",
+      "label": "Gemini 3.1 Pro Preview",
+      "family": "gemini",
+      "caps": {
+        "thinking": "thinkingLevel",
+        "minThinkingLevel": "low"
+      },
+      "lastVerified": "2026-10-24",
+      "note": "paid tier only"
     },
     "gemini-2.5-flash": {
       "status": "grandfathered",
@@ -118,7 +120,9 @@
       "family": "gemini",
       "inputTokenLimit": 1048576,
       "outputTokenLimit": 65536,
-      "caps": {},
+      "caps": {
+        "thinking": "thinkingBudget"
+      },
       "lastVerified": "2026-08-21",
       "note": "404s for keys created after it was retired for new users; verified live 2026-08-31"
     },
@@ -137,7 +141,10 @@
       "status": "live",
       "label": "Gemma 4 26B-A4B",
       "family": "gemma",
-      "caps": {},
+      "caps": {
+        "jsonMode": "ignored",
+        "thinking": "none"
+      },
       "lastVerified": "2026-08-21"
     }
   }

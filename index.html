@@ -14,7 +14,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261104a';
+window.PREPRO_BUILD = '20261104b';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -30,22 +30,22 @@ window.PREPRO_BUILD = '20261104a';
 })();
 </script>
 
-<script src="./local-fb.js?v=20261104a"></script>
+<script src="./local-fb.js?v=20261104b"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20261104a"></script>
+<script src="./people.js?v=20261104b"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261104a"></script>
+<script src="./commitments.js?v=20261104b"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261104a"></script>
+<script src="./dossier.js?v=20261104b"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261104a"></script>
+<script src="./prepro-llm.js?v=20261104b"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261104a"></script>
+<script src="./prepro-ai.js?v=20261104b"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1724,6 +1724,7 @@ let exportPNGRangeProj  = null;     // project id the manual range belongs to
 let pngRangePick        = null;     // { start, projId } while click-picking on the calendar
 let pngWashWin          = null;     // snapped {start,end} the calendar wash paints, set per grid rebuild
 let planBriefOpen       = null;     // Plan-tab Brief expansion; null = not yet read from localStorage
+let planScroll          = { pid: null, top: 0 }; // Plan-tab scroll position, kept across re-renders of the same project
 let showWeekends    = false;
 let showGhosts      = true;
 let resizeState     = null;
@@ -2559,7 +2560,7 @@ function renderAiSettings(c) {
   const key = document.createElement('input');
   key.type = 'password';
   key.className = 'ai-input';
-  key.placeholder = 'AIza…';
+  key.placeholder = 'Paste your AI Studio key';
   key.value = s.apiKey || '';
   key.autocomplete = 'off';
   key.addEventListener('change', () => { ppLlmSave({ apiKey: key.value.trim() }); renderSettingsContent(); });
@@ -2581,10 +2582,15 @@ function renderAiSettings(c) {
   modelRow.appendChild(modelLabel);
   const sel = document.createElement('select');
   sel.className = 'ai-input';
-  ppLiveModels().forEach(id => {
+  // A saved model the registry no longer lists still gets an option. Without
+  // it the dropdown silently showed the first entry while calls kept going to
+  // the saved one, so the screen and the behaviour disagreed.
+  const ids = ppLiveModels();
+  if (s.model && !ids.includes(s.model)) ids.push(s.model);
+  ids.forEach(id => {
     const o = document.createElement('option');
     o.value = id;
-    o.textContent = ppModelLabel(id) + (id === s.model ? '' : '');
+    o.textContent = ppModelLabel(id) + (ppLiveModels().includes(id) ? '' : ' (not in the current list)');
     o.selected = id === s.model;
     sel.appendChild(o);
   });
@@ -4100,9 +4106,13 @@ function handleExcelImport(file) {
     const missingRows = [];
     state.projects.forEach(p => {
       const t = (p.ticketId || '').trim();
+      // Back in the export: any earlier "parked it" answer no longer applies.
+      if (t && presentIds.has(t) && p.missingAnswered) delete p.missingAnswered;
       if (!t || presentIds.has(t)) return;
       const st = projStatus(p);
       if (st === 'completed' || st === 'cancelled') return;
+      // Parked from this list on an earlier import and still parked: already answered.
+      if (st === 'onhold' && p.missingAnswered) return;
       missingRows.push({
         _missing: true, _existingId: p.id, ticketId: t,
         _name: p.name, _curStatus: st, caseStatus: p.caseStatus || ''
@@ -4321,8 +4331,9 @@ function buildExcelReviewTable() {
 }
 
 // Tickets present in the app but absent from the export — likely closed. Rendered
-// as its own section (they aren't editable ticket rows), default unchecked, each a
-// one-click "mark this completed".
+// as its own section (they aren't editable ticket rows), default unchecked, each
+// with a pick of where it goes.
+const XL_CLOSE_OUTCOMES = ['completed', 'cancelled', 'onhold'];
 function buildMissingSection() {
   const section = document.createElement('div');
   section.className = 'xl-missing-section';
@@ -4337,7 +4348,7 @@ function buildMissingSection() {
   heading.textContent = 'No longer in this export — likely closed';
   const sub = document.createElement('span');
   sub.className = 'xl-missing-sub';
-  sub.textContent = 'Ticked tickets are marked Completed. Nothing here is closed unless you tick it.';
+  sub.textContent = 'Ticked tickets move to the status picked in Action. Nothing here changes unless you tick it.';
   head.appendChild(selAll); head.appendChild(heading); head.appendChild(sub);
   section.appendChild(head);
 
@@ -4375,7 +4386,23 @@ function buildMissingSection() {
     const idCell = tr.insertCell(); idCell.textContent = row.ticketId || '—';
     const nmCell = tr.insertCell(); nmCell.textContent = row._name || '—'; nmCell.title = row._name || '';
     const stCell = tr.insertCell(); stCell.textContent = row.caseStatus || row._curStatus || '—';
-    const acCell = tr.insertCell(); acCell.textContent = '→ Completed'; acCell.style.color = 'var(--dim)';
+    // Absence only says the case left the active list, not how — it could have
+    // shipped, been cancelled, or been parked. So the user picks the outcome.
+    const acCell = tr.insertCell();
+    const outcome = document.createElement('select');
+    outcome.title = 'What happened to this ticket';
+    XL_CLOSE_OUTCOMES.forEach(s => {
+      const op = document.createElement('option');
+      op.value = s; op.textContent = '→ ' + STATUS_META[s].label;
+      outcome.appendChild(op);
+    });
+    outcome.value = row._closeAs || 'completed';
+    outcome.addEventListener('change', () => {
+      row._closeAs = outcome.value;
+      // Choosing an outcome is choosing to apply it.
+      if (!cb.checked) { cb.checked = true; cb.dispatchEvent(new Event('change')); }
+    });
+    acCell.appendChild(outcome);
   });
 
   selAll.addEventListener('change', () => {
@@ -4477,14 +4504,19 @@ function ensureImportedPerson(raw, teamKey) {
   return name;
 }
 
-// Mark a project completed because its Case ID is no longer in the export. Only
-// flips status + leaves a note explaining why; schedule, roster and notes stay put.
+// Move a project to the picked outcome (Completed / Cancelled / On Hold) because
+// its Case ID is no longer in the export. Only flips status + leaves a note
+// explaining why; schedule, roster and notes stay put.
 function applyTicketClose(row) {
   const proj = getProject(row._existingId);
   if (!proj) return false;
-  addSystemNote(proj.id, 'Marked Completed from Excel — Case ' + (proj.ticketId || '—') +
-    ' is no longer in the Video Scheduler export (closed/cancelled in Pega).');
-  if (projStatus(proj) !== 'completed') setProjectStatus(proj.id, 'completed');
+  const status = XL_CLOSE_OUTCOMES.includes(row._closeAs) ? row._closeAs : 'completed';
+  addSystemNote(proj.id, 'Marked ' + STATUS_META[status].label + ' from Excel — Case ' + (proj.ticketId || '—') +
+    ' is no longer in the Video Scheduler export.');
+  if (projStatus(proj) !== status) setProjectStatus(proj.id, status);
+  // On Hold is not terminal, so without this the same ticket would come back as
+  // "likely closed" on every import after you've already answered for it.
+  if (status === 'onhold') proj.missingAnswered = proj.ticketId || true;
   return true;
 }
 
@@ -5944,12 +5976,17 @@ function applyRowCaps(el, task, dateStr) {
 }
 
 // Get a short label for continuation bars
+// The label a multi-day chip carries into each later week row. It used to name
+// only the first person, so a chip staffed by three read as one person's work
+// from the second week on. Everyone is listed; the label ellipsises in CSS and
+// the full list is in the bar's tooltip.
+function contLabelPeople(task) {
+  return [...new Set([task.person, ...(task.attendees || []).map(a => a.person)].filter(Boolean))];
+}
 function getContLabel(task) {
-  if (task.person && task.taskName) return task.person + ' · ' + task.taskName;
-  if (task.person) return task.person;
-  const ppl = (task.attendees || []).map(a => a.person).filter(Boolean);
-  if (task.taskName) return task.taskName + (ppl.length ? ' · ' + ppl[0] : '');
-  return ppl[0] || task.reviewLabel || (task.role ? roleVerb(task.role) : '');
+  const ppl = contLabelPeople(task).join(', ');
+  if (task.taskName) return task.taskName + (ppl ? ' · ' + ppl : '');
+  return ppl || task.reviewLabel || (task.role ? roleVerb(task.role) : '');
 }
 // The project a task lives in: the active one first (the common case), then
 // anywhere. My Calendar puts every project's chips on one grid, so there a
@@ -6973,6 +7010,8 @@ function buildRoleBar(task, dateStr, isEnd) {
     lbl.className = 'cont-label';
     lbl.textContent = getContLabel(task);
     bar.appendChild(lbl);
+    const ppl = contLabelPeople(task);
+    if (ppl.length) bar.title = (task.taskName || roleVerb(task.role)) + ' — ' + ppl.join(', ');
   }
   return bar;
 }
@@ -8506,8 +8545,16 @@ function renderRosterInto(content) {
       if (!dragPayload || dragPayload.type !== 'person' || !dragPayload.person) return;
       e.preventDefault();
       proj.leadProducer = dragPayload.person;
+      // The lead is on the project. Without this they sat in the Lead box but
+      // not in the Producer column, so availability, workload and "on this
+      // project" all missed them — the import path already did this.
+      addProducerToRoster(proj, dragPayload.person);
+      const lead = dragPayload.person;
       dragPayload = null;
+      // State first: every save fires the root listener synchronously, and
+      // saving name history while this was unsaved would revert it.
       saveState();
+      recordNameHistory('Producer', lead);
       renderExportPanel();
       renderSidebar();
     });
@@ -10764,7 +10811,18 @@ function renderExportPanel() {
     renderProjectInfo();
     return;
   } else if (exportTabActive === 'plan') {
-    renderPlanPanel(content);
+    // The panel container clips (overflow: hidden) so each tab can pick its own
+    // scroller. Plan never had one and drew straight into it, which went
+    // unnoticed until the Brief moved in and made it taller than the panel.
+    // The position is carried across re-renders — ticking a commitment, or any
+    // background sync, rebuilds the whole tab.
+    const wrap = document.createElement('div');
+    wrap.className = 'project-info';
+    wrap.style.gap = '7px';
+    content.appendChild(wrap);
+    renderPlanPanel(wrap);
+    if (planScroll.pid === activeProjectId) wrap.scrollTop = planScroll.top;
+    wrap.addEventListener('scroll', () => { planScroll = { pid: activeProjectId, top: wrap.scrollTop }; });
     return;
   } else if (exportTabActive === 'text') {
     // ── Format switch ──

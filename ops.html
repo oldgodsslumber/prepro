@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261104a';
+window.PREPRO_BUILD = '20261104b';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,25 +26,25 @@ window.PREPRO_BUILD = '20261104a';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20261104a"></script>
+<script type="module" src="./auth.js?v=20261104b"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261104a"></script>
+<script src="./whatsnew.js?v=20261104b"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20261104a"></script>
+<script src="./people.js?v=20261104b"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261104a"></script>
+<script src="./commitments.js?v=20261104b"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261104a"></script>
+<script src="./dossier.js?v=20261104b"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261104a"></script>
+<script src="./prepro-llm.js?v=20261104b"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261104a"></script>
+<script src="./prepro-ai.js?v=20261104b"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -1551,7 +1551,10 @@ function getStudioBlockEntries() {
 function getAllPeople() {
   const people = new Set();
   const today = todayStr();
-  getOpsEntries().forEach(e => { if (e.person && personCapacityOn(e.person, today)) people.add(e.person); });
+  // An unfilled slot's entry carries the role name as its person ("Editor"),
+  // which is how a person called "Editor" used to turn up in the filter chips
+  // and Team Workload.
+  getOpsEntries().forEach(e => { if (e.person && !e.unassigned && personCapacityOn(e.person, today)) people.add(e.person); });
   const alpha = [...people].sort();
   if (!personOrder.length) return alpha;
   // Saved order first (only those still present), then any new people alphabetically
@@ -1640,9 +1643,13 @@ function getDayWorkload(person, dateStr) {
   // Someone who had left by this date isn't capacity, however their old tasks
   // still read in the stored schedule.
   if (!personActiveOn(person, dateStr)) return 0;
+  // Weekdays only, like forEachEffortDay: a chip running across a weekend is
+  // not Saturday work, and Team Workload's Today read it as such.
+  const dow = new Date(dateStr + 'T00:00:00').getDay();
+  if (dow === 0 || dow === 6) return 0;
   let total = 0;
   getOpsEntries().forEach(e => {
-    if (e.person !== person) return;
+    if (e.person !== person || e.unassigned) return;
     if (dateStr >= e.date && dateStr <= e.endDate) total += loePts(e.loe);
   });
   return total;
@@ -1668,7 +1675,7 @@ function isPersonPTO(person, dateStr) {
 
 // Returns the average daily score across the weekdays in a Mon–Sun window, excluding PTO days
 function getAvgWorkload(person, weekMonday) {
-  const entries = getOpsEntries().filter(e => e.person === person);
+  const entries = getOpsEntries().filter(e => e.person === person && !e.unassigned);
   if (!entries.length) return 0;
   let total = 0;
   let workDays = 0;
@@ -4430,7 +4437,8 @@ function renderQuarterRecap() {
   [
     { label: 'Projects Completed', value: stats.projectsCompleted },
     { label: 'Studio Days',        value: stats.studioDays },
-    { label: 'Reviews Held',       value: stats.reviewsHeld },
+    { label: 'Reviews',            value: stats.reviewsHeld, sub: 'offline reviews + older review chips' },
+    { label: 'Meetings',           value: stats.meetingsHeld },
     { label: 'Hours Produced',     value: stats.hoursProduced + 'h', sub: stats.totalPts + ' pts (≈2h/pt)' }
   ].forEach(t => grid.appendChild(mkTile(t)));
   section.appendChild(grid);
@@ -4443,7 +4451,7 @@ function computeRecapStats(start, end) {
   const cap = end > today ? today : end;
   let projectsCompleted = 0;
   let totalPts = 0;
-  let reviewsHeld = 0;
+  let reviewsHeld = 0, meetingsHeld = 0;
   const studioDays = new Set();
 
   // Effort: the effort chart's total over the same window — per person, per
@@ -4473,10 +4481,19 @@ function computeRecapStats(start, end) {
       const tStart = t.date;
       const tEnd = t.endDate || t.date;
 
-      // Reviews held in the window
-      if (t.isReview && tStart >= start && tStart <= cap) {
-        reviewsHeld++;
-        if ((t.reviewLabel || '').includes('Shoot')) {
+      if (tStart < start || tStart > cap) return;
+      // "Reviews" used to be every isReview task — a holdover from when Review
+      // was a chip. That type is retired, so the count had quietly become every
+      // meeting, shoot and studio-work block. A review now is an Offline Review
+      // key date; the old Review chips still on the books (labelled 'Review',
+      // or unlabelled from before labels existed) count too. Meetings are their
+      // own number.
+      if (t.isDueDate && t.milestoneType === 'offline-review') { reviewsHeld++; return; }
+      if (t.isReview) {
+        const label = t.reviewLabel || 'Review';
+        if (label === 'Review') reviewsHeld++;
+        else if (label === 'Meeting') meetingsHeld++;
+        if (label.includes('Shoot')) {
           let cur = tStart;
           const last = tEnd > cap ? cap : tEnd;
           while (cur <= last) {
@@ -4492,6 +4509,7 @@ function computeRecapStats(start, end) {
     projectsCompleted,
     studioDays: studioDays.size,
     reviewsHeld,
+    meetingsHeld,
     totalPts,
     hoursProduced: Math.round(totalPts * 2)
   };
@@ -4590,13 +4608,16 @@ function buildProjectMetrics(proj) {
         (t.attendees || []).forEach(a => { if (a.person) lane(a.person).segments.push({ start: s, end: e, kind: 'pto', label: offLabel }); });
       } else {
         const mt = t.milestoneType || 'due-date';
+        // Same review rule as the recap: Offline Review key dates and the
+        // retired Review chip count, meetings and shoots do not.
+        if (mt === 'offline-review') reviewCount++;
         markers.push({ date: s, kind: mt, emoji: PM_MS_EMOJI[mt] || '🏁', label: t.taskName || PM_MS_LABEL[mt] || 'Key date' });
       }
       return;
     }
 
     if (t.isReview) {
-      reviewCount++;
+      if ((t.reviewLabel || 'Review') === 'Review') reviewCount++;
       markers.push({ date: s, kind: 'review', emoji: '🎬', label: t.reviewLabel || t.taskName || 'Review' });
     }
   });
@@ -5058,13 +5079,16 @@ function renderTeamWorkloadPanel() {
   section.className = 'm-section';
   section.appendChild(mkSectionTitle('Team Workload'));
 
-  const people = getAllPeople();
+  // The Video Team's load, same as the Gantt — a stakeholder or designer picked
+  // as Internal Team on one chip is not capacity this panel should be rating.
+  const people = getAllPeople().filter(onGanttTeam);
   if (!people.length) {
     section.appendChild(mkEmpty('No internal team tasks found.'));
     return section;
   }
 
   const today         = todayStr();
+  const isWeekendDay  = d => { const w = new Date(d + 'T00:00:00').getDay(); return w === 0 || w === 6; };
   const thisWeekStart = getWeekStart(today);
   const nextWeekStart = addDays(thisWeekStart, 7);
   const twoWeekStart  = addDays(thisWeekStart, 14);
@@ -5082,6 +5106,20 @@ function renderTeamWorkloadPanel() {
     td.innerHTML = `<span class="wl-score">${info.emoji ? info.emoji + ' ' : ''}<span style="color:${info.color};font-weight:600">${scoreStr}${info.label}</span></span>`;
     return td;
   };
+  // Off is not the same as free: both used to render "—".
+  const offCell = (text, title) => {
+    const td = document.createElement('td');
+    td.title = title;
+    td.innerHTML = `<span class="wl-score" style="color:#c8923a;font-weight:600">${esc(text)}</span>`;
+    return td;
+  };
+  const weekCell = (person, monday) => {
+    const off = [0, 1, 2, 3, 4].filter(i => isPersonPTO(person, addDays(monday, i))).length;
+    if (off === 5) return offCell('🌴 Off all week', 'PTO or holiday every weekday this week');
+    const td = mkCell(getAvgWorkload(person, monday));
+    if (off) td.title += ` · ${off} day${off === 1 ? '' : 's'} off, left out of the average`;
+    return td;
+  };
 
   people.forEach(person => {
     const tr = document.createElement('tr');
@@ -5090,10 +5128,12 @@ function renderTeamWorkloadPanel() {
     const nameTd = document.createElement('td');
     nameTd.textContent = person;
     tr.appendChild(nameTd);
-    tr.appendChild(mkCell(getDayWorkload(person, today), true));
-    tr.appendChild(mkCell(getAvgWorkload(person, thisWeekStart)));
-    tr.appendChild(mkCell(getAvgWorkload(person, nextWeekStart)));
-    tr.appendChild(mkCell(getAvgWorkload(person, twoWeekStart)));
+    tr.appendChild(isPersonPTO(person, today) && !isWeekendDay(today)
+      ? offCell('🌴 Off', 'PTO or holiday today')
+      : mkCell(getDayWorkload(person, today), true));
+    tr.appendChild(weekCell(person, thisWeekStart));
+    tr.appendChild(weekCell(person, nextWeekStart));
+    tr.appendChild(weekCell(person, twoWeekStart));
     tbody.appendChild(tr);
   });
 
