@@ -14,7 +14,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261103f';
+window.PREPRO_BUILD = '20261104a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -30,22 +30,22 @@ window.PREPRO_BUILD = '20261103f';
 })();
 </script>
 
-<script src="./local-fb.js?v=20261103f"></script>
+<script src="./local-fb.js?v=20261104a"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by ops.html and dash.html. -->
-<script src="./people.js?v=20261103f"></script>
+<script src="./people.js?v=20261104a"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261103f"></script>
+<script src="./commitments.js?v=20261104a"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261103f"></script>
+<script src="./dossier.js?v=20261104a"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261103f"></script>
+<script src="./prepro-llm.js?v=20261104a"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261103f"></script>
+<script src="./prepro-ai.js?v=20261104a"></script>
 <style>
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -5326,16 +5326,14 @@ function buildGhostInfo(holidaysOnly) {
   if (!scopeProjects.length) return empty;
   const scopeIds = new Set(scopeProjects.map(p => p.id));
 
-  // Collect Internal Team people associated with the in-scope projects (roster + task assignments)
-  const INTERNAL_ROLES = new Set(['Producer', 'Editor', 'Animator']);
+  // Internal Team people on the in-scope projects' rosters — the team columns,
+  // and nothing else. Chips used to count too, so someone taken off the team
+  // kept an availability row for as long as any old chip still named them.
+  const INTERNAL_ROLES = new Set(['Producer', 'Editor', 'Animator', 'Administrative']);
   const rosterPeople = new Set();
   scopeProjects.forEach(proj => {
     Object.entries(proj.roster || {}).forEach(([role, names]) => {
-      if (INTERNAL_ROLES.has(role)) names.forEach(n => rosterPeople.add(n));
-    });
-    (proj.tasks || []).forEach(t => {
-      if (t.person && INTERNAL_ROLES.has(t.role)) rosterPeople.add(t.person);
-      (t.attendees || []).forEach(a => { if (a.person && (a.category === 'Internal Team' || isAdminRole(a.role))) rosterPeople.add(a.person); });
+      if (INTERNAL_ROLES.has(role)) (names || []).forEach(n => { if (n) rosterPeople.add(n); });
     });
   });
   // People who have left with no recorded last day get no row: a permanently
@@ -10793,9 +10791,13 @@ function renderExportPanel() {
     // Deliberately a separate control from the format bar above, not more
     // buttons on it: they answer independent questions (which document, and
     // where it is going), and folding them together would mean a button per
-    // combination. Changing it re-renders the whole panel, because the options
-    // row and the preview both depend on it.
-    const mkTargetBar = () => {
+    // combination.
+    //
+    // Each destination button IS the copy: pressing Outlook copies the Outlook
+    // version there and then. Picking a destination and then pressing a
+    // separate Copy was two clicks for one intent. The panel re-renders after,
+    // because the options row and the preview both depend on the destination.
+    const mkTargetBar = getContent => {
       const wrap = document.createElement('div');
       wrap.className = 'export-target';
       const lbl = document.createElement('span');
@@ -10806,10 +10808,20 @@ function renderExportPanel() {
         const b = document.createElement('button');
         b.className = 'export-fmt-btn' + (exportCopyTarget === key ? ' active' : '');
         b.textContent = label;
-        b.title = note;
+        b.title = 'Copy for ' + label + ' — ' + note;
         b.addEventListener('click', () => {
           exportCopyTarget = key;
           try { localStorage.setItem('prepro_export_copy_target', key); } catch (_) {}
+          // Built and handed to the clipboard inside the click, before the
+          // re-render: clipboard writes need the user's gesture.
+          // The confirmation is deferred a tick so it always lands on the
+          // re-rendered button, even when the fallback copy answers at once.
+          richCopy(getContent(), ok => setTimeout(() => {
+            const now = content.querySelector('.export-target .export-fmt-btn.active');
+            if (!now) return;
+            now.textContent = ok ? '✓ Copied' : 'Copy failed';
+            setTimeout(() => { if (now.isConnected) now.textContent = label; }, 1500);
+          }, 0));
           renderExportPanel();
         });
         wrap.appendChild(b);
@@ -10833,8 +10845,7 @@ function renderExportPanel() {
 
       const acts = document.createElement('div');
       acts.className = 'export-actions';
-      acts.appendChild(mkTargetBar());
-      acts.appendChild(mkRichCopyBtn('Copy', getContent));
+      acts.appendChild(mkTargetBar(getContent));
       const n = document.createElement('span');
       n.className = 'export-note';
       n.textContent = exportCopyTarget === 'plain'
@@ -10888,10 +10899,8 @@ function renderExportPanel() {
 
     const actions = document.createElement('div');
     actions.className = 'export-actions';
-    actions.appendChild(mkTargetBar());
-    // Rich copy button: writes text/html + text/plain simultaneously, or plain
-    // alone when the destination is Plain.
-    actions.appendChild(mkRichCopyBtn('Copy', () => buildHTMLExport()));
+    // Rich copy: text/html + text/plain together, or plain alone for Plain.
+    actions.appendChild(mkTargetBar(() => buildHTMLExport()));
     const note = document.createElement('span');
     note.className = 'export-note';
     note.textContent = targetNote();
@@ -11206,31 +11215,22 @@ function mkCopyBtn(label, text) {
 
 // Writes text/html + text/plain together so the receiver picks its best flavour.
 // getContent() may return html:null to suppress the rich flavour entirely.
-function mkRichCopyBtn(label, getContent) {
-  const btn = document.createElement('button');
-  btn.className = 'btn btn-ghost';
-  btn.textContent = label;
-  btn.style.cssText = 'font-size:11px;padding:3px 10px';
-  btn.addEventListener('click', async () => {
-    const { html, plain } = getContent();
-    const orig = btn.textContent;
-    const done = ok => { btn.textContent = ok ? 'Copied!' : 'Failed'; setTimeout(() => { btn.textContent = orig; }, 1500); };
-    // html === null is the Plain destination: withhold the text/html flavour so
-    // a rich-capable receiver has nothing to prefer over the plain one.
-    if (html !== null && navigator.clipboard && window.ClipboardItem) {
-      try {
-        await navigator.clipboard.write([new ClipboardItem({
-          'text/html':  new Blob([html],  { type: 'text/html' }),
-          'text/plain': new Blob([plain], { type: 'text/plain' })
-        })]);
-        done(true); return;
-      } catch(e) { /* fall through to plain text */ }
-    }
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(plain).then(() => done(true)).catch(() => fallbackCopy(plain, done));
-    } else { fallbackCopy(plain, done); }
-  });
-  return btn;
+// Writes text/html + text/plain together. html === null is the Plain
+// destination: withhold the text/html flavour so a rich-capable receiver has
+// nothing to prefer over the plain one.
+async function richCopy({ html, plain }, done) {
+  if (html !== null && navigator.clipboard && window.ClipboardItem) {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/html':  new Blob([html],  { type: 'text/html' }),
+        'text/plain': new Blob([plain], { type: 'text/plain' })
+      })]);
+      done(true); return;
+    } catch(e) { /* fall through to plain text */ }
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(plain).then(() => done(true)).catch(() => fallbackCopy(plain, done));
+  } else { fallbackCopy(plain, done); }
 }
 
 function fallbackCopy(text, cb) {

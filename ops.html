@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261103f';
+window.PREPRO_BUILD = '20261104a';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,25 +26,25 @@ window.PREPRO_BUILD = '20261103f';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20261103f"></script>
+<script type="module" src="./auth.js?v=20261104a"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261103f"></script>
+<script src="./whatsnew.js?v=20261104a"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20261103f"></script>
+<script src="./people.js?v=20261104a"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261103f"></script>
+<script src="./commitments.js?v=20261104a"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261103f"></script>
+<script src="./dossier.js?v=20261104a"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261103f"></script>
+<script src="./prepro-llm.js?v=20261104a"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261103f"></script>
+<script src="./prepro-ai.js?v=20261104a"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -1562,11 +1562,19 @@ function getAllPeople() {
 // Same as getAllPeople but also surfaces people who only appear on PTO (no work
 // entries). The timeline renders and reorders from THIS list so PTO-only rows
 // are reorderable too.
+// The Gantt is the Video Team's schedule. "Internal Team" on a task is a
+// category the producer picks per chip, and stakeholders, vendors and Brand
+// Creative end up under it often enough that keying rows off it filled the
+// chart with people who aren't on the team. Without person records yet (a
+// fresh file) there is nothing to go on, so everyone stays.
+function onGanttTeam(name) {
+  return !hasPeopleRecords() || personTeam(name) === 'video';
+}
 function getTimelinePeople() {
   const people = new Set();
   const today = todayStr();
-  getOpsEntries().forEach(e => { if (e.person && personCapacityOn(e.person, today)) people.add(e.person); });
-  getPtoEntries().forEach(e => { if (e.person && personCapacityOn(e.person, today)) people.add(e.person); });
+  getOpsEntries().forEach(e => { if (e.person && !e.unassigned && onGanttTeam(e.person) && personCapacityOn(e.person, today)) people.add(e.person); });
+  getPtoEntries().forEach(e => { if (e.person && onGanttTeam(e.person) && personCapacityOn(e.person, today)) people.add(e.person); });
   // The studio is a resource, not a person, so it only exists on this list —
   // getAllPeople (workload, pickers, breakdowns) deliberately never sees it.
   if (getStudioBlockEntries().length) people.add(STUDIO_ROW);
@@ -4503,7 +4511,28 @@ const PM_NOTE_LABEL = { update: 'Update', delay: 'Delay', direction: 'Change in 
 const PM_MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function pmPad(n) { return (n < 10 ? '0' : '') + n; }
 function pmIsWeekend(dateStr) { const d = new Date(dateStr + 'T00:00:00').getDay(); return d === 0 || d === 6; }
-function pmRoleColor(role) { return colorForRole(role); }
+// colorForRole paints by team, so Producer, Editor and Animator all came out
+// the same Video Team blue and a lane couldn't tell you what someone was doing.
+// The retrospective is about who did what, so each role gets its own colour,
+// reusing the Ops category colours where the role has one.
+const PM_ROLE_COLOR = {
+  'Producer':         CAT_COLORS['Producing'],
+  'Editor':           CAT_COLORS['Editing'],
+  'Animator':         CAT_COLORS['Animation'],
+  'Administrative':   CAT_COLORS['Administrative'],
+  'Team/Other Event': CAT_COLORS['Administrative'],
+  'Copywriter':       '#e07b39',
+  'Designer':         '#d9a83a',
+  'Stakeholder':      '#4aa9a0',
+  'External Vendor':  '#8c6d5a',
+};
+const PM_REVIEW_COLOR = '#5c6b8a';
+function pmRoleColor(role) { return PM_ROLE_COLOR[role] || colorForRole(role); }
+function pmSegColor(seg) {
+  if (seg.kind === 'pto') return '#c8923a';
+  if (seg.kind === 'review') return isStudioLabel(seg.reviewLabel) ? CAT_COLORS['Production'] : PM_REVIEW_COLOR;
+  return pmRoleColor(seg.role);
+}
 
 function pmCompletedProjects() {
   return (state.projects || [])
@@ -4579,18 +4608,38 @@ function buildProjectMetrics(proj) {
   // A role slot on a chip with nobody named in it yet still counts here: it is
   // this project's planned effort, even though it is nobody's workload yet.
   const offOn = makeOffOn();
-  const workIds = new Set();
   getOpsEntries({ projects: [proj] }).forEach(en => {
     const pts = loePts(en.loe);
     forEachEffortDay(en, en.date, en.endDate, offOn, d => { perDay[d] = (perDay[d] || 0) + pts; });
-    if (en.isReview) return;
-    workIds.add(en.taskId);
-    if (en.unassigned || !en.person) return;
-    const L = lane(en.person);
-    if (en.role) L.roles.add(en.role);
-    L.segments.push({ start: en.date, end: en.endDate, kind: 'work', role: en.role || '', label: en.taskName || 'Task', loe: en.loe });
   });
-  workTasks = workIds.size;
+
+  // Lanes are everyone who touched the project, whatever the chip. They used to
+  // come from the effort entries above, which only carry Internal Team
+  // Producer/Editor/Animator/Admin work — so the copywriter, the designers, the
+  // vendor, the stakeholders and every review, meeting and shoot were missing
+  // from the project's own history. Effort stays internal: that is what Ops
+  // scores everywhere else.
+  (proj.tasks || []).forEach(t => {
+    if (!t.date || t.isDueDate) return;
+    const s = t.date, e = t.endDate || t.date;
+    const seen = new Set();
+    const add = (person, role, seg) => {
+      if (!person || seen.has(person)) return;
+      seen.add(person);
+      const L = lane(person);
+      if (role) L.roles.add(role);
+      L.segments.push(Object.assign({ start: s, end: e, role: role || '' }, seg));
+    };
+    if (t.isReview) {
+      const label = t.reviewLabel || 'Review';
+      (t.attendees || []).forEach(a => add(a.person, a.role, { kind: 'review', label: t.taskName || label, reviewLabel: label }));
+      return;
+    }
+    workTasks++;
+    const label = r => t.taskName || roleVerb(r);
+    if (t.person) add(t.person, t.role, { kind: 'work', label: label(t.role), loe: t.loe || 'low' });
+    (t.attendees || []).forEach(a => add(a.person, a.role || t.role, { kind: 'work', label: label(a.role || t.role), loe: t.loe || 'low' }));
+  });
 
   Object.values(perDay).forEach(v => { totalPts += v; });
 
@@ -4822,8 +4871,10 @@ function renderProjectMetricsPanel() {
       bar.className = 'pm-bar' + (seg.kind === 'pto' ? ' pto' : '');
       bar.style.left = xPct(seg.start) + '%';
       bar.style.width = 'calc(' + Math.max(0.6, (daysBetweenDates(seg.start, seg.end) + 1) / totalDays * 100) + '% - 1px)';
-      bar.style.background = seg.kind === 'pto' ? '#c8923a' : pmRoleColor(seg.role);
-      bar.title = (seg.kind === 'pto' ? 'PTO' : (seg.label || 'Task')) + ' · ' + fmtDateShort(seg.start) +
+      bar.style.background = pmSegColor(seg);
+      bar.title = (seg.kind === 'pto' ? 'PTO' : (seg.label || 'Task')) +
+        (seg.kind === 'review' && seg.label !== seg.reviewLabel ? ' (' + seg.reviewLabel + ')' : '') +
+        (seg.role ? ' · ' + seg.role : '') + ' · ' + fmtDateShort(seg.start) +
         (seg.end !== seg.start ? ' → ' + fmtDateShort(seg.end) : '') + (seg.loe ? ' · ' + seg.loe + ' effort' : '');
       laneTrack.appendChild(bar);
     });
@@ -4868,14 +4919,23 @@ function renderProjectMetricsPanel() {
   // Legend
   const legend = document.createElement('div');
   legend.className = 'pm-legend';
+  // Swatches for what is actually drawn: work bars by role, then reviews and
+  // shoots, which are coloured by kind rather than by the attendee's role.
   const roleLegend = new Set();
-  m.lanes.forEach(d => d.roles.forEach(r => roleLegend.add(r)));
-  [...roleLegend].sort().forEach(r => {
+  let hasReview = false, hasShoot = false;
+  m.lanes.forEach(d => d.segments.forEach(s => {
+    if (s.kind === 'work' && s.role) roleLegend.add(s.role);
+    else if (s.kind === 'review') { if (isStudioLabel(s.reviewLabel)) hasShoot = true; else hasReview = true; }
+  }));
+  const swatch = (color, text) => {
     const item = document.createElement('div');
     item.className = 'pm-legend-item';
-    item.innerHTML = '<span class="pm-legend-swatch" style="background:' + pmRoleColor(r) + '"></span>' + esc(r);
+    item.innerHTML = '<span class="pm-legend-swatch" style="background:' + color + '"></span>' + esc(text);
     legend.appendChild(item);
-  });
+  };
+  [...roleLegend].sort().forEach(r => swatch(pmRoleColor(r), r));
+  if (hasReview) swatch(PM_REVIEW_COLOR, 'Review / meeting');
+  if (hasShoot) swatch(CAT_COLORS['Production'], 'Shoot / studio');
   const notesLeg = document.createElement('div');
   notesLeg.className = 'pm-legend-item';
   notesLeg.textContent = '⏳🚧🔀 = delay / blocker / redirect note';
