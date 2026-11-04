@@ -17,6 +17,21 @@
 
 var WHATSNEW_RELEASES = [
   {
+    id: '2026-11-04d',
+    title: 'Team Effort gets the same controls',
+    dateLabel: 'Nov 4, 2026',
+    groups: [
+      {
+        area: 'Ops · Metrics',
+        items: [
+          { tag: 'new', text: 'Team Effort (the look-back chart) now has the same controls as Projected Effort: look back from 1 week to 6 months, group by role, person, project or phase, pick days or weeks, switch to the grid, and click to see the chips behind a number. Each chart remembers its own settings.' },
+          { tag: 'fix', text: 'By role, Team Effort now shares the work across everyone on the Video Team who holds that role, as Projected Effort does. "People who worked it" is the old way. It also counts only the Video Team, so stakeholders and vendors on a chip no longer show up.' },
+          { tag: 'new', text: '"Unrecorded staffing" (off by default) shows past chips that had a role but nobody on them, so gaps in what was recorded are easy to spot.' }
+        ]
+      }
+    ]
+  },
+  {
     id: '2026-11-04c',
     title: 'Projected Effort: who has room, and when',
     dateLabel: 'Nov 4, 2026',

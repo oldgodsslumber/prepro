@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261104f';
+window.PREPRO_BUILD = '20261104g';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,25 +26,25 @@ window.PREPRO_BUILD = '20261104f';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20261104f"></script>
+<script type="module" src="./auth.js?v=20261104g"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261104f"></script>
+<script src="./whatsnew.js?v=20261104g"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20261104f"></script>
+<script src="./people.js?v=20261104g"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261104f"></script>
+<script src="./commitments.js?v=20261104g"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261104f"></script>
+<script src="./dossier.js?v=20261104g"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261104f"></script>
+<script src="./prepro-llm.js?v=20261104g"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261104f"></script>
+<script src="./prepro-ai.js?v=20261104g"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -387,6 +387,7 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .m-chart-x > div { flex: 1; min-width: 0; text-align: center; white-space: nowrap; overflow: visible; }
 .m-chart-x > div.today { color: #6c63ff; font-weight: 700; }
 .m-chart-x > div.month { color: var(--text); font-weight: 700; }
+.m-chart-x > div.sel { color: #e0a33a; font-weight: 700; }
 
 .m-recap-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .m-recap-head .m-section-title { margin-bottom: 0; }
@@ -403,7 +404,8 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .m-effort-grid td.cell { text-align: center; padding: 4px 3px; border: 1px solid var(--bg); cursor: pointer; color: var(--text); min-width: 34px; }
 .m-effort-grid td.cell:hover { outline: 1px solid var(--dim); outline-offset: -1px; }
 .m-effort-grid td.cell.off { color: var(--dim); font-style: italic; }
-.m-effort-grid .sel { outline: 2px solid #6c63ff !important; outline-offset: -2px; }
+.m-effort-grid .sel { outline: 2px solid #e0a33a !important; outline-offset: -2px; }
+.m-effort-grid th.today { color: #6c63ff; }
 .m-effort-grid tr.unst td { font-style: italic; color: var(--dim); font-size: 10px; }
 .m-effort-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
 .m-effort-drill { margin-top: 12px; border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; background: var(--card); }
@@ -825,23 +827,39 @@ let viewMode = (() => {
   return VALID_VIEW_MODES.includes(saved) ? saved : 'headsup';
 })();
 let metricsRecapRange = 'quarter'; // '30d' | 'quarter' | '6mo' | 'ytd'
-// Projected Effort window, in workdays. Five per week, since the chart only
-// plots weekdays; 15 (three weeks) was the hardcoded value before it was a pick.
-const EFFORT_NEXT_SPANS = [
-  { days: 5,  label: 'Next week' },
-  { days: 10, label: 'Next 2 weeks' },
-  { days: 15, label: 'Next 3 weeks' },
-  { days: 20, label: 'Next 4 weeks' },
-  { days: 30, label: 'Next 6 weeks' },
-  { days: 40, label: 'Next 8 weeks' },
-  { days: 60, label: 'Next 12 weeks' }
-];
-let effortNextDays = (() => {
+// Effort chart windows, in workdays — five per week, since the charts only plot
+// weekdays. The defaults are the old hardcoded values: 15 ahead (three weeks)
+// and 22 back (about 30 calendar days).
+const EFFORT_SPANS = {
+  next: { def: 15, list: [
+    { days: 5,  label: 'Next week' },
+    { days: 10, label: 'Next 2 weeks' },
+    { days: 15, label: 'Next 3 weeks' },
+    { days: 20, label: 'Next 4 weeks' },
+    { days: 30, label: 'Next 6 weeks' },
+    { days: 40, label: 'Next 8 weeks' },
+    { days: 60, label: 'Next 12 weeks' }
+  ] },
+  past: { def: 22, list: [
+    { days: 5,  label: 'Last week' },
+    { days: 10, label: 'Last 2 weeks' },
+    { days: 22, label: 'Last 30 days' },
+    { days: 30, label: 'Last 6 weeks' },
+    { days: 40, label: 'Last 8 weeks' },
+    { days: 65, label: 'Last quarter' },
+    { days: 130, label: 'Last 6 months' }
+  ] }
+};
+const effortSpan = {};
+['next', 'past'].forEach(dir => {
+  const S = EFFORT_SPANS[dir];
+  let v = S.def;
   try {
-    const v = Number(localStorage.getItem('ops_effort_next_days'));
-    return EFFORT_NEXT_SPANS.some(s => s.days === v) ? v : 15;
-  } catch (_) { return 15; }
-})();
+    const saved = Number(localStorage.getItem('ops_effort_' + dir + '_days'));
+    if (S.list.some(s => s.days === saved)) v = saved;
+  } catch (_) {}
+  effortSpan[dir] = v;
+});
 let pmProjectId = (() => { try { return localStorage.getItem('ops_projmetrics') || null; } catch (_) { return null; } })();
 function saveProjMetrics() {
   if (pmProjectId) localStorage.setItem('ops_projmetrics', pmProjectId);
@@ -3296,8 +3314,8 @@ const METRICS_PANELS = [
   { id: 'teamWorkload', label: 'Team Workload',         render: renderTeamWorkloadPanel },
   { id: 'categoryMix',  label: 'Category Mix',          render: renderCategoryMix },
   { id: 'quarterRecap', label: 'Quarter Recap',         render: renderQuarterRecap },
-  { id: 'effortPast',   label: 'Effort · Last 30 Days', render: () => renderEffortChart('past', 22) },
-  { id: 'effortNext',   label: 'Effort · Projected',    render: () => renderProjectedEffort(effortNextDays) },
+  { id: 'effortPast',   label: 'Effort · Look Back',    render: () => renderEffortPanel('past') },
+  { id: 'effortNext',   label: 'Effort · Projected',    render: () => renderEffortPanel('next') },
   { id: 'projectGantt', label: 'Project Timeline',      render: renderProjectGantt },
   { id: 'health',       label: 'Project Health',        render: renderProjectHealth },
   { id: 'projRetro',    label: 'Project Retrospective', render: renderProjectMetricsPanel },
@@ -4182,305 +4200,57 @@ function effortRoleOf(entry) {
 // dropping a project the day it ships rewrote the last 30 days every time.
 function getEffortEntries() { return getOpsEntries({ includeInactive: true }); }
 
-function renderEffortChart(direction, daySpan) {
-  const section = document.createElement('div');
-  section.className = 'm-section';
-  // The projection has its own renderer now (renderProjectedEffort); 'next'
-  // is still handled below so this keeps working if it is ever called with it.
-  section.appendChild(mkSectionTitle(direction === 'past'
-    ? 'Team Effort by Role · Last 30 Days'
-    : 'Projected Effort by Role'));
-
-  const today = todayStr();
-  const days = [];
-  if (direction === 'past') {
-    let cursor = today;
-    while (days.length < daySpan) {
-      const dow = new Date(cursor + 'T00:00:00').getDay();
-      if (dow !== 0 && dow !== 6) days.unshift(cursor);
-      cursor = addDays(cursor, -1);
-    }
-  } else {
-    let cursor = addDays(today, 1);
-    while (days.length < daySpan) {
-      const dow = new Date(cursor + 'T00:00:00').getDay();
-      if (dow !== 0 && dow !== 6) days.push(cursor);
-      cursor = addDays(cursor, 1);
-    }
-  }
-
-  const roles = EFFORT_ROLES;
-
-  // isPersonPTO walks every project, and we ask it once per person per day per
-  // role — memoise or the chart re-scans the whole file thousands of times.
-  const ptoMemo = new Map();
-  const offOn = (person, d) => {
-    const k = person + '|' + d;
-    if (!ptoMemo.has(k)) ptoMemo.set(k, isPersonPTO(person, d));
-    return ptoMemo.get(k);
-  };
-
-  // Pass 1 — bucket the window's effort by day and role.
-  const dayIdx = new Map(days.map((d, i) => [d, i]));
-  const first = days[0], last = days[days.length - 1];
-  const ptsByDay = days.map(() => ({}));   // [i][role] → total pts that day
-  const peopleByRole = {};                 // role → everyone who did it in the window
-  roles.forEach(r => {
-    peopleByRole[r] = new Set();
-    ptsByDay.forEach(o => { o[r] = 0; });
-  });
-
-  getEffortEntries().forEach(e => {
-    const role = effortRoleOf(e);
-    if (!role) return;
-    if (e.unassigned || !e.person) return;      // an unfilled role slot is not a person
-    // Gone with no recorded last day: no way to know which of these days they
-    // were here for, and a permanently empty slot reads as spare capacity.
-    if (personGoneEntirely(e.person)) return;
-    const from = e.date > first ? e.date : first;
-    const to   = e.endDate < last ? e.endDate : last;
-    if (!from || !to || from > to) return;
-    const pts = loePts(e.loe);
-    for (let d = from; d <= to; d = addDays(d, 1)) {
-      const i = dayIdx.get(d);
-      if (i === undefined) continue;            // weekend, or outside the window
-      // personActiveOn is date-aware, unlike isSunset — someone with a last day
-      // still in the future is capacity today, and someone who left last week
-      // still did the work that shows earlier in this window.
-      if (!personActiveOn(e.person, d)) continue;
-      if (offOn(e.person, d)) continue;
-      ptsByDay[i][role] += pts;
-      peopleByRole[role].add(e.person);
-    }
-  });
-
-  // Pass 2 — average against a stable head count: everyone who worked that role
-  // anywhere in the window, minus whoever is out or gone on the day itself. A
-  // per-day denominator would spike to "Overloaded" the moment a role was down
-  // to its one busy person.
-  const perDay = days.map((d, i) => {
-    const byRole = {}, headByRole = {};
-    roles.forEach(r => {
-      let head = 0;
-      peopleByRole[r].forEach(p => {
-        if (!personActiveOn(p, d) || offOn(p, d)) return;
-        head++;
-      });
-      headByRole[r] = head;
-      byRole[r] = head ? ptsByDay[i][r] / head : 0;
-    });
-    return { date: d, byRole, headByRole };
-  });
-
-  if (!perDay.some(d => roles.some(r => d.byRole[r] > 0))) {
-    section.appendChild(mkEmpty(direction === 'past'
-      ? 'No effort logged in this window.'
-      : 'No projected effort in this window.'));
-    return section;
-  }
-
-  const yMax = 5;            // workload meter tops out at "Overloaded" (5+)
-  const SVGNS = 'http://www.w3.org/2000/svg';
-
-  const chart = document.createElement('div');
-  chart.className = 'm-chart';
-
-  // Y-axis: workload tier labels positioned at the centre of each band
-  const yAxis = document.createElement('div');
-  yAxis.className = 'm-chart-y';
-  const tiers = [
-    { v: 4.75, txt: '🚨 Overloaded' },
-    { v: 4,    txt: '🔴 Very Busy' },
-    { v: 3,    txt: '🟠 Busy' },
-    { v: 2,    txt: '🟡 Manageable' },
-    { v: 0.75, txt: '🟢 Light' }
-  ];
-  tiers.forEach(t => {
-    const lab = document.createElement('div');
-    lab.className = 'm-chart-y-label';
-    lab.textContent = t.txt;
-    lab.style.top = ((1 - t.v / yMax) * 100) + '%';
-    yAxis.appendChild(lab);
-  });
-  chart.appendChild(yAxis);
-
-  const area = document.createElement('div');
-  area.className = 'm-chart-area';
-  const svgWrap = document.createElement('div');
-  svgWrap.className = 'm-chart-svg-wrap';
-
-  const W = 100, H = 100;
-  const svg = document.createElementNS(SVGNS, 'svg');
-  svg.setAttribute('class', 'm-chart-svg');
-  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  svg.setAttribute('preserveAspectRatio', 'none');
-
-  // Horizontal gridlines at workload tier boundaries
-  [1.5, 2.5, 3.5, 4.5].forEach(v => {
-    const y = (1 - v / yMax) * H;
-    const line = document.createElementNS(SVGNS, 'line');
-    line.setAttribute('x1', 0);
-    line.setAttribute('x2', W);
-    line.setAttribute('y1', y);
-    line.setAttribute('y2', y);
-    line.setAttribute('stroke', '#2a2a3a');
-    line.setAttribute('stroke-width', '0.5');
-    line.setAttribute('stroke-dasharray', '1,1');
-    line.setAttribute('vector-effect', 'non-scaling-stroke');
-    svg.appendChild(line);
-  });
-
-  // Today vertical marker (only for past chart, since next chart starts tomorrow)
-  if (direction === 'past') {
-    const x = ((days.length - 0.5) / days.length) * W;
-    const tline = document.createElementNS(SVGNS, 'line');
-    tline.setAttribute('x1', x);
-    tline.setAttribute('x2', x);
-    tline.setAttribute('y1', 0);
-    tline.setAttribute('y2', H);
-    tline.setAttribute('stroke', '#6c63ff');
-    tline.setAttribute('stroke-width', '0.5');
-    tline.setAttribute('vector-effect', 'non-scaling-stroke');
-    svg.appendChild(tline);
-  }
-
-  // One polyline per role, plotted at slot centres so x-axis labels line up
-  roles.forEach(role => {
-    const points = perDay.map((p, i) => {
-      const x = ((i + 0.5) / days.length) * W;
-      const v = Math.min(p.byRole[role], yMax);
-      const y = (1 - v / yMax) * H;
-      return `${x.toFixed(2)},${y.toFixed(2)}`;
-    }).join(' ');
-    const poly = document.createElementNS(SVGNS, 'polyline');
-    poly.setAttribute('points', points);
-    poly.setAttribute('fill', 'none');
-    poly.setAttribute('stroke', ROLE_COLOR[role]);
-    poly.setAttribute('stroke-width', '2');
-    poly.setAttribute('stroke-linejoin', 'round');
-    poly.setAttribute('stroke-linecap', 'round');
-    poly.setAttribute('vector-effect', 'non-scaling-stroke');
-    svg.appendChild(poly);
-  });
-
-  // Transparent hover columns for tooltips
-  perDay.forEach((p, i) => {
-    const colW = W / days.length;
-    const rect = document.createElementNS(SVGNS, 'rect');
-    rect.setAttribute('x', i * colW);
-    rect.setAttribute('y', 0);
-    rect.setAttribute('width', colW);
-    rect.setAttribute('height', H);
-    rect.setAttribute('fill', 'transparent');
-    const title = document.createElementNS(SVGNS, 'title');
-    title.textContent = `${fmtDateShort(p.date)}\n` +
-      roles.map(r => {
-        const head = p.headByRole[r];
-        if (!head) return `${r}: —`;
-        const info = workloadInfo(p.byRole[r]);
-        return `${r}: ${p.byRole[r].toFixed(1)} (${info.label}) · ${head} ${head === 1 ? 'person' : 'people'}`;
-      }).join('\n');
-    rect.appendChild(title);
-    svg.appendChild(rect);
-  });
-
-  svgWrap.appendChild(svg);
-  area.appendChild(svgWrap);
-
-  // X-axis labels (one slot per day, centre-aligned to match polyline points)
-  const xAxis = document.createElement('div');
-  xAxis.className = 'm-chart-x';
-  // A month label is wider than one day's slot once the window runs to weeks, so
-  // labels may overflow their slot; a Monday right beside a month start would
-  // then print on top of it, so that one Monday goes unlabelled.
-  const monthAt = days.map((d, i) => i === 0 || new Date(d + 'T00:00:00').getDate() === 1 ||
-    new Date(d + 'T00:00:00').getMonth() !== new Date(days[i - 1] + 'T00:00:00').getMonth());
-  days.forEach((d, i) => {
-    const day = new Date(d + 'T00:00:00');
-    const lab = document.createElement('div');
-    const isMonth = monthAt[i];
-    const nearMonth = days.length > 20 && [-2, -1, 1, 2].some(k => monthAt[i + k]);
-    const showLabel = isMonth || d === today || (day.getDay() === 1 && !nearMonth); // Mondays + month starts + today
-    if (d === today) lab.classList.add('today');
-    if (isMonth) lab.classList.add('month');
-    if (showLabel) {
-      lab.textContent = isMonth
-        ? `${MONTHS[day.getMonth()].slice(0, 3)} ${day.getDate()}`
-        : day.getDate().toString();
-    }
-    lab.title = fmtDateShort(d);
-    xAxis.appendChild(lab);
-  });
-  area.appendChild(xAxis);
-  chart.appendChild(area);
-  section.appendChild(chart);
-
-  // Legend
-  const legend = document.createElement('div');
-  legend.className = 'm-cat-legend';
-  legend.style.marginTop = '10px';
-  roles.forEach(role => {
-    const item = document.createElement('div');
-    item.className = 'm-cat-legend-item';
-    const sw = document.createElement('div');
-    sw.className = 'm-cat-swatch';
-    sw.style.background = ROLE_COLOR[role];
-    item.appendChild(sw);
-    const lab = document.createElement('span');
-    const ppl = [...peopleByRole[role]].sort();
-    lab.textContent = `${role} (${ppl.length})`;
-    // The whole point of the chart is "who", so name them on hover.
-    item.title = ppl.length ? `${role}: ${ppl.join(', ')}` : `Nobody worked ${role} tasks in this window.`;
-    item.appendChild(lab);
-    legend.appendChild(item);
-  });
-  section.appendChild(legend);
-
-  return section;
-}
-
-/* ── PROJECTED EFFORT ────────────────────────────────────────────────────────
- * The look-ahead, with the choices that make it a planning tool:
+/* ── EFFORT CHARTS (look back + projected) ───────────────────────────────────
+ * One calculation and one renderer for both directions, so the two panels
+ * cannot drift apart again — the look back used to be its own copy, and fell
+ * behind the moment the projection gained options. `dir` is 'past' or 'next'.
  *
  *  - Group by role / person / project / phase.
- *  - Divide by everyone who holds the role, not only whoever is already booked.
- *    Booked-only was the old rule, and looking ahead it hid spare capacity:
- *    one editor booked solid and three with nothing read as Editing
- *    "Overloaded". It is still offered, because "how stretched are the people
- *    already on it?" is a real question too.
- *  - Unstaffed work: role slots with nobody in them. Looking ahead that is the
- *    work most worth seeing, and it was dropped entirely. Drawn as a dashed
- *    companion ("if the team we have picks it up"), or its own series when
- *    grouped by person, since it has no person to sit on.
+ *  - Divide by everyone who holds the role, not only whoever is booked.
+ *    Booked-only was the old rule, and it hid spare capacity: one editor booked
+ *    solid and three with nothing read as Editing "Overloaded". It is still
+ *    offered, because "how stretched were the people on it?" is a real question.
+ *  - Unstaffed work: role slots with nobody in them. Ahead, that is demand
+ *    nobody is on yet. Behind, it is work whose staffing was never recorded —
+ *    a data gap, so it is off by default there. Drawn as a dashed companion,
+ *    or its own series when grouped by person.
  *  - Day or week buckets; lines or a grid; click any day/week (or grid cell)
  *    to list the chips behind the number.
  *
- * Only the Video Team counts as capacity, as in the Gantt and Team Workload,
- * and only active projects: on-hold or cancelled work is not coming. (The
- * 30-day look back keeps inactive projects — that work happened.)
+ * Only the Video Team counts, as in the Gantt and Team Workload. Ahead, only
+ * active projects (on-hold or cancelled work is not coming) and people here
+ * today. Behind, inactive projects stay — that work happened, and dropping a
+ * project the day it shipped rewrote the window — and so do people who have
+ * since left, for the days they were still here.
  * ─────────────────────────────────────────────────────────────────────────── */
-const EFFORT_OPTS_KEY = 'ops_effort_next_opts';
 const EFFORT_OPT_CHOICES = {
   groupBy:   [['role', 'Role'], ['person', 'Person'], ['project', 'Project'], ['phase', 'Phase']],
   divide:    [['everyone', 'Everyone who holds the role'], ['booked', 'People already booked']],
   bucket:    [['auto', 'Auto'], ['day', 'Days'], ['week', 'Weeks']],
   view:      [['lines', 'Lines'], ['grid', 'Grid']]
 };
-const EFFORT_OPT_DEFAULTS = { groupBy: 'role', divide: 'everyone', bucket: 'auto', view: 'lines', unstaffed: true };
-let effortOpts = (() => {
+// Each panel keeps its own settings: what you want to see ahead and behind
+// are rarely the same.
+const EFFORT_OPT_DEFAULTS = {
+  next: { groupBy: 'role', divide: 'everyone', bucket: 'auto', view: 'lines', unstaffed: true },
+  past: { groupBy: 'role', divide: 'everyone', bucket: 'auto', view: 'lines', unstaffed: false }
+};
+const effortOptsKey = dir => 'ops_effort_' + dir + '_opts';
+const effortOptsBy = {};
+['next', 'past'].forEach(dir => {
   let s = {};
-  try { s = JSON.parse(localStorage.getItem(EFFORT_OPTS_KEY) || '{}') || {}; } catch (_) {}
-  const o = Object.assign({}, EFFORT_OPT_DEFAULTS);
+  try { s = JSON.parse(localStorage.getItem(effortOptsKey(dir)) || '{}') || {}; } catch (_) {}
+  const o = Object.assign({}, EFFORT_OPT_DEFAULTS[dir]);
   Object.keys(EFFORT_OPT_CHOICES).forEach(k => { if (EFFORT_OPT_CHOICES[k].some(c => c[0] === s[k])) o[k] = s[k]; });
   if (typeof s.unstaffed === 'boolean') o.unstaffed = s.unstaffed;
-  return o;
-})();
-function saveEffortOpts() { try { localStorage.setItem(EFFORT_OPTS_KEY, JSON.stringify(effortOpts)); } catch (_) {} }
-// The day/week (and series) whose chips are listed under the chart. Tied to the
-// settings it was picked under, so changing a setting never leaves it pointing
-// at a bucket that no longer means the same thing.
-let effortDrill = null; // { sig, b, key }
-const effortSig = days => JSON.stringify([days, effortOpts]);
+  effortOptsBy[dir] = o;
+});
+function saveEffortOpts(dir) { try { localStorage.setItem(effortOptsKey(dir), JSON.stringify(effortOptsBy[dir])); } catch (_) {} }
+// The day/week (and series) whose chips are listed under each chart. Tied to
+// the settings it was picked under, so changing a setting never leaves it
+// pointing at a bucket that no longer means the same thing.
+const effortDrillBy = { next: null, past: null }; // { sig, b, key }
+const effortSig = dir => JSON.stringify([dir, effortSpan[dir], effortOptsBy[dir]]);
 
 const PHASE_ORDER = ['Pre-Production', 'Producing', 'Production', 'Post-Producing', 'Editing', 'Animation', 'Administrative'];
 // Who could carry a phase's work, for "divide by everyone".
@@ -4493,12 +4263,14 @@ const UNSTAFFED_KEY = '__unstaffed';
 const OTHER_PROJECTS_KEY = '__other';
 const EFFORT_PROJECT_LINES = 8;
 
-function computeProjectedEffort(daySpan, o) {
+function computeEffort(dir, daySpan, o) {
+  const past = dir === 'past';
   const today = todayStr();
+  // Ahead: the next N workdays from tomorrow. Behind: the last N, today included.
   const days = [];
-  for (let c = addDays(today, 1); days.length < daySpan; c = addDays(c, 1)) {
+  for (let c = past ? today : addDays(today, 1); days.length < daySpan; c = addDays(c, past ? -1 : 1)) {
     const w = new Date(c + 'T00:00:00').getDay();
-    if (w !== 0 && w !== 6) days.push(c);
+    if (w !== 0 && w !== 6) { if (past) days.unshift(c); else days.push(c); }
   }
   const dayIdx = new Map(days.map((d, i) => [d, i]));
   const first = days[0], last = days[days.length - 1];
@@ -4516,8 +4288,12 @@ function computeProjectedEffort(daySpan, o) {
   if (o.groupBy === 'role') EFFORT_ROLES.forEach((r, i) => group(r, r, ROLE_COLOR[r], i));
   // Everyone on the team gets a row, booked or not — an idle person is the
   // answer to "who has room?", and they used to be invisible.
+  // Ahead: whoever is here today. Behind: whoever was here for any of the
+  // window, so someone who left last week still owns the work they did.
   const videoTeam = hasPeopleRecords()
-    ? Object.keys(peopleRecords).filter(n => peopleRecords[n].team === 'video' && personCapacityOn(n, today))
+    ? Object.keys(peopleRecords).filter(n => peopleRecords[n].team === 'video' && (past
+        ? !personGoneEntirely(n) && days.some(d => personActiveOn(n, d))
+        : personCapacityOn(n, today)))
     : [];
   if (o.groupBy === 'person') videoTeam.forEach(n => group(n, n, null));
 
@@ -4525,9 +4301,9 @@ function computeProjectedEffort(daySpan, o) {
   // a role chip nobody has been put on yet — the usual unstaffed case — never
   // reaches it. Same test the Unassigned Work panel uses: no person, and no
   // attendee with one.
-  const entries = getOpsEntries();
+  const entries = past ? getEffortEntries() : getOpsEntries();
   if (o.unstaffed) {
-    (state.projects || []).filter(p => !isInactive(p) && !p.ghost).forEach(proj => (proj.tasks || []).forEach(t => {
+    (state.projects || []).filter(p => (past || !isInactive(p)) && !p.ghost).forEach(proj => (proj.tasks || []).forEach(t => {
       if (t.isDueDate || t.isReview || !t.date || t.person) return;
       if ((t.attendees || []).some(a => a.person)) return;
       if ((t.attendees || []).length) return;               // its empty slots are already entries
@@ -4626,7 +4402,9 @@ function computeProjectedEffort(daySpan, o) {
   let pi = 0;
   series.forEach(s => { if (!s.color) s.color = SERIES_PALETTE[pi++ % SERIES_PALETTE.length]; });
 
-  const bucketed = o.bucket === 'week' || (o.bucket === 'auto' && daySpan > 20);
+  // Auto: weeks once the window is past about a month (22 workdays), so the
+  // 30-day look back stays daily as it always was.
+  const bucketed = o.bucket === 'week' || (o.bucket === 'auto' && daySpan > 22);
   const buckets = [];
   days.forEach((d, i) => {
     const key = bucketed ? getWeekStart(d) : d;
@@ -4647,7 +4425,7 @@ function computeProjectedEffort(daySpan, o) {
     s.bHeads = buckets.map(b => Math.max(0, ...b.idx.map(i => s.heads[i])));
   });
 
-  return { days, buckets, series, mode, contrib, bucketed };
+  return { dir, today, days, buckets, series, mode, contrib, bucketed };
 }
 
 function effortBucketLabel(b, bucketed) {
@@ -4659,27 +4437,29 @@ function effortValueText(v, mode) {
   return mode === 'points' ? v.toFixed(1) + ' pts/day' : v.toFixed(1) + ' (' + workloadInfo(v).label + ')';
 }
 
-function renderProjectedEffort(daySpan) {
-  const o = effortOpts;
+function renderEffortPanel(dir) {
+  const past = dir === 'past';
+  const o = effortOptsBy[dir];
+  const daySpan = effortSpan[dir];
   const section = document.createElement('div');
   section.className = 'm-section';
-  const redraw = () => section.replaceWith(renderProjectedEffort(effortNextDays));
+  const redraw = () => section.replaceWith(renderEffortPanel(dir));
 
   const head = document.createElement('div');
   head.className = 'm-recap-head';
-  head.appendChild(mkSectionTitle('Projected Effort'));
+  head.appendChild(mkSectionTitle(past ? 'Team Effort' : 'Projected Effort'));
   const span = document.createElement('select');
   span.className = 'm-recap-range';
-  span.title = 'How far ahead to project. Weekdays only.';
-  EFFORT_NEXT_SPANS.forEach(s => {
+  span.title = (past ? 'How far back to look.' : 'How far ahead to project.') + ' Weekdays only.';
+  EFFORT_SPANS[dir].list.forEach(s => {
     const op = document.createElement('option');
     op.value = s.days; op.textContent = s.label;
     if (s.days === daySpan) op.selected = true;
     span.appendChild(op);
   });
   span.addEventListener('change', () => {
-    effortNextDays = Number(span.value);
-    try { localStorage.setItem('ops_effort_next_days', String(effortNextDays)); } catch (_) {}
+    effortSpan[dir] = Number(span.value);
+    try { localStorage.setItem('ops_effort_' + dir + '_days', String(effortSpan[dir])); } catch (_) {}
     redraw();
   });
   head.appendChild(span);
@@ -4696,43 +4476,51 @@ function renderProjectedEffort(daySpan) {
     sel.className = 'm-recap-range';
     EFFORT_OPT_CHOICES[key].forEach(([v, l]) => {
       const op = document.createElement('option');
-      op.value = v; op.textContent = l; op.selected = o[key] === v;
+      op.value = v;
+      op.textContent = past && key === 'divide' && v === 'booked' ? 'People who worked it' : l;
+      op.selected = o[key] === v;
       sel.appendChild(op);
     });
-    sel.addEventListener('change', () => { o[key] = sel.value; saveEffortOpts(); redraw(); });
+    sel.addEventListener('change', () => { o[key] = sel.value; saveEffortOpts(dir); redraw(); });
     wrap.appendChild(sel);
     ctrls.appendChild(wrap);
   };
   pick('Group by', 'groupBy');
   if (o.groupBy === 'role' || o.groupBy === 'phase') {
-    pick('Divide by', 'divide', 'Whose capacity the work is shared across. "Everyone" uses the Video Team person records, so people with nothing booked count as room.');
+    pick('Divide by', 'divide', past
+      ? 'Whose capacity the work is shared across. "Everyone" uses the Video Team person records, so people who had nothing on count as room that went unused.'
+      : 'Whose capacity the work is shared across. "Everyone" uses the Video Team person records, so people with nothing booked count as room.');
   }
-  pick('Show', 'bucket', 'Auto shows weeks once the window is longer than 4 weeks.');
+  pick('Show', 'bucket', 'Auto shows weeks once the window is longer than a month.');
   pick('As', 'view');
   const unst = document.createElement('label');
-  unst.title = 'Role slots on a chip that nobody is in yet';
+  unst.title = past
+    ? 'Chips with a role but nobody recorded on them — work whose staffing was never filled in'
+    : 'Role slots on a chip that nobody is in yet';
   const cb = document.createElement('input');
   cb.type = 'checkbox';
   cb.checked = o.unstaffed;
-  cb.addEventListener('change', () => { o.unstaffed = cb.checked; saveEffortOpts(); redraw(); });
+  cb.addEventListener('change', () => { o.unstaffed = cb.checked; saveEffortOpts(dir); redraw(); });
   unst.appendChild(cb);
-  unst.appendChild(document.createTextNode('Unstaffed work'));
+  unst.appendChild(document.createTextNode(past ? 'Unrecorded staffing' : 'Unstaffed work'));
   ctrls.appendChild(unst);
   section.appendChild(ctrls);
 
-  const data = computeProjectedEffort(daySpan, o);
+  const data = computeEffort(dir, daySpan, o);
   const anything = data.series.some(s => s.b.some(v => v > 0) || s.bUnst.some(v => v > 0));
   if (!anything) {
-    section.appendChild(mkEmpty('No projected effort in this window.'));
+    section.appendChild(mkEmpty(past ? 'No effort logged in this window.' : 'No projected effort in this window.'));
     return section;
   }
 
-  const sig = effortSig(daySpan);
-  if (effortDrill && (effortDrill.sig !== sig || effortDrill.b >= data.buckets.length ||
-      (effortDrill.key && !data.series.some(s => s.key === effortDrill.key)))) effortDrill = null;
+  const sig = effortSig(dir);
+  let drill = effortDrillBy[dir];
+  if (drill && (drill.sig !== sig || drill.b >= data.buckets.length ||
+      (drill.key && !data.series.some(s => s.key === drill.key)))) drill = effortDrillBy[dir] = null;
+  data.drill = drill;
   const onPick = (b, key) => {
-    const same = effortDrill && effortDrill.b === b && effortDrill.key === key;
-    effortDrill = same ? null : { sig, b, key };
+    const same = drill && drill.b === b && drill.key === key;
+    effortDrillBy[dir] = same ? null : { sig, b, key };
     redraw();
   };
 
@@ -4745,21 +4533,23 @@ function renderProjectedEffort(daySpan) {
   const unit = data.bucketed ? 'Weekly averages of each workday.' : 'One point per workday.';
   const grid = o.view === 'grid';
   const each = grid ? 'Each row' : 'Each line';
+  const pts = past ? 'points worked' : 'booked points';
   let how;
   if (data.mode === 'points') how = each + ' is the project’s total effort points per day, across everyone on it.';
-  else if (o.groupBy === 'person') how = each + ' is that person’s own load. ' + (grid ? '"off" means' : 'Gaps are') + ' days they are out.';
+  else if (o.groupBy === 'person') how = each + ' is that person’s own load. ' + (grid ? '"off" means' : 'Gaps are') + ' days they were out' + (past ? '.' : ' or will be.');
   else how = o.divide === 'everyone'
-    ? each + ' is the booked points shared across everyone on the Video Team who holds the role and is in that day.'
-    : each + ' is the booked points shared across the people already booked on it.';
+    ? each + ' is the ' + pts + ' shared across everyone on the Video Team who holds the role and ' + (past ? 'was' : 'is') + ' in that day.'
+    : each + ' is the ' + pts + ' shared across the people ' + (past ? 'who worked it.' : 'already booked on it.');
+  const label = past ? 'unrecorded staffing' : 'unstaffed work';
   const dashed = o.unstaffed
     ? (o.groupBy === 'person' ? ' Unstaffed is the work in empty role slots, in points.'
-      : grid ? ' "↳ with unstaffed" rows add the unstaffed work, as if the same people picked it up.'
-             : ' Dashed lines add the unstaffed work, as if the same people picked it up.')
+      : grid ? ' "↳ with unstaffed" rows add the ' + label + ', as if the same people ' + (past ? 'did it.' : 'picked it up.')
+             : ' Dashed lines add the ' + label + ', as if the same people ' + (past ? 'did it.' : 'picked it up.'))
     : '';
-  hint.textContent = how + dashed + ' ' + unit + ' Click a ' + (data.bucketed ? 'week' : 'day') + (o.view === 'grid' ? ' or a cell' : '') + ' to see the chips behind it.';
+  hint.textContent = how + dashed + ' ' + unit + ' Click a ' + (data.bucketed ? 'week' : 'day') + (grid ? ' or a cell' : '') + ' to see the chips behind it.';
   section.appendChild(hint);
 
-  if (effortDrill) section.appendChild(effortDrillPanel(data, o, () => { effortDrill = null; redraw(); }));
+  if (drill) section.appendChild(effortDrillPanel(data, o, () => { effortDrillBy[dir] = null; redraw(); }));
   return section;
 }
 
@@ -4810,9 +4600,16 @@ function effortLines(data, o, onPick) {
     const y = (1 - v / yMax) * H;
     line(0, y, W, y, '#2a2a3a', '1,1');
   });
-  if (effortDrill) {
-    const x = ((effortDrill.b + 0.5) / n) * W;
+  // The look back marks today, as it always has. A picked day/week gets its
+  // own colour so the two never read as the same thing.
+  const todayB = data.dir === 'past' ? buckets.findIndex(b => b.idx.some(i => data.days[i] === data.today)) : -1;
+  if (todayB >= 0) {
+    const x = ((todayB + 0.5) / n) * W;
     line(x, 0, x, H, '#6c63ff');
+  }
+  if (data.drill) {
+    const x = ((data.drill.b + 0.5) / n) * W;
+    line(x, 0, x, H, '#e0a33a', '2,2');
   }
 
   const xy = (i, v) => [((i + 0.5) / n) * W, (1 - Math.min(v, yMax) / yMax) * H];
@@ -4881,7 +4678,8 @@ function effortLines(data, o, onPick) {
     const lab = document.createElement('div');
     const day = new Date(b.start + 'T00:00:00');
     if (monthAt[i]) lab.classList.add('month');
-    if (effortDrill && effortDrill.b === i) lab.classList.add('today');
+    if (i === todayB) lab.classList.add('today');
+    if (data.drill && data.drill.b === i) lab.classList.add('sel');
     const nearMonth = n > 20 && [-2, -1, 1, 2].some(k => monthAt[i + k]);
     if (data.bucketed || monthAt[i] || (day.getDay() === 1 && !nearMonth)) {
       lab.textContent = monthAt[i] || data.bucketed ? effortBucketLabel(b, true) : String(day.getDate());
@@ -4933,7 +4731,8 @@ function effortGrid(data, o, onPick) {
     const th = document.createElement('th');
     th.textContent = effortBucketLabel(b, data.bucketed);
     th.title = (data.bucketed ? 'Week of ' : '') + fmtDateShort(b.start) + ' — click to see every chip';
-    if (effortDrill && effortDrill.b === i && !effortDrill.key) th.classList.add('sel');
+    if (data.drill && data.drill.b === i && !data.drill.key) th.classList.add('sel');
+    if (data.dir === 'past' && b.idx.some(j => data.days[j] === data.today)) th.classList.add('today');
     th.addEventListener('click', () => onPick(i, null));
     thead.appendChild(th);
   });
@@ -4951,7 +4750,7 @@ function effortGrid(data, o, onPick) {
     vals.forEach((v, i) => {
       const td = tr.insertCell();
       td.className = 'cell';
-      if (effortDrill && effortDrill.b === i && effortDrill.key === s.key) td.classList.add('sel');
+      if (data.drill && data.drill.b === i && data.drill.key === s.key) td.classList.add('sel');
       if (v == null) {
         td.classList.add('off');
         td.textContent = o.groupBy === 'person' ? 'off' : '—';
@@ -4981,7 +4780,7 @@ function effortGrid(data, o, onPick) {
 // cell). The number on the chart is only worth acting on if you can see what
 // it is made of.
 function effortDrillPanel(data, o, onClose) {
-  const d = effortDrill;
+  const d = data.drill;
   const b = data.buckets[d.b];
   const inB = new Set(b.idx);
   const s = d.key ? data.series.find(x => x.key === d.key) : null;
@@ -5034,7 +4833,7 @@ function effortDrillPanel(data, o, onClose) {
   if (!list.length) {
     const e = document.createElement('div');
     e.className = 'm-effort-hint';
-    e.textContent = 'Nothing booked here.';
+    e.textContent = data.dir === 'past' ? 'Nothing logged here.' : 'Nothing booked here.';
     box.appendChild(e);
     return box;
   }
