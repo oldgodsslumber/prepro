@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261124e';
+window.PREPRO_BUILD = '20261124f';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,25 +26,25 @@ window.PREPRO_BUILD = '20261124e';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20261124e"></script>
+<script type="module" src="./auth.js?v=20261124f"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261124e"></script>
+<script src="./whatsnew.js?v=20261124f"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20261124e"></script>
+<script src="./people.js?v=20261124f"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261124e"></script>
+<script src="./commitments.js?v=20261124f"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261124e"></script>
+<script src="./dossier.js?v=20261124f"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261124e"></script>
+<script src="./prepro-llm.js?v=20261124f"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261124e"></script>
+<script src="./prepro-ai.js?v=20261124f"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -523,7 +523,11 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 /* Person rows */
 .tl-person-row { display: flex; border-bottom: 1px solid var(--border); }
 
-.tl-row-name { flex-shrink: 0; width: 130px; position: sticky; left: 0; z-index: 10; background: var(--card); border-right: 1px solid var(--border); display: flex; align-items: center; gap: 7px; padding: 0 6px 0 10px; font-size: 11px; font-weight: 600; color: var(--text); word-break: break-word; }
+.tl-more-btn { flex-basis: 100%; align-self: flex-start; margin-left: 16px; margin-top: 2px; font-size: 9px; font-weight: 700; color: var(--accent); background: rgba(108,99,255,.12); border: 1px solid rgba(108,99,255,.4); border-radius: 10px; padding: 1px 7px; cursor: pointer; line-height: 1.5; width: fit-content; }
+.tl-more-btn:hover { background: var(--accent); color: #fff; }
+.tl-more-btn.on { color: var(--dim); background: none; border-color: var(--border); }
+.tl-more-btn.on:hover { color: var(--text); border-color: var(--accent); }
+.tl-row-name { flex-wrap: wrap; flex-shrink: 0; width: 130px; position: sticky; left: 0; z-index: 10; background: var(--card); border-right: 1px solid var(--border); display: flex; align-items: center; gap: 7px; padding: 0 6px 0 10px; font-size: 11px; font-weight: 600; color: var(--text); word-break: break-word; }
 .tl-row-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .tl-row-name-text { flex: 1; overflow: hidden; text-overflow: ellipsis; }
 .tl-reorder { display: flex; flex-direction: column; gap: 1px; margin-left: auto; flex-shrink: 0; opacity: 0; transition: opacity .15s; }
@@ -810,6 +814,9 @@ const TL_MIN_BAR_W  = 26;
 // separately now, into a thin band beneath the work lanes.
 const TL_CTX_BAR_H  = 13;
 const TL_CTX_LANE_H = TL_CTX_BAR_H + 3;
+// Work lanes shown before the rest collapse behind a "+N more" chip. One
+// person six-deep would otherwise eat the whole viewport.
+const TL_MAX_LANES  = 4;
 const TL_WEEKS_INIT = 16;
 const TL_WEEKS_EXT  = 8;
 const TL_ZOOM_STEPS = [18, 26, 36, 50, 70, 100]; // px per visible day column
@@ -817,6 +824,15 @@ const TL_ZOOM_STEPS = [18, 26, 36, 50, 70, 100]; // px per visible day column
 // ── STATE ──
 let showWeekends = false;
 let hiddenPeople = new Set();
+// People whose work lanes are expanded past TL_MAX_LANES. Persisted: choosing
+// to see somebody's full depth is a preference, not a transient.
+let expandedPeople = new Set((() => {
+  try { return JSON.parse(localStorage.getItem('ops_expanded_people')) || []; }
+  catch (_) { return []; }
+})());
+function saveExpandedPeople() {
+  try { localStorage.setItem('ops_expanded_people', JSON.stringify([...expandedPeople])); } catch (_) {}
+}
 let calEarliestDate = null;
 let calLatestDate   = null;
 let calObserver     = null;
@@ -2641,21 +2657,35 @@ function renderTimeline() {
     // the whole built range — so filtering here would stop bars being DRAWN
     // rather than merely stop them claiming height. (It did, and blanked the
     // chart mid-scroll.)
-    const workLaned = assignLanes(entries);
-    const ctxLaned  = assignLanes([...ptoEntries, ...studioEntries]);
+    // Two passes per band. The window pass is RE-PACKED over only what is on
+    // screen, which is what makes a height genuinely tight: packing globally
+    // and then counting the window's lane numbers left a long task sitting at
+    // a high lane index inflating an otherwise quiet stretch. The global pass
+    // supplies positions for everything else — still drawn, so the chart never
+    // goes blank, but horizontally off-screen, so a lane past trackH cannot be
+    // seen.
+    const onScreen = e => tlOverlapsWindow(e) && tlDrawCols(e);
+    const band = all => {
+      const win   = assignLanes(all.filter(onScreen));
+      const off   = assignLanes(all).filter(e => !onScreen(e));
+      const lanes = win.length ? Math.max(...win.map(e => e.lane)) + 1 : 0;
+      return { win, off, lanes };
+    };
+    const work = band(entries);
+    const ctx  = band([...ptoEntries, ...studioEntries]);
 
-    // Height counts only lanes that are on screen AND actually drawable — see
-    // tlDrawCols for why "drawable" is not a given.
-    const onScreen  = e => tlOverlapsWindow(e) && tlDrawCols(e);
-    const depth     = list => { const w = list.filter(onScreen);
-                                return w.length ? Math.max(...w.map(e => e.lane)) + 1 : 0; };
-    const workLanes = depth(workLaned);
-    const ctxLanes  = depth(ctxLaned);
+    // Cap the work band. Only work is capped: the context strip is thin enough
+    // that it does not threaten the viewport.
+    const overflowing = work.lanes > TL_MAX_LANES;
+    const expanded    = expandedPeople.has(person);
+    const shownWork   = (overflowing && !expanded) ? TL_MAX_LANES : work.lanes;
+    const hiddenLanes = work.lanes - shownWork;
+
     // Floored at one work lane's worth, so a row holding only a thin PTO strip
     // (or nothing in view at all) still reads as a row rather than a sliver.
     const trackH = Math.max(
       TL_PAD * 2 + TL_LANE_H,
-      TL_PAD * 2 + workLanes * TL_LANE_H + ctxLanes * TL_CTX_LANE_H
+      TL_PAD * 2 + shownWork * TL_LANE_H + ctx.lanes * TL_CTX_LANE_H
     );
 
     const row = document.createElement('div');
@@ -2689,6 +2719,25 @@ function renderTimeline() {
     reorder.appendChild(btnUp);
     reorder.appendChild(btnDn);
     nameCell.appendChild(reorder);
+
+    // Overflow affordance. Only appears when this person actually exceeds the
+    // cap in the current window, so it comes and goes with what is on screen.
+    if (overflowing) {
+      const more = document.createElement('button');
+      more.className = 'tl-more-btn' + (expanded ? ' on' : '');
+      more.textContent = expanded ? '− collapse' : '+' + hiddenLanes + ' more';
+      more.title = expanded
+        ? `Collapse ${person} back to ${TL_MAX_LANES} lanes`
+        : `${hiddenLanes} more overlapping ${hiddenLanes === 1 ? 'task is' : 'tasks are'} hidden — click to show all ${work.lanes}`;
+      more.addEventListener('click', ev => {
+        ev.stopPropagation();
+        if (expandedPeople.has(person)) expandedPeople.delete(person);
+        else expandedPeople.add(person);
+        saveExpandedPeople();
+        renderTimeline();
+      });
+      nameCell.appendChild(more);
+    }
     row.appendChild(nameCell);
 
     const track = document.createElement('div');
@@ -2706,18 +2755,25 @@ function renderTimeline() {
 
     // Hairline between the work lanes and the context strip, so the thin bars
     // read as a separate band rather than as undersized tasks.
-    const ctxTop = TL_PAD + workLanes * TL_LANE_H;
-    if (ctxLanes) {
+    const ctxTop = TL_PAD + shownWork * TL_LANE_H;
+    if (ctx.lanes) {
       const sep = document.createElement('div');
       sep.className = 'tl-ctx-sep';
       sep.style.top = (ctxTop - 2) + 'px';
       track.appendChild(sep);
     }
 
-    // One list, each entry carrying the geometry of its own band.
+    // One list, each entry carrying the geometry of its own band. In-window
+    // bars use the tight re-packed lanes; off-window bars keep their global
+    // lanes, which is why they are listed separately.
+    const workTop = e => TL_PAD + e.lane * TL_LANE_H;
+    const ctxBarTop = e => ctxTop + e.lane * TL_CTX_LANE_H;
     const drawList = [
-      ...workLaned.map(e => ({ entry: e, top: TL_PAD + e.lane * TL_LANE_H, barH: TL_BAR_H })),
-      ...ctxLaned.map(e  => ({ entry: e, top: ctxTop + e.lane * TL_CTX_LANE_H, barH: TL_CTX_BAR_H })),
+      // Capped: lanes at or past shownWork are the ones behind "+N more".
+      ...work.win.filter(e => e.lane < shownWork).map(e => ({ entry: e, top: workTop(e), barH: TL_BAR_H })),
+      ...work.off.map(e => ({ entry: e, top: workTop(e), barH: TL_BAR_H })),
+      ...ctx.win.map(e => ({ entry: e, top: ctxBarTop(e), barH: TL_CTX_BAR_H })),
+      ...ctx.off.map(e => ({ entry: e, top: ctxBarTop(e), barH: TL_CTX_BAR_H })),
     ];
 
     drawList.forEach(({ entry, top, barH }) => {
