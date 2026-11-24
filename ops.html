@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261124b';
+window.PREPRO_BUILD = '20261124c';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,25 +26,25 @@ window.PREPRO_BUILD = '20261124b';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20261124b"></script>
+<script type="module" src="./auth.js?v=20261124c"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261124b"></script>
+<script src="./whatsnew.js?v=20261124c"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20261124b"></script>
+<script src="./people.js?v=20261124c"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261124b"></script>
+<script src="./commitments.js?v=20261124c"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261124b"></script>
+<script src="./dossier.js?v=20261124c"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261124b"></script>
+<script src="./prepro-llm.js?v=20261124c"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261124b"></script>
+<script src="./prepro-ai.js?v=20261124c"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -2111,6 +2111,103 @@ function buildTlDates() {
   tlDateMap = new Map(tlDates.map((ds, i) => [ds, i]));
 }
 
+/* ── VISIBLE-WINDOW ROW SIZING ───────────────────────────────────────────────
+ * A person's row is as tall as their work is deep — but "deep" has to mean
+ * "deep right here". Lanes used to be packed from every entry at every date,
+ * so a week of six overlapping tasks last March pinned that row six lanes tall
+ * forever, including across stretches where the person had one task. The row
+ * scaled, just to the wrong number, and so it never shrank.
+ *
+ * These hold the date range actually on screen, padded by a week either side so
+ * a nudge of the scrollbar doesn't relayout. Entries are clipped to it before
+ * lanes are assigned. Bars outside the window were already skipped at draw
+ * time, so nothing stops being drawn — they just stop claiming height. */
+const TL_WIN_BUFFER_COLS = 5;   // a week of slack on each edge
+let tlWinStart = '';
+let tlWinEnd   = '';
+
+/* Derive the on-screen date range from the scroll position. Column i sits at
+ * content x = TL_NAME_W + i*tlColW, and the leftmost TL_NAME_W px of the
+ * viewport is covered by the sticky name column — hence the offsets.
+ * Returns true when the window moved, which is the cue to relayout. */
+function computeTlWindow() {
+  const sc = document.getElementById('tlScroll');
+  if (!sc || !tlDates.length) {
+    const changed = (tlWinStart !== tlStart || tlWinEnd !== tlEnd);
+    tlWinStart = tlStart; tlWinEnd = tlEnd;
+    return changed;
+  }
+  const firstVis = Math.floor(sc.scrollLeft / tlColW);
+  const lastVis  = Math.ceil((sc.scrollLeft + sc.clientWidth - TL_NAME_W) / tlColW) - 1;
+  const a = Math.max(0, firstVis - TL_WIN_BUFFER_COLS);
+  const b = Math.min(tlDates.length - 1, Math.max(a, lastVis + TL_WIN_BUFFER_COLS));
+  const ns = tlDates[a], ne = tlDates[b];
+  const changed = (ns !== tlWinStart || ne !== tlWinEnd);
+  tlWinStart = ns; tlWinEnd = ne;
+  return changed;
+}
+
+// Does this entry touch the on-screen window at all? Inclusive at both edges,
+// so a bar spanning the whole viewport (neither end inside it) still counts.
+function tlOverlapsWindow(e) {
+  if (!tlWinStart || !tlWinEnd) return true;
+  return (e.endDate || e.date) >= tlWinStart && e.date <= tlWinEnd;
+}
+
+/* Re-sizes rows after the window moves. Keeps both scroll axes stable: left is
+ * restored outright, and top is anchored to whichever row was at the top of the
+ * viewport, so rows resizing mid-scroll don't shove content under the cursor. */
+let tlWinRelayoutTimer = null;
+function relayoutTlForWindow() {
+  const sc = document.getElementById('tlScroll');
+  if (!sc) return;
+  // Never yank the ground out from under an in-progress drag or resize.
+  if (document.querySelector('.tl-task-bar.dragging')) return;
+
+  const scTop = sc.getBoundingClientRect().top;
+  let anchorName = null, anchorDelta = 0;
+  for (const r of document.querySelectorAll('#tlRows .tl-person-row')) {
+    const rb = r.getBoundingClientRect();
+    if (rb.bottom > scTop) {
+      const nm = r.querySelector('.tl-row-name-text');
+      anchorName  = nm ? nm.textContent : null;
+      anchorDelta = rb.top - scTop;
+      break;
+    }
+  }
+
+  const keepLeft = sc.scrollLeft;
+  renderTimeline();
+  sc.scrollLeft = keepLeft;
+
+  if (anchorName) {
+    for (const r of document.querySelectorAll('#tlRows .tl-person-row')) {
+      const nm = r.querySelector('.tl-row-name-text');
+      if (nm && nm.textContent === anchorName) {
+        sc.scrollTop += (r.getBoundingClientRect().top - sc.getBoundingClientRect().top) - anchorDelta;
+        break;
+      }
+    }
+  }
+}
+
+// Debounced: only relayout once the scroll settles, and only if the window
+// genuinely moved. Setting scrollLeft above re-fires scroll, but that pass
+// finds the window unchanged and stops — no loop.
+function onTlScrollWindow() {
+  clearTimeout(tlWinRelayoutTimer);
+  tlWinRelayoutTimer = setTimeout(() => {
+    if (computeTlWindow()) relayoutTlForWindow();
+  }, 120);
+}
+
+// Resizing the window changes clientWidth, so it changes how many days are on
+// screen — and therefore how tall the rows should be. Same debounced path.
+window.addEventListener('resize', () => {
+  if (viewMode !== 'person') return;
+  onTlScrollWindow();
+});
+
 // Find the nearest visible column index for a date (snaps toward center if hidden)
 function nearestCol(dateStr, snapForward) {
   if (tlDateMap.has(dateStr)) return tlDateMap.get(dateStr);
@@ -2328,6 +2425,10 @@ function startTlResize(e, entry, bar, side) {
 // ── TIMELINE RENDER ──
 function renderTimeline() {
   buildTlDates();
+  // Row heights follow this window, so it has to be fresh before the person
+  // rows are built. Zoom and the weekend toggle both land here too, which is
+  // why this sits in render rather than only in the scroll handler.
+  computeTlWindow();
   updateZoomButtons();
 
   const today   = todayStr();
@@ -2457,8 +2558,15 @@ function renderTimeline() {
     if (filtering ? (!entries.length && !studioEntries.length)
                   : (!entries.length && !ptoEntries.length && !studioEntries.length)) return;
 
-    const laned    = assignLanes([...entries, ...ptoEntries, ...studioEntries]);
-    const numLanes = Math.max(...laned.map(e => e.lane)) + 1;
+    // Only what's on screen gets to claim a lane — see tlOverlapsWindow. The
+    // row above decides *whether* somebody appears (on all their work, so the
+    // team list stays put while you scroll); this decides how tall they are.
+    const laned = assignLanes(
+      [...entries, ...ptoEntries, ...studioEntries].filter(tlOverlapsWindow)
+    );
+    // Math.max of nothing is -Infinity: a person with work, none of it in view,
+    // still holds a one-lane row rather than collapsing to zero height.
+    const numLanes = laned.length ? Math.max(...laned.map(e => e.lane)) + 1 : 1;
     const trackH   = TL_PAD * 2 + numLanes * TL_LANE_H;
 
     const row = document.createElement('div');
@@ -2647,6 +2755,12 @@ function extendTimeline(direction) {
 function setupTlObserver() {
   if (tlObserver) { tlObserver.disconnect(); tlObserver = null; }
   const sc = document.getElementById('tlScroll');
+  // Row heights track the visible window, so the window has to be watched.
+  // Bound once — setupTlObserver runs again on zoom/weekend changes.
+  if (sc && !sc.dataset.winBound) {
+    sc.addEventListener('scroll', onTlScrollWindow, { passive: true });
+    sc.dataset.winBound = '1';
+  }
   tlObserver = new IntersectionObserver(entries => {
     entries.forEach(e => {
       if (!e.isIntersecting) return;
