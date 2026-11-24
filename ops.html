@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261124c';
+window.PREPRO_BUILD = '20261124d';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,25 +26,25 @@ window.PREPRO_BUILD = '20261124c';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20261124c"></script>
+<script type="module" src="./auth.js?v=20261124d"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261124c"></script>
+<script src="./whatsnew.js?v=20261124d"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20261124c"></script>
+<script src="./people.js?v=20261124d"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261124c"></script>
+<script src="./commitments.js?v=20261124d"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261124c"></script>
+<script src="./dossier.js?v=20261124d"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261124c"></script>
+<script src="./prepro-llm.js?v=20261124d"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261124c"></script>
+<script src="./prepro-ai.js?v=20261124d"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -2122,7 +2122,9 @@ function buildTlDates() {
  * a nudge of the scrollbar doesn't relayout. Entries are clipped to it before
  * lanes are assigned. Bars outside the window were already skipped at draw
  * time, so nothing stops being drawn — they just stop claiming height. */
-const TL_WIN_BUFFER_COLS = 5;   // a week of slack on each edge
+// Slack in COLUMNS, not days: 5 columns is a working week with weekends
+// hidden (7 real days) and 5 real days with them shown.
+const TL_WIN_BUFFER_COLS = 5;
 let tlWinStart = '';
 let tlWinEnd   = '';
 
@@ -2139,8 +2141,14 @@ function computeTlWindow() {
   }
   const firstVis = Math.floor(sc.scrollLeft / tlColW);
   const lastVis  = Math.ceil((sc.scrollLeft + sc.clientWidth - TL_NAME_W) / tlColW) - 1;
-  const a = Math.max(0, firstVis - TL_WIN_BUFFER_COLS);
-  const b = Math.min(tlDates.length - 1, Math.max(a, lastVis + TL_WIN_BUFFER_COLS));
+  // firstVis must be clamped at the TOP as well as the bottom. Zooming out
+  // divides a stale (larger) scrollLeft by the new (smaller) tlColW, which can
+  // put firstVis past the end of tlDates; a then exceeded b and tlDates[a] was
+  // undefined, which made tlOverlapsWindow fall through to "match everything"
+  // and flashed every row at its full historical height.
+  const last = tlDates.length - 1;
+  const a = Math.max(0, Math.min(last, firstVis - TL_WIN_BUFFER_COLS));
+  const b = Math.max(a, Math.min(last, lastVis + TL_WIN_BUFFER_COLS));
   const ns = tlDates[a], ne = tlDates[b];
   const changed = (ns !== tlWinStart || ne !== tlWinEnd);
   tlWinStart = ns; tlWinEnd = ne;
@@ -2154,15 +2162,37 @@ function tlOverlapsWindow(e) {
   return (e.endDate || e.date) >= tlWinStart && e.date <= tlWinEnd;
 }
 
+/* The columns an entry actually occupies, or null if it cannot be drawn at all.
+ * Both the height count and the draw loop go through this, so an entry can
+ * never claim a lane it is then skipped from. It could: with weekends hidden,
+ * an entry falling entirely on a Sat/Sun (a Saturday delivery or milestone)
+ * snaps start forward and end backward, they cross over, and the bar is
+ * dropped — after it had already taken 30px of row height for an empty lane. */
+function tlDrawCols(entry) {
+  const entryEnd = entry.endDate || entry.date;
+  const visStart = entry.date < tlStart ? tlStart : entry.date;
+  const visEnd   = entryEnd   > tlEnd   ? tlEnd   : entryEnd;
+  if (visEnd < visStart) return null;
+  const startCol = nearestCol(visStart, true);
+  const endCol   = nearestCol(visEnd,   false);
+  if (startCol === null || endCol === null || endCol < startCol) return null;
+  return { startCol, endCol };
+}
+
 /* Re-sizes rows after the window moves. Keeps both scroll axes stable: left is
  * restored outright, and top is anchored to whichever row was at the top of the
  * viewport, so rows resizing mid-scroll don't shove content under the cursor. */
 let tlWinRelayoutTimer = null;
+let tlWinLastRelayout  = 0;
+// Set for the whole of a bar drag OR resize. The `.tl-task-bar.dragging` class
+// only covers drags, and only after the 4px threshold, so it is not a usable
+// guard on its own — a relayout mid-resize destroys the bar you are holding
+// while the gesture goes on writing to the detached node and still commits.
+let tlGestureActive = false;
+
 function relayoutTlForWindow() {
   const sc = document.getElementById('tlScroll');
   if (!sc) return;
-  // Never yank the ground out from under an in-progress drag or resize.
-  if (document.querySelector('.tl-task-bar.dragging')) return;
 
   const scTop = sc.getBoundingClientRect().top;
   let anchorName = null, anchorDelta = 0;
@@ -2194,11 +2224,34 @@ function relayoutTlForWindow() {
 // Debounced: only relayout once the scroll settles, and only if the window
 // genuinely moved. Setting scrollLeft above re-fires scroll, but that pass
 // finds the window unchanged and stops — no loop.
+// One guarded attempt to bring row heights in line with the window.
+function tlWindowTick() {
+  const sc = document.getElementById('tlScroll');
+  // A pending timer can outlive the view: a switch to Metrics/Studio inside the
+  // debounce window would otherwise run a full render of a display:none Gantt,
+  // where clientWidth is 0 and the derived window is garbage.
+  if (viewMode !== 'person' || !sc || !sc.clientWidth) return;
+  if (tlGestureActive || document.querySelector('.tl-task-bar.dragging')) return;
+  if (!computeTlWindow()) return;
+  tlWinLastRelayout = Date.now();
+  relayoutTlForWindow();
+}
+
 function onTlScrollWindow() {
+  // Trailing pass, so the final resting position is always exact.
   clearTimeout(tlWinRelayoutTimer);
-  tlWinRelayoutTimer = setTimeout(() => {
-    if (computeTlWindow()) relayoutTlForWindow();
-  }, 120);
+  tlWinRelayoutTimer = setTimeout(tlWindowTick, 120);
+  // Periodic pass. A continuous gesture clears the trailing timer on every
+  // scroll event, so on its own the trailing timer never fires until the user
+  // stops — and the window would lag the viewport for the whole flick.
+  if (Date.now() - tlWinLastRelayout >= 150) tlWindowTick();
+}
+
+// After a caller moves scrollLeft itself, the window the frame was rendered
+// with is stale. Re-derive and re-render in the same task, so the user never
+// sees a frame sized for the wrong dates (the debounced path takes 120ms).
+function syncTlWindowNow() {
+  if (computeTlWindow()) renderTimeline();
 }
 
 // Resizing the window changes clientWidth, so it changes how many days are on
@@ -2255,6 +2308,7 @@ function getPersonRowAtY(y) {
 
 function startTlDrag(e, entry, bar, personRow) {
   if (e.button !== 0) return;
+  tlGestureActive = true;   // blocks window relayout for the whole gesture
   e.preventDefault();
   const sc = document.getElementById('tlScroll');
   const startX = e.clientX;
@@ -2346,11 +2400,16 @@ function startTlDrag(e, entry, bar, personRow) {
 
   document.addEventListener('mousemove', onMove);
   document.addEventListener('mouseup', onUp);
+  // Cleared regardless of how the gesture ends, including mouseup outside the
+  // window, so a stuck flag can never freeze row sizing for the session.
+  document.addEventListener('mouseup', () => { tlGestureActive = false; }, { once: true });
 }
 
 // ── TIMELINE RESIZE ──
 function startTlResize(e, entry, bar, side) {
   if (e.button !== 0) return;
+  tlGestureActive = true;   // resize never set .dragging, so relayout could
+                            // destroy the bar mid-gesture and still commit
   e.preventDefault();
   e.stopPropagation();
   const sc = document.getElementById('tlScroll');
@@ -2420,6 +2479,9 @@ function startTlResize(e, entry, bar, side) {
 
   document.addEventListener('mousemove', onMove);
   document.addEventListener('mouseup', onUp);
+  // Cleared regardless of how the gesture ends, including mouseup outside the
+  // window, so a stuck flag can never freeze row sizing for the session.
+  document.addEventListener('mouseup', () => { tlGestureActive = false; }, { once: true });
 }
 
 // ── TIMELINE RENDER ──
@@ -2558,15 +2620,20 @@ function renderTimeline() {
     if (filtering ? (!entries.length && !studioEntries.length)
                   : (!entries.length && !ptoEntries.length && !studioEntries.length)) return;
 
-    // Only what's on screen gets to claim a lane — see tlOverlapsWindow. The
-    // row above decides *whether* somebody appears (on all their work, so the
-    // team list stays put while you scroll); this decides how tall they are.
-    const laned = assignLanes(
-      [...entries, ...ptoEntries, ...studioEntries].filter(tlOverlapsWindow)
-    );
-    // Math.max of nothing is -Infinity: a person with work, none of it in view,
-    // still holds a one-lane row rather than collapsing to zero height.
-    const numLanes = laned.length ? Math.max(...laned.map(e => e.lane)) + 1 : 1;
+    // Lanes are packed over ALL of this person's work, never the window.
+    // `laned` is also the draw list below, and the draw clip there is against
+    // tlStart/tlEnd — the whole built range, not the window — so filtering
+    // here would stop bars being DRAWN, not merely stop them claiming height.
+    // (It did exactly that, and blanked the chart mid-scroll.)
+    const laned = assignLanes([...entries, ...ptoEntries, ...studioEntries]);
+
+    // Height, though, counts only the lanes actually in use on screen.
+    // Math.max of nothing is -Infinity, so a person whose work is all
+    // off-screen keeps a one-lane row rather than collapsing to zero height.
+    // Only lanes that are both on screen AND actually drawable count — see
+    // tlDrawCols for why "drawable" is not a given.
+    const winLanes = laned.filter(e => tlOverlapsWindow(e) && tlDrawCols(e));
+    const numLanes = winLanes.length ? Math.max(...winLanes.map(e => e.lane)) + 1 : 1;
     const trackH   = TL_PAD * 2 + numLanes * TL_LANE_H;
 
     const row = document.createElement('div');
@@ -2616,14 +2683,10 @@ function renderTimeline() {
     }
 
     laned.forEach(entry => {
-      const entryEnd = entry.endDate || entry.date;
-      const visStart = entry.date < tlStart ? tlStart : entry.date;
-      const visEnd   = entryEnd   > tlEnd   ? tlEnd   : entryEnd;
-      if (visEnd < visStart) return;
-
-      const startCol = nearestCol(visStart, true);
-      const endCol   = nearestCol(visEnd,   false);
-      if (startCol === null || endCol === null || endCol < startCol) return;
+      // Same helper the height count uses, so the two can never disagree.
+      const cols = tlDrawCols(entry);
+      if (!cols) return;
+      const { startCol, endCol } = cols;
 
       const left  = startCol * tlColW + 2;
       const width = Math.max(TL_BAR_H, (endCol - startCol + 1) * tlColW - 4);
@@ -2732,6 +2795,7 @@ function scrollTlToToday() {
   buildTlDates();
   const col = tlDateMap.get(todayStr()) ?? 0;
   sc.scrollLeft = Math.max(0, TL_NAME_W + col * tlColW - Math.round((sc.clientWidth - TL_NAME_W) / 2));
+  syncTlWindowNow();   // rows were sized for scrollLeft 0 before this jump
 }
 
 function extendTimeline(direction) {
@@ -2749,14 +2813,22 @@ function extendTimeline(direction) {
     tlStart = fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
   }
   renderTimeline();
-  if (direction === 'left') sc.scrollLeft = prevSL + (sc.scrollWidth - prevSW);
+  if (direction === 'left') {
+    // renderTimeline above already derived the window from the OLD scrollLeft,
+    // while every column index just shifted by 8 weeks. Resync now rather than
+    // leaving it to the 120ms debounce.
+    sc.scrollLeft = prevSL + (sc.scrollWidth - prevSW);
+    syncTlWindowNow();
+  }
 }
 
 function setupTlObserver() {
   if (tlObserver) { tlObserver.disconnect(); tlObserver = null; }
   const sc = document.getElementById('tlScroll');
   // Row heights track the visible window, so the window has to be watched.
-  // Bound once — setupTlObserver runs again on zoom/weekend changes.
+  // Bound once: setupTlObserver runs again on every entry to the Gantt view.
+  // #tlScroll is static markup that is never replaced and whose innerHTML is
+  // never overwritten, so the dataset flag survives every rebuild.
   if (sc && !sc.dataset.winBound) {
     sc.addEventListener('scroll', onTlScrollWindow, { passive: true });
     sc.dataset.winBound = '1';
@@ -6258,6 +6330,7 @@ function init() {
     // Restore scroll so the same date stays centred
     const newCol = tlDateMap.get(centreDate) ?? tlDateMap.get(todayStr()) ?? 0;
     sc.scrollLeft = Math.max(0, TL_NAME_W + newCol * tlColW - Math.round((sc.clientWidth - TL_NAME_W) / 2));
+    syncTlWindowNow();   // window was derived from the pre-move scrollLeft
   });
 
   // Zoom in / out
@@ -6270,6 +6343,7 @@ function init() {
       tlColW = TL_ZOOM_STEPS[idx + 1];
       renderTimeline();
       sc.scrollLeft = Math.max(0, TL_NAME_W + centreCol * tlColW - Math.round((sc.clientWidth - TL_NAME_W) / 2));
+      syncTlWindowNow();   // tlColW changed under the old scrollLeft
     }
   });
 
@@ -6281,6 +6355,7 @@ function init() {
       tlColW = TL_ZOOM_STEPS[idx - 1];
       renderTimeline();
       sc.scrollLeft = Math.max(0, TL_NAME_W + centreCol * tlColW - Math.round((sc.clientWidth - TL_NAME_W) / 2));
+      syncTlWindowNow();   // tlColW changed under the old scrollLeft
     }
   });
 
