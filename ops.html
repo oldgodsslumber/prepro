@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261124f';
+window.PREPRO_BUILD = '20261124g';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,25 +26,25 @@ window.PREPRO_BUILD = '20261124f';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20261124f"></script>
+<script type="module" src="./auth.js?v=20261124g"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261124f"></script>
+<script src="./whatsnew.js?v=20261124g"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20261124f"></script>
+<script src="./people.js?v=20261124g"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261124f"></script>
+<script src="./commitments.js?v=20261124g"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261124f"></script>
+<script src="./dossier.js?v=20261124g"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261124f"></script>
+<script src="./prepro-llm.js?v=20261124g"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261124f"></script>
+<script src="./prepro-ai.js?v=20261124g"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -527,9 +527,9 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .tl-more-btn:hover { background: var(--accent); color: #fff; }
 .tl-more-btn.on { color: var(--dim); background: none; border-color: var(--border); }
 .tl-more-btn.on:hover { color: var(--text); border-color: var(--accent); }
-.tl-row-name { flex-wrap: wrap; flex-shrink: 0; width: 130px; position: sticky; left: 0; z-index: 10; background: var(--card); border-right: 1px solid var(--border); display: flex; align-items: center; gap: 7px; padding: 0 6px 0 10px; font-size: 11px; font-weight: 600; color: var(--text); word-break: break-word; }
+.tl-row-name { flex-wrap: wrap; align-content: center; overflow: hidden; flex-shrink: 0; width: 130px; position: sticky; left: 0; z-index: 10; background: var(--card); border-right: 1px solid var(--border); display: flex; align-items: center; gap: 7px; padding: 0 6px 0 10px; font-size: 11px; font-weight: 600; color: var(--text); word-break: break-word; }
 .tl-row-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-.tl-row-name-text { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.tl-row-name-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tl-reorder { display: flex; flex-direction: column; gap: 1px; margin-left: auto; flex-shrink: 0; opacity: 0; transition: opacity .15s; }
 .tl-row-name:hover .tl-reorder { opacity: 1; }
 .tl-reorder-btn { width: 16px; height: 12px; display: flex; align-items: center; justify-content: center; font-size: 8px; color: var(--dim); background: var(--panel); border: 1px solid var(--border); border-radius: 2px; cursor: pointer; padding: 0; line-height: 1; }
@@ -542,6 +542,16 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
    and phase are set once on #tlInner as --tl-band-w / --tl-band-off and inherit
    down to every track, so all rows stay in step. */
 .tl-track {
+  /* Hard containment. Off-window bars are positioned from GLOBAL lane numbers
+     while the row is sized from the window-repacked count, so a stale window
+     (fast scroll, or a drag — which blocks relayout outright) could paint them
+     past the row. Unclipped they landed in the NEXT person's row, where they
+     were still draggable, and startTlDrag reassigns by cursor Y — so nudging a
+     bar that looked like Bob's rewrote Ada's task to Bob. Clipping also kills
+     hit-testing outside the row, which is half the fix.
+     Cost: .tl-resize-handle overhangs by 3px and is clipped at the very first
+     and last column of the range. */
+  overflow: hidden;
   flex: 1; position: relative;
   background-color: var(--card);
   /* Two tiles, both phased off --tl-band-off: a 1px week divider (repeats every
@@ -558,6 +568,18 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .tl-task-bar { position: absolute; border-radius: 3px; color: #fff; display: flex; align-items: center; overflow: visible; cursor: grab; user-select: none; }
 .tl-task-bar:active { cursor: grabbing; }
 .tl-task-bar.dragging { opacity: .6; z-index: 50 !important; }
+/* ── Per-person collapse ── */
+.tl-chev { background: none; border: none; color: var(--dim); font-size: 9px; line-height: 1; cursor: pointer; padding: 6px 2px; margin: -6px 0; width: 15px; flex-shrink: 0; }
+.tl-chev:hover { color: var(--accent); }
+/* Squashed row: every bar piled on one lane, so overlap reads as denser colour */
+.tl-task-bar.tl-squash { opacity: .55; border-radius: 2px; cursor: default; }
+.tl-task-bar.tl-squash .tl-bar-name { font-size: 9px; }
+
+/* ── Compact density ── */
+:root.tl-compact .tl-bar-name { font-size: 9px; }
+:root.tl-compact .tl-task-bar.tl-ctx .tl-bar-name { font-size: 7px; }
+:root.tl-compact .tl-row-name { font-size: 10px; }
+
 /* ── Read-only context strip (PTO + studio), packed below the work lanes ── */
 .tl-ctx-sep { position: absolute; left: 0; right: 0; height: 1px; background: var(--border); opacity: .85; pointer-events: none; z-index: 1; }
 .tl-task-bar.tl-ctx { border-radius: 2px; opacity: .92; }
@@ -661,6 +683,10 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
   <div class="toggle-group" id="chipDisplayToggle" title="Chip label: category abbreviation or task name">
     <button class="toggle-btn active" data-disp="categories">Categories</button>
     <button class="toggle-btn" data-disp="tasks">Tasks</button>
+  </div>
+  <div class="toggle-group" id="densityToggle" title="Row density">
+    <button class="toggle-btn" data-density="compact">Compact</button>
+    <button class="toggle-btn active" data-density="normal">Normal</button>
   </div>
   <div class="ops-zoom">
     <button class="ops-zoom-btn" id="zoomOutBtn" title="Zoom out">−</button>
@@ -802,8 +828,11 @@ function typeAbbr(label) { return TYPE_ABBR[label] || String(label || '').slice(
 
 // ── TIMELINE CONSTANTS ──
 const TL_NAME_W     = 130;
-const TL_BAR_H      = 26;
-const TL_LANE_H     = TL_BAR_H + 4;
+// Bar/lane heights are DENSITY-DRIVEN, so these are mutable — applyTlDensity()
+// sets them before every render. Only heights scale; TL_MIN_BAR_W below stays
+// fixed so compact mode cannot shrink how short a bar is allowed to be.
+let TL_BAR_H        = 26;
+let TL_LANE_H       = 30;
 const TL_PAD        = 6;
 // Minimum bar WIDTH. TL_BAR_H used to do double duty here, which quietly tied
 // how short a bar can be to how tall it is — wrong once bar heights vary.
@@ -812,8 +841,33 @@ const TL_MIN_BAR_W  = 26;
 // task (both are undraggable here), and letting them compete for work lanes
 // spent full 30px lanes on things that aren't someone's workload. They pack
 // separately now, into a thin band beneath the work lanes.
-const TL_CTX_BAR_H  = 13;
-const TL_CTX_LANE_H = TL_CTX_BAR_H + 3;
+let TL_CTX_BAR_H    = 13;
+let TL_CTX_LANE_H   = 16;
+
+const TL_DENSITY = {
+  normal:  { bar: 26, lane: 30, ctxBar: 13, ctxLane: 16 },
+  compact: { bar: 17, lane: 20, ctxBar:  9, ctxLane: 11 },
+};
+let tlDensity = (() => {
+  try { const v = localStorage.getItem('ops_density');
+        return Object.prototype.hasOwnProperty.call(TL_DENSITY, v) ? v : 'normal'; }
+  catch (_) { return 'normal'; }
+})();
+function applyTlDensity() {
+  const d = TL_DENSITY[tlDensity] || TL_DENSITY.normal;
+  TL_BAR_H = d.bar; TL_LANE_H = d.lane;
+  TL_CTX_BAR_H = d.ctxBar; TL_CTX_LANE_H = d.ctxLane;
+  document.documentElement.classList.toggle('tl-compact', tlDensity === 'compact');
+}
+function syncDensityBtns() {
+  const el = document.getElementById('densityToggle');
+  if (!el) return;
+  el.querySelectorAll('.toggle-btn')
+    .forEach(b => b.classList.toggle('active', b.dataset.density === tlDensity));
+}
+function saveTlDensity() {
+  try { localStorage.setItem('ops_density', tlDensity); } catch (_) {}
+}
 // Work lanes shown before the rest collapse behind a "+N more" chip. One
 // person six-deep would otherwise eat the whole viewport.
 const TL_MAX_LANES  = 4;
@@ -827,9 +881,25 @@ let hiddenPeople = new Set();
 // People whose work lanes are expanded past TL_MAX_LANES. Persisted: choosing
 // to see somebody's full depth is a preference, not a transient.
 let expandedPeople = new Set((() => {
-  try { return JSON.parse(localStorage.getItem('ops_expanded_people')) || []; }
+  // Array.isArray, not just a truthiness check: valid-but-wrong JSON such as
+  // {} parses fine and then throws "not iterable" inside new Set(), at top
+  // level of the script, which would blank the whole page.
+  try { const v = JSON.parse(localStorage.getItem('ops_expanded_people'));
+        return Array.isArray(v) ? v : []; }
   catch (_) { return []; }
 })());
+// People squashed to a single summary lane. Persisted alongside expansion.
+let collapsedPeople = new Set((() => {
+  // Array.isArray, not just a truthiness check: valid-but-wrong JSON such as
+  // {} parses fine and then throws "not iterable" inside new Set(), at top
+  // level of the script, which would blank the whole page.
+  try { const v = JSON.parse(localStorage.getItem('ops_collapsed_people'));
+        return Array.isArray(v) ? v : []; }
+  catch (_) { return []; }
+})());
+function saveCollapsedPeople() {
+  try { localStorage.setItem('ops_collapsed_people', JSON.stringify([...collapsedPeople])); } catch (_) {}
+}
 function saveExpandedPeople() {
   try { localStorage.setItem('ops_expanded_people', JSON.stringify([...expandedPeople])); } catch (_) {}
 }
@@ -837,7 +907,13 @@ let calEarliestDate = null;
 let calLatestDate   = null;
 let calObserver     = null;
 let chipDisplay = 'categories'; // 'categories' | 'tasks'
-let personOrder = JSON.parse(localStorage.getItem('ops_person_order') || '[]'); // persisted row order
+// Guarded like the other persisted reads: a SyntaxError here throws at top
+// level of the single <script> and blanks the whole page with no way back.
+let personOrder = (() => {
+  try { const v = JSON.parse(localStorage.getItem('ops_person_order') || '[]');
+        return Array.isArray(v) ? v : []; }
+  catch (_) { return []; }
+})(); // persisted row order
 /* ── GANTT LENS FILTER ──────────────────────────────────────────────────────
  * The set of "lenses" the Gantt is currently narrowed to. Empty means show
  * everything — an explicit "all" member would have to be kept in sync with
@@ -2361,7 +2437,7 @@ function startTlDrag(e, entry, bar, personRow) {
     const newStartCol = origStartCol + colShift;
     const newEndCol   = (origEndCol !== null ? origEndCol : origStartCol) + colShift;
     const left  = newStartCol * tlColW + 2;
-    const width = Math.max(TL_BAR_H, (newEndCol - newStartCol + 1) * tlColW - 4);
+    const width = Math.max(TL_MIN_BAR_W, (newEndCol - newStartCol + 1) * tlColW - 4);
     bar.style.left  = left + 'px';
     bar.style.width = width + 'px';
 
@@ -2451,11 +2527,11 @@ function startTlResize(e, entry, bar, side) {
   function onMove(ev) {
     const dx = ev.clientX - startX + (sc.scrollLeft - startScrollLeft);
     if (side === 'right') {
-      bar.style.width = Math.max(TL_BAR_H, origWidth + dx) + 'px';
+      bar.style.width = Math.max(TL_MIN_BAR_W, origWidth + dx) + 'px';
     } else {
       const newLeft  = origLeft + dx;
       const newWidth = origWidth - dx;
-      if (newWidth >= TL_BAR_H) {
+      if (newWidth >= TL_MIN_BAR_W) {
         bar.style.left  = newLeft + 'px';
         bar.style.width = newWidth + 'px';
       }
@@ -2516,6 +2592,7 @@ function startTlResize(e, entry, bar, side) {
 
 // ── TIMELINE RENDER ──
 function renderTimeline() {
+  applyTlDensity();
   buildTlDates();
   // Row heights follow this window, so it has to be fresh before the person
   // rows are built. Zoom and the weekend toggle both land here too, which is
@@ -2674,18 +2751,27 @@ function renderTimeline() {
     const work = band(entries);
     const ctx  = band([...ptoEntries, ...studioEntries]);
 
+    // Collapse wins over everything: a parked person is one summary lane with
+    // every bar piled on it, so the cap and the context strip are moot.
+    const collapsed   = collapsedPeople.has(person);
     // Cap the work band. Only work is capped: the context strip is thin enough
     // that it does not threaten the viewport.
-    const overflowing = work.lanes > TL_MAX_LANES;
+    const overflowing = !collapsed && work.lanes > TL_MAX_LANES;
     const expanded    = expandedPeople.has(person);
-    const shownWork   = (overflowing && !expanded) ? TL_MAX_LANES : work.lanes;
-    const hiddenLanes = work.lanes - shownWork;
+    const shownWork   = collapsed ? 1
+                      : (overflowing && !expanded) ? TL_MAX_LANES
+                      : work.lanes;
+    const hiddenLanes = collapsed ? 0 : work.lanes - shownWork;
+    // Lanes hold multiple sequential tasks, so a lane count understates what is
+    // actually out of sight. Count the bars.
+    const hiddenTasks = collapsed ? 0 : work.win.filter(e => e.lane >= shownWork).length;
+    const shownCtx    = collapsed ? 0 : ctx.lanes;
 
     // Floored at one work lane's worth, so a row holding only a thin PTO strip
     // (or nothing in view at all) still reads as a row rather than a sliver.
     const trackH = Math.max(
       TL_PAD * 2 + TL_LANE_H,
-      TL_PAD * 2 + shownWork * TL_LANE_H + ctx.lanes * TL_CTX_LANE_H
+      TL_PAD * 2 + shownWork * TL_LANE_H + shownCtx * TL_CTX_LANE_H
     );
 
     const row = document.createElement('div');
@@ -2694,6 +2780,29 @@ function renderTimeline() {
     const nameCell = document.createElement('div');
     nameCell.className = 'tl-row-name';
     nameCell.style.height = trackH + 'px';
+
+    const chev = document.createElement('button');
+    chev.className = 'tl-chev';
+    chev.textContent = collapsed ? '▸' : '▾';
+    chev.title = collapsed ? `Expand ${person}`
+                           : `Collapse ${person} to a single summary lane`;
+    // Glyph-only button: give assistive tech a real name and a state.
+    chev.setAttribute('aria-label', chev.title);
+    chev.setAttribute('aria-expanded', String(!collapsed));
+    chev.addEventListener('click', ev => {
+      ev.stopPropagation();
+      if (collapsedPeople.has(person)) collapsedPeople.delete(person);
+      else {
+        collapsedPeople.add(person);
+        // One state at a time: a name in both Sets made un-collapsing jump
+        // straight to fully expanded, with no "+N more" click to explain it.
+        expandedPeople.delete(person);
+        saveExpandedPeople();
+      }
+      saveCollapsedPeople();
+      relayoutTlForWindow();   // anchored: keeps your place in a long list
+    });
+    nameCell.appendChild(chev);
     const dot = document.createElement('span');
     dot.className = 'tl-row-dot';
     dot.style.background = personColor[person] || '#6c63ff';
@@ -2725,16 +2834,17 @@ function renderTimeline() {
     if (overflowing) {
       const more = document.createElement('button');
       more.className = 'tl-more-btn' + (expanded ? ' on' : '');
-      more.textContent = expanded ? '− collapse' : '+' + hiddenLanes + ' more';
+      more.textContent = expanded ? '− collapse' : '+' + hiddenTasks + ' more';
       more.title = expanded
         ? `Collapse ${person} back to ${TL_MAX_LANES} lanes`
-        : `${hiddenLanes} more overlapping ${hiddenLanes === 1 ? 'task is' : 'tasks are'} hidden — click to show all ${work.lanes}`;
+        : `${hiddenTasks} ${hiddenTasks === 1 ? 'task is' : 'tasks are'} hidden in `
+          + `${hiddenLanes} more ${hiddenLanes === 1 ? 'lane' : 'lanes'} — click to show all ${work.lanes}`;
       more.addEventListener('click', ev => {
         ev.stopPropagation();
         if (expandedPeople.has(person)) expandedPeople.delete(person);
         else expandedPeople.add(person);
         saveExpandedPeople();
-        renderTimeline();
+        relayoutTlForWindow();   // anchored: keeps your place in a long list
       });
       nameCell.appendChild(more);
     }
@@ -2756,7 +2866,7 @@ function renderTimeline() {
     // Hairline between the work lanes and the context strip, so the thin bars
     // read as a separate band rather than as undersized tasks.
     const ctxTop = TL_PAD + shownWork * TL_LANE_H;
-    if (ctx.lanes) {
+    if (shownCtx) {
       const sep = document.createElement('div');
       sep.className = 'tl-ctx-sep';
       sep.style.top = (ctxTop - 2) + 'px';
@@ -2768,15 +2878,36 @@ function renderTimeline() {
     // lanes, which is why they are listed separately.
     const workTop = e => TL_PAD + e.lane * TL_LANE_H;
     const ctxBarTop = e => ctxTop + e.lane * TL_CTX_LANE_H;
-    const drawList = [
-      // Capped: lanes at or past shownWork are the ones behind "+N more".
-      ...work.win.filter(e => e.lane < shownWork).map(e => ({ entry: e, top: workTop(e), barH: TL_BAR_H })),
-      ...work.off.map(e => ({ entry: e, top: workTop(e), barH: TL_BAR_H })),
-      ...ctx.win.map(e => ({ entry: e, top: ctxBarTop(e), barH: TL_CTX_BAR_H })),
-      ...ctx.off.map(e => ({ entry: e, top: ctxBarTop(e), barH: TL_CTX_BAR_H })),
-    ];
+    // Off-window bars are drawn so the chart never goes blank mid-scroll, but
+    // their lane numbers come from a different packing than the row's height.
+    // Clamp them inside the row, and mark them inert: until the layout catches
+    // up (≤150ms) they are paint, not controls. Editing something that is not
+    // correctly laid out is how the wrong task got rescheduled.
+    const lastWork = Math.max(0, shownWork - 1);
+    const lastCtx  = Math.max(0, shownCtx  - 1);
+    const offWorkTop = e => TL_PAD + Math.min(e.lane, lastWork) * TL_LANE_H;
+    const offCtxTop  = e => ctxTop + Math.min(e.lane, lastCtx)  * TL_CTX_LANE_H;
+    const drawList = collapsed
+      // Squashed: everything on lane 0, half-opaque, so overlap reads as
+      // denser colour instead of being hidden outright.
+      ? [...work.win, ...work.off, ...ctx.win, ...ctx.off]
+          .map(e => ({ entry: e, top: TL_PAD,
+                       // context bars keep their thin height: "squash" should
+                       // never make a PTO chip bigger than it was
+                       barH: (e.isPTO || e.isStudioBlock) ? TL_CTX_BAR_H : TL_BAR_H,
+                       squash: true }))
+      : [
+        // Capped: lanes at or past shownWork are the ones behind "+N more".
+        ...work.win.filter(e => e.lane < shownWork).map(e => ({ entry: e, top: workTop(e), barH: TL_BAR_H })),
+        ...work.off.map(e => ({ entry: e, top: offWorkTop(e), barH: TL_BAR_H, inert: true })),
+        ...ctx.win.map(e => ({ entry: e, top: ctxBarTop(e), barH: TL_CTX_BAR_H })),
+        ...ctx.off.map(e => ({ entry: e, top: offCtxTop(e), barH: TL_CTX_BAR_H, inert: true })),
+      ];
 
-    drawList.forEach(({ entry, top, barH }) => {
+    drawList.forEach(({ entry, top, barH, squash, inert }) => {
+      const sq = squash ? ' tl-squash' : '';
+      // Neither a squashed pile nor an off-window bar may be edited.
+      const readOnly = squash || inert;
       // Same helper the height count uses, so the two can never disagree.
       const cols = tlDrawCols(entry);
       if (!cols) return;
@@ -2788,7 +2919,7 @@ function renderTimeline() {
       // PTO renders as a read-only chip (no drag/resize/reassign, no LoE dot).
       if (entry.isPTO) {
         const pto = document.createElement('div');
-        pto.className = 'tl-task-bar tl-pto-bar tl-ctx';
+        pto.className = 'tl-task-bar tl-pto-bar' + (squash ? ' tl-squash' : ' tl-ctx');
         pto.style.cssText = `left:${left}px;width:${width}px;top:${top}px;height:${barH}px;z-index:2;`;
         pto.title = `${entry.person} · PTO\n${entry.date}${entry.endDate && entry.endDate !== entry.date ? ' → ' + entry.endDate : ''} (${entry.projectName})`;
         const pInner = document.createElement('div');
@@ -2807,7 +2938,7 @@ function renderTimeline() {
       // (no drag/resize/reassign — there is no person to reassign them to).
       if (entry.isStudioBlock) {
         const sb = document.createElement('div');
-        sb.className = 'tl-task-bar tl-studio-bar tl-ctx';
+        sb.className = 'tl-task-bar tl-studio-bar' + (squash ? ' tl-squash' : ' tl-ctx');
         sb.style.cssText = `left:${left}px;width:${width}px;top:${top}px;height:${barH}px;background:${entry.color};z-index:2;`;
         sb.title = `Studio · ${entry.taskName}
 ${entry.date}${entry.endDate && entry.endDate !== entry.date ? ' → ' + entry.endDate : ''} (${entry.projectName})`;
@@ -2824,31 +2955,38 @@ ${entry.date}${entry.endDate && entry.endDate !== entry.date ? ' → ' + entry.e
       }
 
       const bar = document.createElement('div');
-      bar.className = 'tl-task-bar';
+      bar.className = 'tl-task-bar' + sq;
       bar.style.cssText = `left:${left}px;width:${width}px;top:${top}px;height:${barH}px;background:${entry.color};z-index:2;`;
       bar.title = `${entry.person} · ${entry.cat} · ${entry.taskName}\n${entry.date}${entry.endDate && entry.endDate !== entry.date ? ' → ' + entry.endDate : ''} (${entry.projectName})`;
       bar.dataset.projectId = entry.projectId;
       bar.dataset.taskId    = entry.taskId;
       if (entry.isReview) bar.dataset.attIdx = entry.attIdx;
 
-      // Resize handles (for multi-day tasks)
-      const isMulti = entry.endDate && entry.endDate !== entry.date;
-      if (isMulti) {
-        const lh = document.createElement('div');
-        lh.className = 'tl-resize-handle left';
-        lh.addEventListener('mousedown', e => startTlResize(e, entry, bar, 'left'));
-        bar.appendChild(lh);
-      }
-      const rh = document.createElement('div');
-      rh.className = 'tl-resize-handle right';
-      rh.addEventListener('mousedown', e => startTlResize(e, entry, bar, 'right'));
-      bar.appendChild(rh);
+      // A squashed row piles every bar onto one lane, where overlap is
+      // deliberately drawn as denser colour — i.e. indistinguishable. Left
+      // draggable, you grab "a bar" and silently reschedule whichever one
+      // happens to be last in DOM order. A collapsed row reads as a summary,
+      // so it behaves like one; PTO and studio bars are already read-only.
+      if (!readOnly) {
+        // Resize handles (for multi-day tasks)
+        const isMulti = entry.endDate && entry.endDate !== entry.date;
+        if (isMulti) {
+          const lh = document.createElement('div');
+          lh.className = 'tl-resize-handle left';
+          lh.addEventListener('mousedown', e => startTlResize(e, entry, bar, 'left'));
+          bar.appendChild(lh);
+        }
+        const rh = document.createElement('div');
+        rh.className = 'tl-resize-handle right';
+        rh.addEventListener('mousedown', e => startTlResize(e, entry, bar, 'right'));
+        bar.appendChild(rh);
 
-      // Drag to move / reassign
-      bar.addEventListener('mousedown', e => {
-        if (e.target.classList.contains('tl-resize-handle')) return;
-        startTlDrag(e, entry, bar, row);
-      });
+        // Drag to move / reassign
+        bar.addEventListener('mousedown', e => {
+          if (e.target.classList.contains('tl-resize-handle')) return;
+          startTlDrag(e, entry, bar, row);
+        });
+      }
 
       const inner = document.createElement('div');
       inner.className = 'tl-bar-inner';
@@ -2956,6 +3094,8 @@ function applyViewMode() {
   const isStudio = viewMode === 'studio';
   const legendWrap = document.getElementById('legendWrap');
   chipToggle.style.display = isTimeline ? '' : 'none';
+  const densityGroup = document.getElementById('densityToggle');
+  if (densityGroup) densityGroup.style.display = isTimeline ? '' : 'none';
   zoomGroup.style.display = isTimeline ? '' : 'none';
   wkndBtn.style.display = (isTimeline || isStudio) ? '' : 'none';
   if (legendWrap) legendWrap.style.display = isTimeline ? '' : 'none';
@@ -6370,6 +6510,9 @@ function setupCalObserver() {
 function init() {
   // Restore the persisted view tab's active state before first render
   document.querySelectorAll('#viewToggle .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.view === viewMode));
+  // Same for the density pills — before applyViewMode renders, so they are
+  // never briefly unselected and never disagree with the density in force.
+  syncDensityBtns();
   resetCalRange();
   resetTlRange();
   renderFilterChips();
@@ -6463,6 +6606,22 @@ function init() {
   });
 
   // Chip display toggle (Categories / Tasks)
+  // Density. syncDensityBtns is also called early in init(), before the first
+  // render, so the pills are never briefly unselected and a later wiring
+  // failure cannot leave them out of step with the actual density.
+  const densEl = document.getElementById('densityToggle');
+  densEl.addEventListener('click', e => {
+    const btn = e.target.closest('.toggle-btn');
+    if (!btn) return;
+    tlDensity = btn.dataset.density;
+    saveTlDensity();
+    syncDensityBtns();
+    // Unconditional: keeps the module heights and the html class in step with
+    // the persisted value even when the Gantt is not the current view.
+    applyTlDensity();
+    if (viewMode === 'person') relayoutTlForWindow();
+  });
+
   document.getElementById('chipDisplayToggle').addEventListener('click', e => {
     const btn = e.target.closest('.toggle-btn');
     if (!btn) return;
