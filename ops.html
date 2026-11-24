@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261124a';
+window.PREPRO_BUILD = '20261124b';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,25 +26,25 @@ window.PREPRO_BUILD = '20261124a';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20261124a"></script>
+<script type="module" src="./auth.js?v=20261124b"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261124a"></script>
+<script src="./whatsnew.js?v=20261124b"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20261124a"></script>
+<script src="./people.js?v=20261124b"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261124a"></script>
+<script src="./commitments.js?v=20261124b"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261124a"></script>
+<script src="./dossier.js?v=20261124b"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261124a"></script>
+<script src="./prepro-llm.js?v=20261124b"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261124a"></script>
+<script src="./prepro-ai.js?v=20261124b"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -206,6 +206,9 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .toggle-btn { font-size: 11px; font-weight: 600; color: var(--dim); background: transparent; border: none; padding: 4px 12px; cursor: pointer; transition: all .15s; }
 .toggle-btn.active { background: var(--accent); color: #fff; }
 .toggle-btn:not(.active):hover { color: var(--text); }
+/* TEMPORARY: hides the Ops Dashboard + Standup tabs while we focus on the
+   Gantt. Remove this rule (and HIDDEN_VIEWS in the script) to bring them back. */
+.toggle-btn.view-hidden { display: none; }
 
 /* ── FILTER ACTIONS ── */
 .ops-filter-actions { display: flex; gap: 5px; margin-bottom: 6px; }
@@ -637,11 +640,13 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
   <span class="ops-header-title">Ops</span>
   <span class="ops-header-sub">Internal team workload view</span>
   <div class="toggle-group" id="viewToggle" title="Switch view">
-    <button class="toggle-btn active" data-view="headsup">Ops Dashboard</button>
-    <button class="toggle-btn" data-view="person">Gantt Chart</button>
+    <!-- TEMPORARY: headsup + standup hidden while we focus on the Gantt.
+         See HIDDEN_VIEWS in the script; the .view-hidden rule does the hiding. -->
+    <button class="toggle-btn view-hidden" data-view="headsup">Ops Dashboard</button>
+    <button class="toggle-btn active" data-view="person">Gantt Chart</button>
     <button class="toggle-btn" data-view="studio">Studio Calendar</button>
     <button class="toggle-btn" data-view="metrics">Metrics</button>
-    <button class="toggle-btn" data-view="standup">Standup</button>
+    <button class="toggle-btn view-hidden" data-view="standup">Standup</button>
   </div>
   <div class="ops-header-spacer"></div>
   <div class="toggle-group" id="chipDisplayToggle" title="Chip label: category abbreviation or task name">
@@ -822,9 +827,22 @@ function saveLens() {
   try { localStorage.setItem('ops_lens_filter', JSON.stringify([...tlLens])); } catch (_) {}
 }
 const VALID_VIEW_MODES = ['headsup', 'person', 'studio', 'metrics', 'standup'];
+
+/* ── TEMPORARY: focus on the Gantt ──────────────────────────────────────────
+ * Ops Dashboard (headsup) and Standup are hidden for now while we work on the
+ * Gantt. Their render code is untouched — only the tab buttons are hidden and
+ * the view falls back to the Gantt. To restore: empty HIDDEN_VIEWS (or delete
+ * this block and the matching one in the stylesheet) and nothing else changes.
+ * Note headsup was the default view, hence the fallback below. */
+const HIDDEN_VIEWS = ['headsup', 'standup'];
+const DEFAULT_VIEW = 'person';   // the Gantt
+/* ───────────────────────────────────────────────────────────────────────── */
+
 let viewMode = (() => {
   const saved = localStorage.getItem('ops_view_mode');
-  return VALID_VIEW_MODES.includes(saved) ? saved : 'headsup';
+  // a stored preference for a now-hidden view would load into an empty page
+  if (HIDDEN_VIEWS.includes(saved)) return DEFAULT_VIEW;
+  return VALID_VIEW_MODES.includes(saved) ? saved : DEFAULT_VIEW;
 })();
 let metricsRecapRange = 'quarter'; // '30d' | 'quarter' | '6mo' | 'ytd'
 // Effort chart windows, in workdays — five per week, since the charts only plot
