@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261124d';
+window.PREPRO_BUILD = '20261124e';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,25 +26,25 @@ window.PREPRO_BUILD = '20261124d';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20261124d"></script>
+<script type="module" src="./auth.js?v=20261124e"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261124d"></script>
+<script src="./whatsnew.js?v=20261124e"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20261124d"></script>
+<script src="./people.js?v=20261124e"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261124d"></script>
+<script src="./commitments.js?v=20261124e"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261124d"></script>
+<script src="./dossier.js?v=20261124e"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261124d"></script>
+<script src="./prepro-llm.js?v=20261124e"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261124d"></script>
+<script src="./prepro-ai.js?v=20261124e"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -554,6 +554,11 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .tl-task-bar { position: absolute; border-radius: 3px; color: #fff; display: flex; align-items: center; overflow: visible; cursor: grab; user-select: none; }
 .tl-task-bar:active { cursor: grabbing; }
 .tl-task-bar.dragging { opacity: .6; z-index: 50 !important; }
+/* ── Read-only context strip (PTO + studio), packed below the work lanes ── */
+.tl-ctx-sep { position: absolute; left: 0; right: 0; height: 1px; background: var(--border); opacity: .85; pointer-events: none; z-index: 1; }
+.tl-task-bar.tl-ctx { border-radius: 2px; opacity: .92; }
+.tl-task-bar.tl-ctx .tl-bar-inner { padding: 0 2px; }
+.tl-task-bar.tl-ctx .tl-bar-name { font-size: 8px; line-height: 1; letter-spacing: .01em; opacity: 1; }
 .tl-pto-bar { cursor: default; background: repeating-linear-gradient(45deg, #6e6e7b 0, #6e6e7b 6px, #56565f 6px, #56565f 12px); border: 1px solid #9a9aa6; }
 .tl-pto-bar .tl-bar-name { font-weight: 700; opacity: 1; }
 .tl-studio-bar { cursor: default; }
@@ -796,6 +801,15 @@ const TL_NAME_W     = 130;
 const TL_BAR_H      = 26;
 const TL_LANE_H     = TL_BAR_H + 4;
 const TL_PAD        = 6;
+// Minimum bar WIDTH. TL_BAR_H used to do double duty here, which quietly tied
+// how short a bar can be to how tall it is — wrong once bar heights vary.
+const TL_MIN_BAR_W  = 26;
+// Read-only context strip: PTO and studio bookings. Neither is an assignable
+// task (both are undraggable here), and letting them compete for work lanes
+// spent full 30px lanes on things that aren't someone's workload. They pack
+// separately now, into a thin band beneath the work lanes.
+const TL_CTX_BAR_H  = 13;
+const TL_CTX_LANE_H = TL_CTX_BAR_H + 3;
 const TL_WEEKS_INIT = 16;
 const TL_WEEKS_EXT  = 8;
 const TL_ZOOM_STEPS = [18, 26, 36, 50, 70, 100]; // px per visible day column
@@ -2620,21 +2634,29 @@ function renderTimeline() {
     if (filtering ? (!entries.length && !studioEntries.length)
                   : (!entries.length && !ptoEntries.length && !studioEntries.length)) return;
 
-    // Lanes are packed over ALL of this person's work, never the window.
-    // `laned` is also the draw list below, and the draw clip there is against
-    // tlStart/tlEnd — the whole built range, not the window — so filtering
-    // here would stop bars being DRAWN, not merely stop them claiming height.
-    // (It did exactly that, and blanked the chart mid-scroll.)
-    const laned = assignLanes([...entries, ...ptoEntries, ...studioEntries]);
+    // Work and read-only context are packed into separate bands, so PTO can
+    // never push somebody's workload down a lane. Within each band, lanes are
+    // assigned over ALL of that person's entries, never the window: these are
+    // also the draw lists below, and the draw clip is against tlStart/tlEnd —
+    // the whole built range — so filtering here would stop bars being DRAWN
+    // rather than merely stop them claiming height. (It did, and blanked the
+    // chart mid-scroll.)
+    const workLaned = assignLanes(entries);
+    const ctxLaned  = assignLanes([...ptoEntries, ...studioEntries]);
 
-    // Height, though, counts only the lanes actually in use on screen.
-    // Math.max of nothing is -Infinity, so a person whose work is all
-    // off-screen keeps a one-lane row rather than collapsing to zero height.
-    // Only lanes that are both on screen AND actually drawable count — see
+    // Height counts only lanes that are on screen AND actually drawable — see
     // tlDrawCols for why "drawable" is not a given.
-    const winLanes = laned.filter(e => tlOverlapsWindow(e) && tlDrawCols(e));
-    const numLanes = winLanes.length ? Math.max(...winLanes.map(e => e.lane)) + 1 : 1;
-    const trackH   = TL_PAD * 2 + numLanes * TL_LANE_H;
+    const onScreen  = e => tlOverlapsWindow(e) && tlDrawCols(e);
+    const depth     = list => { const w = list.filter(onScreen);
+                                return w.length ? Math.max(...w.map(e => e.lane)) + 1 : 0; };
+    const workLanes = depth(workLaned);
+    const ctxLanes  = depth(ctxLaned);
+    // Floored at one work lane's worth, so a row holding only a thin PTO strip
+    // (or nothing in view at all) still reads as a row rather than a sliver.
+    const trackH = Math.max(
+      TL_PAD * 2 + TL_LANE_H,
+      TL_PAD * 2 + workLanes * TL_LANE_H + ctxLanes * TL_CTX_LANE_H
+    );
 
     const row = document.createElement('div');
     row.className = 'tl-person-row';
@@ -2682,28 +2704,43 @@ function renderTimeline() {
       track.appendChild(todayEl);
     }
 
-    laned.forEach(entry => {
+    // Hairline between the work lanes and the context strip, so the thin bars
+    // read as a separate band rather than as undersized tasks.
+    const ctxTop = TL_PAD + workLanes * TL_LANE_H;
+    if (ctxLanes) {
+      const sep = document.createElement('div');
+      sep.className = 'tl-ctx-sep';
+      sep.style.top = (ctxTop - 2) + 'px';
+      track.appendChild(sep);
+    }
+
+    // One list, each entry carrying the geometry of its own band.
+    const drawList = [
+      ...workLaned.map(e => ({ entry: e, top: TL_PAD + e.lane * TL_LANE_H, barH: TL_BAR_H })),
+      ...ctxLaned.map(e  => ({ entry: e, top: ctxTop + e.lane * TL_CTX_LANE_H, barH: TL_CTX_BAR_H })),
+    ];
+
+    drawList.forEach(({ entry, top, barH }) => {
       // Same helper the height count uses, so the two can never disagree.
       const cols = tlDrawCols(entry);
       if (!cols) return;
       const { startCol, endCol } = cols;
 
       const left  = startCol * tlColW + 2;
-      const width = Math.max(TL_BAR_H, (endCol - startCol + 1) * tlColW - 4);
-      const top   = TL_PAD + entry.lane * TL_LANE_H;
+      const width = Math.max(TL_MIN_BAR_W, (endCol - startCol + 1) * tlColW - 4);
 
       // PTO renders as a read-only chip (no drag/resize/reassign, no LoE dot).
       if (entry.isPTO) {
         const pto = document.createElement('div');
-        pto.className = 'tl-task-bar tl-pto-bar';
-        pto.style.cssText = `left:${left}px;width:${width}px;top:${top}px;height:${TL_BAR_H}px;z-index:2;`;
+        pto.className = 'tl-task-bar tl-pto-bar tl-ctx';
+        pto.style.cssText = `left:${left}px;width:${width}px;top:${top}px;height:${barH}px;z-index:2;`;
         pto.title = `${entry.person} · PTO\n${entry.date}${entry.endDate && entry.endDate !== entry.date ? ' → ' + entry.endDate : ''} (${entry.projectName})`;
         const pInner = document.createElement('div');
         pInner.className = 'tl-bar-inner';
         pInner.style.pointerEvents = 'none';
         const pLbl = document.createElement('span');
         pLbl.className = 'tl-bar-name';
-        pLbl.textContent = '🏖 PTO';
+        pLbl.textContent = width < 52 ? '🏖' : '🏖 PTO';
         pInner.appendChild(pLbl);
         pto.appendChild(pInner);
         track.appendChild(pto);
@@ -2714,8 +2751,8 @@ function renderTimeline() {
       // (no drag/resize/reassign — there is no person to reassign them to).
       if (entry.isStudioBlock) {
         const sb = document.createElement('div');
-        sb.className = 'tl-task-bar tl-studio-bar';
-        sb.style.cssText = `left:${left}px;width:${width}px;top:${top}px;height:${TL_BAR_H}px;background:${entry.color};z-index:2;`;
+        sb.className = 'tl-task-bar tl-studio-bar tl-ctx';
+        sb.style.cssText = `left:${left}px;width:${width}px;top:${top}px;height:${barH}px;background:${entry.color};z-index:2;`;
         sb.title = `Studio · ${entry.taskName}
 ${entry.date}${entry.endDate && entry.endDate !== entry.date ? ' → ' + entry.endDate : ''} (${entry.projectName})`;
         const sInner = document.createElement('div');
@@ -2723,7 +2760,7 @@ ${entry.date}${entry.endDate && entry.endDate !== entry.date ? ' → ' + entry.e
         sInner.style.pointerEvents = 'none';
         const sLbl = document.createElement('span');
         sLbl.className = 'tl-bar-name';
-        sLbl.textContent = '🎬 ' + entry.taskName;
+        sLbl.textContent = width < 52 ? '🎬' : '🎬 ' + entry.taskName;
         sInner.appendChild(sLbl);
         sb.appendChild(sInner);
         track.appendChild(sb);
@@ -2732,7 +2769,7 @@ ${entry.date}${entry.endDate && entry.endDate !== entry.date ? ' → ' + entry.e
 
       const bar = document.createElement('div');
       bar.className = 'tl-task-bar';
-      bar.style.cssText = `left:${left}px;width:${width}px;top:${top}px;height:${TL_BAR_H}px;background:${entry.color};z-index:2;`;
+      bar.style.cssText = `left:${left}px;width:${width}px;top:${top}px;height:${barH}px;background:${entry.color};z-index:2;`;
       bar.title = `${entry.person} · ${entry.cat} · ${entry.taskName}\n${entry.date}${entry.endDate && entry.endDate !== entry.date ? ' → ' + entry.endDate : ''} (${entry.projectName})`;
       bar.dataset.projectId = entry.projectId;
       bar.dataset.taskId    = entry.taskId;
