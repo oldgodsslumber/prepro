@@ -10,7 +10,7 @@
      on each deploy. If the deployed build is newer than this cached page, reload
      once so users always get the latest without a manual hard refresh. -->
 <script>
-window.PREPRO_BUILD = '20261124i';
+window.PREPRO_BUILD = '20261124j';
 (function () {
   try {
     fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -26,25 +26,25 @@ window.PREPRO_BUILD = '20261124i';
 })();
 </script>
 
-<script type="module" src="./auth.js?v=20261124i"></script>
+<script type="module" src="./auth.js?v=20261124j"></script>
 <!-- Release notes: self-mounting "What's New" modal, opened by the
      prepro:auth-ready event from auth.js. Shared by all four pages. -->
-<script src="./whatsnew.js?v=20261124i"></script>
+<script src="./whatsnew.js?v=20261124j"></script>
 <!-- Shared people module — classic script so its globals exist before the app
      script below runs. Same file is loaded by team.html and dash.html. -->
-<script src="./people.js?v=20261124i"></script>
+<script src="./people.js?v=20261124j"></script>
 <!-- Shared commitments module (open loops / subtasks). Classic script, same
      contract as people.js: its globals must exist before the page script runs. -->
-<script src="./commitments.js?v=20261124i"></script>
+<script src="./commitments.js?v=20261124j"></script>
 <!-- Project dossier serializer — pure text rendering of a whole project.
      Classic script, loaded after commitments.js whose globals it reads. -->
-<script src="./dossier.js?v=20261124i"></script>
+<script src="./dossier.js?v=20261124j"></script>
 <!-- Gemini client. Optional: every person brings their own key and the app is
      fully usable without one. Classic script, loaded after dossier.js. -->
-<script src="./prepro-llm.js?v=20261124i"></script>
+<script src="./prepro-llm.js?v=20261124j"></script>
 <!-- Extraction + advisory. Both gated on ppLlmConfigured(); with no key the
      app behaves exactly as it did before this file existed. -->
-<script src="./prepro-ai.js?v=20261124i"></script>
+<script src="./prepro-ai.js?v=20261124j"></script>
 <script type="module">
 window._fbReady.then(({ db, ref, onValue }) => {
   onValue(ref(db, 'prepro/state'), snapshot => {
@@ -568,6 +568,31 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
 .tl-task-bar { position: absolute; border-radius: 3px; color: #fff; display: flex; align-items: center; overflow: visible; cursor: grab; user-select: none; }
 .tl-task-bar:active { cursor: grabbing; }
 .tl-task-bar.dragging { opacity: .6; z-index: 50 !important; }
+/* ── Task panel, docked under the Gantt ── */
+.tl-task-panel { display: none; flex-shrink: 0; align-items: center; gap: 12px; padding: 7px 14px; border-top: 1px solid var(--border); background: var(--panel); font-size: 12px; min-width: 0; }
+.tl-task-panel.on { display: flex; }
+.tlp-info { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; overflow: hidden; white-space: nowrap; }
+.tlp-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.tlp-proj { font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; min-width: 40px; flex-shrink: 1; }
+.tlp-sep { color: var(--dim); flex-shrink: 0; }
+.tlp-task { color: var(--dim); overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 3; }
+.tlp-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.tlp-btn { font: inherit; font-size: 11px; font-weight: 600; color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; cursor: pointer; text-decoration: none; white-space: nowrap; }
+.tlp-btn:hover { border-color: var(--accent); color: var(--accent); }
+.tlp-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tlp-close { background: none; border: none; color: var(--dim); font-size: 13px; cursor: pointer; padding: 2px 4px; }
+.tlp-close:hover { color: var(--text); }
+/* Dim preview: an id in the selector, so it beats .tl-squash's own opacity */
+/* :not(.dragging) — the id makes this outrank .dragging's own opacity, so a
+   non-matching bar picked up mid-preview would otherwise drag at 22%. */
+#tlRows.tl-proj-focus .tl-task-bar:not(.tl-proj-match):not(.dragging) { opacity: .22; }
+.tl-task-bar.tl-selected { outline: 2px solid var(--text); outline-offset: 1px; }
+/* !important because bars carry an inline z-index. Not while dragging: this
+   ties .dragging's z-index:50 on specificity, comes later, and would win —
+   sliding the dragged bar under the sticky name column. */
+.tl-task-bar.tl-selected:not(.dragging) { z-index: 3 !important; }
+.tl-task-bar.tl-clickable { cursor: pointer; }
+
 /* ── Per-person collapse ── */
 .tl-chev { background: none; border: none; color: var(--dim); font-size: 9px; line-height: 1; cursor: pointer; padding: 6px 2px; margin: -6px 0; width: 15px; flex-shrink: 0; }
 .tl-chev:hover { color: var(--accent); }
@@ -746,6 +771,9 @@ body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-
       <div class="tl-sentinel-lr" id="tlSentinelR" style="right:0"></div>
     </div>
   </div>
+  <!-- Task panel: docked, so it shortens the chart instead of covering it, and
+       it hides with the Gantt view on its own. Filled by renderTlTaskPanel. -->
+  <div class="tl-task-panel" id="tlTaskPanel" role="region" aria-label="Selected task" aria-live="polite"></div>
 </div>
 
 <div class="headsup-view" id="headsupView"></div>
@@ -923,6 +951,13 @@ let personOrder = (() => {
  * A lens is one of the CAT_COLORS categories, or the synthetic 'Studio'.
  * Selected lenses OR together, so Animation + Studio shows both.
  * ─────────────────────────────────────────────────────────────────────────── */
+// ── TASK PANEL (Gantt) ──
+// Neither is persisted. A selection is momentary, and a remembered project
+// filter that hides most of the team would make the Gantt look broken the next
+// morning — the category lenses persist, this deliberately does not.
+let tlSelected      = null;   // stable entry key, see tlEntryKey
+let tlProjectFilter = null;   // projectId, or null for every project
+
 let tlLens = (() => {
   try {
     const raw = JSON.parse(localStorage.getItem('ops_lens_filter') || '[]');
@@ -1652,7 +1687,7 @@ function getOpsEntries(opts) {
         // attendee precedes an internal one.
         (task.attendees || []).forEach((att, attIdx) => {
           if (att.category !== 'Internal Team') return;
-          entries.push({ date: task.date, endDate: task.endDate || task.date, person: att.person || att.role, role: att.role, unassigned: !att.person, cat, taskName: task.taskName || task.reviewLabel || 'Review', loe, color, projectName: proj.name, projectId: proj.id, taskId: task.id, isReview: true, attIdx, reviewLabel: task.reviewLabel || '', isStudio });
+          entries.push({ date: task.date, endDate: task.endDate || task.date, person: att.person || att.role, role: att.role, unassigned: !att.person, cat, taskName: task.taskName || task.reviewLabel || 'Review', loe, color, projectName: proj.name, projectId: proj.id, taskId: task.id, isReview: true, attIdx, attId: att.id, reviewLabel: task.reviewLabel || '', isStudio });
         });
         return;
       }
@@ -1660,7 +1695,7 @@ function getOpsEntries(opts) {
       // task.person/role is kept for back-compat. Emit one entry per person.
       const roster = [];
       if (task.person) roster.push({ person: task.person, role: task.role, category: task.roleCategory, isPrimary: true });
-      (task.attendees || []).forEach((a, i) => roster.push({ person: a.person, role: a.role, category: a.category, attIdx: i }));
+      (task.attendees || []).forEach((a, i) => roster.push({ person: a.person, role: a.role, category: a.category, attIdx: i, attId: a.id }));
       const rosterSeen = new Set();
       roster.forEach(p => {
         if (p.category !== 'Internal Team' && !isAdminRole(p.role)) return;
@@ -1668,7 +1703,7 @@ function getOpsEntries(opts) {
         const cat = getRoleCat(p.role, task.taskName);
         if (!cat) return;
         const color = CAT_COLORS[cat] || '#6c63ff';
-        entries.push({ date: task.date, endDate: task.endDate || task.date, person: p.person || p.role, role: p.role, unassigned: !p.person, cat, taskName: task.taskName || roleVerb(p.role), loe, color, projectName: proj.name, projectId: proj.id, taskId: task.id, isPrimary: p.isPrimary || false, attIdx: p.attIdx });
+        entries.push({ date: task.date, endDate: task.endDate || task.date, person: p.person || p.role, role: p.role, unassigned: !p.person, cat, taskName: task.taskName || roleVerb(p.role), loe, color, projectName: proj.name, projectId: proj.id, taskId: task.id, isPrimary: p.isPrimary || false, attIdx: p.attIdx, attId: p.attId });
       });
     });
   });
@@ -1983,6 +2018,191 @@ function passesLens(entry) {
   return lensesOf(entry).some(l => tlLens.has(l));
 }
 
+// One bar, identified in a way that survives reassignment. `person` is
+// deliberately not part of it, so dragging the selected bar to someone else
+// keeps it selected.
+// Attendees are keyed by their permanent id, NOT by attIdx. attIdx is a
+// position: removing an earlier attendee (deleted everywhere, merged, or a
+// chip removed in Projects and synced over) shifts every later one down, and
+// the selection silently became the NEXT person's bar — the panel and outline
+// describing a task the user never clicked. attIdx is kept on entries only
+// for writing changes back. Legacy attendees with no id fall back to it.
+// The legacy primary person is 'P'; a studio block is one per task, 'S'.
+function tlEntryKey(e) {
+  const slot = e.isStudioBlock ? 'S'
+             : e.attId         ? 'a:' + e.attId
+             : (e.attIdx ?? 'P');
+  return e.projectId + '|' + e.taskId + '|' + slot;
+}
+// ANDs with the lenses: "Aurora" + "Edit" means Aurora's edit work.
+function passesProject(entry) {
+  return !tlProjectFilter || entry.projectId === tlProjectFilter;
+}
+function passesTlFilters(entry) {
+  return passesLens(entry) && passesProject(entry);
+}
+function tlFilterEmptyHtml() {
+  const fp = tlProjectFilter && (state.projects || []).find(p => p.id === tlProjectFilter);
+  return '<div style="padding:20px;color:var(--dim);font-size:12px">' + (
+    !fp ? 'No work matches this filter. Clear it in the bar above, or from the Legend.'
+    : tlLens.size
+      ? 'Nothing on <b>' + esc(fp.name) + '</b> matches the category filter. Remove a filter in the bar above.'
+      : '<b>' + esc(fp.name) + '</b> has no internal team work on the Gantt. Clear the project filter in the bar above.'
+  ) + '</div>';
+}
+
+// The selected entry, read fresh from state — never from the drawn bars, which
+// are rebuilt every scroll. So a rename, a drag to new dates, or a reassignment
+// all show up, and a deleted task simply stops being found.
+function findTlSelectedEntry(ops, studio) {
+  if (!tlSelected) return null;
+  return (ops    || getOpsEntries()).find(e => tlEntryKey(e) === tlSelected)
+      || (studio || getStudioBlockEntries()).find(e => tlEntryKey(e) === tlSelected)
+      || null;
+}
+
+// A filter on a project that is gone (deleted, or gone inactive on a refresh)
+// would blank the chart with nothing on screen to explain why.
+function validateTlProjectFilter() {
+  if (!tlProjectFilter) return;
+  const p = (state.projects || []).find(x => x.id === tlProjectFilter);
+  // getOpsEntries skips ghost projects too, so a ghosted project is as gone.
+  if (!p || p.ghost || isInactive(p)) tlProjectFilter = null;
+}
+
+let tlSelectedAt = 0;
+function selectTlEntry(entry) {
+  if (!entry || !entry.projectId) return;     // PTO carries no project
+  const key = tlEntryKey(entry);
+  if (tlSelected === key) {
+    // A double-click arrives as two clicks: the second would toggle the panel
+    // straight back shut. Only a deliberate later click closes it.
+    if (Date.now() - tlSelectedAt < 400) return;
+    tlSelected = null;
+  } else {
+    tlSelected = key;
+    tlSelectedAt = Date.now();
+  }
+  // The bar is rebuilt under the cursor during this mouseup, so the click
+  // that would have reached document (and closed the legend) may not. Do it.
+  toggleLegendPop(false);
+  relayoutTlForWindow();
+  if (tlSelected) revealTlSelected();
+}
+// Opening the panel takes ~38px from the chart's bottom, which can push the
+// bar you just clicked below the fold. Nudge it back into view.
+function revealTlSelected() {
+  const sc = document.getElementById('tlScroll');
+  const el = document.querySelector('#tlRows .tl-selected');
+  if (!sc || !el) return;
+  const s = sc.getBoundingClientRect(), r = el.getBoundingClientRect();
+  const hdr = document.getElementById('tlHeader');
+  const top = hdr ? hdr.getBoundingClientRect().bottom : s.top;   // sticky header
+  if (r.bottom > s.bottom - 6)  sc.scrollTop += r.bottom - s.bottom + 10;
+  else if (r.top < top + 4)     sc.scrollTop -= (top - r.top) + 10;
+}
+function closeTlTaskPanel() {
+  if (!tlSelected) return false;
+  tlSelected = null;
+  relayoutTlForWindow();
+  return true;
+}
+// anchorPerson keeps that person's row where it is on screen. Filtering removes
+// the rows above it, so without this the row you clicked would jump upward.
+function setTlProjectFilter(id, anchorPerson) {
+  tlProjectFilter = id || null;
+  if (viewMode === 'person') relayoutTlForWindow(anchorPerson);
+}
+
+function fmtTlRange(a, b) {
+  const da = new Date(a + 'T00:00:00');
+  const db = new Date((b || a) + 'T00:00:00');
+  // Must never throw: this runs before the rows are built, so a throw from a
+  // malformed date left the whole Gantt empty on every render until Esc.
+  if (isNaN(da) || isNaN(db)) return [a, b].filter(Boolean).join(' \u2013 ');
+  // Ends before it starts: read it the right way round, not "Nov 24–20".
+  if (db < da) return fmtTlRange(b, a);
+  const ma = MONTHS[da.getMonth()].slice(0, 3);
+  const mb = MONTHS[db.getMonth()].slice(0, 3);
+  if (!b || b === a) return ma + ' ' + da.getDate();
+  if (da.getMonth() === db.getMonth() && da.getFullYear() === db.getFullYear())
+    return ma + ' ' + da.getDate() + '\u2013' + db.getDate();
+  return ma + ' ' + da.getDate() + ' \u2013 ' + mb + ' ' + db.getDate();
+}
+
+// Docked under the Gantt. Built with textContent throughout: project and task
+// names are user-typed, so nothing here goes through innerHTML.
+function renderTlTaskPanel(entry) {
+  const panel = document.getElementById('tlTaskPanel');
+  if (!panel) return;
+  // Every render rebuilds the panel, which used to drop keyboard focus to
+  // <body> whenever a focused button inside it was replaced.
+  const ae = document.activeElement;
+  const refocus = (ae && panel.contains(ae)) ? ae.dataset.act : null;
+  panel.innerHTML = '';
+  if (!entry) { panel.classList.remove('on'); return; }
+  panel.classList.add('on');
+
+  const proj = (state.projects || []).find(p => p.id === entry.projectId);
+  const projName = proj ? proj.name : (entry.projectName || 'Project');
+  const mk = (tag, cls, text) => {
+    const el = document.createElement(tag);
+    if (cls) el.className = cls;
+    if (text != null) el.textContent = text;
+    return el;
+  };
+
+  const info = mk('div', 'tlp-info');
+  const dot = mk('span', 'tlp-dot');
+  dot.style.background = entry.color || 'var(--accent)';
+  info.appendChild(dot);
+  const pn = mk('span', 'tlp-proj', projName);
+  pn.title = projName;
+  info.appendChild(pn);
+  info.appendChild(mk('span', 'tlp-sep', '\u203a'));
+  const who = entry.isStudioBlock ? 'Studio'
+            : entry.unassigned   ? (entry.role || 'Unfilled') + ' (unfilled)'
+            : entry.person;
+  const taskLine = [entry.taskName, who, fmtTlRange(entry.date, entry.endDate)]
+    .filter(Boolean).join(' \u00b7 ');
+  const tl = mk('span', 'tlp-task', taskLine);
+  tl.title = taskLine;
+  info.appendChild(tl);
+  panel.appendChild(info);
+
+  const acts = mk('div', 'tlp-actions');
+  const filtered = tlProjectFilter === entry.projectId;
+  const fb = mk('button', 'tlp-btn' + (filtered ? ' on' : ''),
+                filtered ? 'Show all projects' : '\u25ce Only this project');
+  fb.setAttribute('aria-pressed', String(filtered));
+  fb.dataset.act = 'filter';
+  fb.title = filtered ? 'Bring back every project'
+                      : 'Show only ' + projName + ' — people with no work on it are hidden';
+  fb.addEventListener('click', () =>
+    setTlProjectFilter(filtered ? null : entry.projectId, entry.person));
+  acts.appendChild(fb);
+
+  // A real link: click stays in this tab, Ctrl/middle-click opens a new one —
+  // the same way dash's project links behave. team.html reads #project= on load.
+  const go = mk('a', 'tlp-btn tlp-go', 'Open in Projects \u2197');
+  go.href = 'team.html#project=' + encodeURIComponent(entry.projectId);
+  go.dataset.act = 'go';
+  go.title = 'Open ' + projName + ' on the Projects page';
+  acts.appendChild(go);
+
+  const x = mk('button', 'tlp-close', '\u2715');
+  x.title = 'Close (Esc)';
+  x.setAttribute('aria-label', 'Close task panel');
+  x.dataset.act = 'close';
+  x.addEventListener('click', () => closeTlTaskPanel());
+  acts.appendChild(x);
+  panel.appendChild(acts);
+  if (refocus) {
+    const t = panel.querySelector('[data-act="' + refocus + '"]');
+    if (t) t.focus();
+  }
+}
+
 function setLens(keys) {
   tlLens = new Set(keys);
   saveLens();
@@ -2095,8 +2315,22 @@ function renderTlFilterBar() {
   const bar = document.getElementById('tlFilterBar');
   if (!bar) return;
   bar.innerHTML = '';
-  if (!tlLens.size) { bar.classList.remove('on'); return; }
+  if (!tlLens.size && !tlProjectFilter) { bar.classList.remove('on'); return; }
   bar.classList.add('on');
+  // The project filter sits first and reads like the category pills, so every
+  // active filter is in one place even after the task panel is closed.
+  if (tlProjectFilter) {
+    const fp = (state.projects || []).find(p => p.id === tlProjectFilter);
+    const pill = document.createElement('span');
+    pill.className = 'tl-filter-pill';
+    pill.appendChild(document.createTextNode('\ud83d\udcc1 ' + (fp ? fp.name : 'Project')));
+    const px = document.createElement('button');
+    px.textContent = '\u2715';
+    px.title = 'Show all projects';
+    px.addEventListener('click', () => setTlProjectFilter(null));
+    pill.appendChild(px);
+    bar.appendChild(pill);
+  }
   // Pills follow LENSES order, not click order, so the bar reads the same way
   // the legend does.
   LENSES.filter(l => tlLens.has(l.key)).forEach(l => {
@@ -2117,7 +2351,10 @@ function renderTlFilterBar() {
   note.className = 'tl-filter-note';
   note.textContent = 'Rows with no matching work are hidden. PTO still shows.';
   bar.appendChild(note);
-  bar.appendChild(legendActionBtn('Clear', 'Show everything again', () => setLens([])));
+  bar.appendChild(legendActionBtn('Clear', 'Show everything again', () => {
+    tlProjectFilter = null;   // Clear means every filter, project included
+    setLens([]);
+  }));
 }
 
 function toggleLegendPop(force) {
@@ -2296,18 +2533,37 @@ let tlWinLastRelayout  = 0;
 // while the gesture goes on writing to the detached node and still commits.
 let tlGestureActive = false;
 
-function relayoutTlForWindow() {
+function relayoutTlForWindow(preferName) {
   const sc = document.getElementById('tlScroll');
   if (!sc) return;
 
-  const scTop = sc.getBoundingClientRect().top;
-  let anchorName = null, anchorDelta = 0;
-  for (const r of document.querySelectorAll('#tlRows .tl-person-row')) {
-    const rb = r.getBoundingClientRect();
-    if (rb.bottom > scTop) {
+  // Anchors are held in ABSOLUTE screen position, not relative to the
+  // scroller: the filter bar above the chart appears and disappears with the
+  // project filter, moving the scroller itself, and a scroller-relative anchor
+  // let the "held still" row slide by the bar's height.
+  const sb = sc.getBoundingClientRect();
+  const visible = r => { const b = r.getBoundingClientRect(); return b.bottom > sb.top && b.top < sb.bottom; };
+  let anchorName = null, anchorY = 0;
+  // A caller can name the row to hold still (the project filter does: it
+  // removes the rows above the one you clicked) — but only if it is actually
+  // on screen. Holding an off-screen row clamped scrollTop and dropped you at
+  // the far end of the list.
+  if (preferName) {
+    for (const r of document.querySelectorAll('#tlRows .tl-person-row')) {
       const nm = r.querySelector('.tl-row-name-text');
-      anchorName  = nm ? nm.textContent : null;
-      anchorDelta = rb.top - scTop;
+      if (nm && nm.textContent === preferName && visible(r)) {
+        anchorName = preferName;
+        anchorY    = r.getBoundingClientRect().top;
+        break;
+      }
+    }
+  }
+  if (!anchorName) for (const r of document.querySelectorAll('#tlRows .tl-person-row')) {
+    const rb = r.getBoundingClientRect();
+    if (rb.bottom > sb.top) {
+      const nm = r.querySelector('.tl-row-name-text');
+      anchorName = nm ? nm.textContent : null;
+      anchorY    = rb.top;
       break;
     }
   }
@@ -2320,7 +2576,7 @@ function relayoutTlForWindow() {
     for (const r of document.querySelectorAll('#tlRows .tl-person-row')) {
       const nm = r.querySelector('.tl-row-name-text');
       if (nm && nm.textContent === anchorName) {
-        sc.scrollTop += (r.getBoundingClientRect().top - sc.getBoundingClientRect().top) - anchorDelta;
+        sc.scrollTop += r.getBoundingClientRect().top - anchorY;
         break;
       }
     }
@@ -2418,6 +2674,7 @@ function startTlDrag(e, entry, bar, personRow) {
   e.preventDefault();
   const sc = document.getElementById('tlScroll');
   const startX = e.clientX;
+  const startY = e.clientY;   // the drag threshold below only looks at dx
   const startScrollLeft = sc.scrollLeft;
   let moved = false;
   let lastHighlightRow = null;
@@ -2458,7 +2715,15 @@ function startTlDrag(e, entry, bar, personRow) {
     document.removeEventListener('mouseup', onUp);
     bar.classList.remove('dragging');
     if (lastHighlightRow) lastHighlightRow.classList.remove('drop-target');
-    if (!moved) return;
+    // A press that never crossed the 4px drag threshold is a click: open the
+    // task panel. Doing it here rather than with a 'click' listener is what
+    // keeps the end of every real drag from also opening it.
+    // `moved` only tracks horizontal travel, so a straight-down drag (an
+    // attempt at reassigning) also reached here and opened the panel.
+    if (!moved) {
+      if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 4) selectTlEntry(entry);
+      return;
+    }
 
     const dx = ev.clientX - startX;
     const totalDx = dx + (sc.scrollLeft - startScrollLeft);
@@ -2520,6 +2785,7 @@ function startTlResize(e, entry, bar, side) {
   e.stopPropagation();
   const sc = document.getElementById('tlScroll');
   const startX = e.clientX;
+  const startY = e.clientY;
   const startScrollLeft = sc.scrollLeft;
   const origLeft  = parseFloat(bar.style.left);
   const origWidth = parseFloat(bar.style.width);
@@ -2548,7 +2814,13 @@ function startTlResize(e, entry, bar, side) {
 
     const dx = ev.clientX - startX + (sc.scrollLeft - startScrollLeft);
     const colShift = Math.round(dx / tlColW);
-    if (colShift === 0) { renderTimeline(); return; }
+    if (colShift === 0) {
+      // The handle covers the bar's edge (about a third of a short bar), so a
+      // click there is almost always meant for the bar itself.
+      if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 4) { selectTlEntry(entry); return; }
+      renderTimeline();
+      return;
+    }
 
     if (side === 'right') {
       const endD = new Date((task.endDate || task.date) + 'T00:00:00');
@@ -2683,12 +2955,37 @@ function renderTimeline() {
   const rows = document.getElementById('tlRows');
   rows.innerHTML = '';
 
+  // Before anything reads the filter or the selection: both can have gone
+  // stale on a refresh. The panel is built here too, ahead of the early
+  // returns below, because it is derived from state rather than from bars.
+  validateTlProjectFilter();
+  // Built once each and shared: finding the selection used to rebuild both
+  // lists a second time on every render, including the scroll relayouts.
+  const opsRaw    = getOpsEntries();
+  const studioRaw = getStudioBlockEntries();
+  let selEntry    = findTlSelectedEntry(opsRaw, studioRaw);
+  // A filter that hides the selected task ends the selection; otherwise the
+  // panel describes a bar that isn't there and every remaining bar — none of
+  // them in the focused project — dims at once.
+  if (selEntry && !passesTlFilters(selEntry)) selEntry = null;
+  if (!selEntry) tlSelected = null;
+  const focusProj = selEntry ? selEntry.projectId : null;
+  rows.classList.toggle('tl-proj-focus', !!focusProj);
+  // The panel must never take the Gantt down with it: it runs before any row
+  // is built, so a throw here would leave the chart empty on every render.
+  try { renderTlTaskPanel(selEntry); }
+  catch (err) {
+    console.error('task panel failed', err);
+    const tp = document.getElementById('tlTaskPanel');
+    if (tp) { tp.classList.remove('on'); tp.innerHTML = ''; }
+  }
+
   renderTlFilterBar();
-  const filtering  = tlLens.size > 0;
+  const filtering  = tlLens.size > 0 || !!tlProjectFilter;
   // PTO is deliberately not filtered: see passesLens.
-  const allEntries = getOpsEntries().filter(passesLens);
+  const allEntries = opsRaw.filter(passesTlFilters);
   const ptoAll     = getPtoEntries();
-  const studioAll  = getStudioBlockEntries().filter(passesLens);
+  const studioAll  = studioRaw.filter(passesTlFilters);
   // Includes people who only appear on PTO, ordered by the saved row order.
   const people     = getTimelinePeople();
   const personColor = {};
@@ -2703,7 +3000,7 @@ function renderTimeline() {
   }
   // A filter that matches nothing must not look like missing data.
   if (filtering && !allEntries.length && !studioAll.length) {
-    rows.innerHTML = '<div style="padding:20px;color:var(--dim);font-size:12px">No work matches this filter. Clear it in the bar above, or from the Legend.</div>';
+    rows.innerHTML = tlFilterEmptyHtml();
     return;
   }
 
@@ -2716,6 +3013,10 @@ function renderTimeline() {
     return;
   }
 
+  // Counted, because entries can exist while no row survives — their person is
+  // hidden, out of capacity, or the slot is unfilled — and that used to leave a
+  // filtered chart blank with no message at all.
+  let rowsDrawn = 0;
   visiblePeople.forEach(person => {
     const entries       = allEntries.filter(e => e.person === person);
     const ptoEntries    = ptoAll.filter(e => e.person === person);
@@ -2904,6 +3205,15 @@ function renderTimeline() {
         ...ctx.off.map(e => ({ entry: e, top: offCtxTop(e), barH: TL_CTX_BAR_H, inert: true })),
       ];
 
+    // Dim preview: while a task is selected, its project's bars stay solid and
+    // everything else fades. Re-applied on every render, so it survives the
+    // rebuilds that scrolling triggers.
+    const markFocus = (el, entry) => {
+      if (!focusProj) return;
+      if (entry.projectId === focusProj) el.classList.add('tl-proj-match');
+      if (entry.projectId && tlEntryKey(entry) === tlSelected) el.classList.add('tl-selected');
+    };
+
     drawList.forEach(({ entry, top, barH, squash, inert }) => {
       const sq = squash ? ' tl-squash' : '';
       // Neither a squashed pile nor an off-window bar may be edited.
@@ -2930,6 +3240,7 @@ function renderTimeline() {
         pLbl.textContent = width < 52 ? '🏖' : '🏖 PTO';
         pInner.appendChild(pLbl);
         pto.appendChild(pInner);
+        markFocus(pto, entry);   // PTO has no project, so it fades with the rest
         track.appendChild(pto);
         return;
       }
@@ -2950,6 +3261,14 @@ ${entry.date}${entry.endDate && entry.endDate !== entry.date ? ' → ' + entry.e
         sLbl.textContent = width < 52 ? '🎬' : '🎬 ' + entry.taskName;
         sInner.appendChild(sLbl);
         sb.appendChild(sInner);
+        markFocus(sb, entry);
+        // Studio blocks have no drag handlers (nothing to reassign to), so a
+        // plain click listener cannot collide with a gesture. Piles and the
+        // off-window placeholders stay unclickable: which task would it be?
+        if (!readOnly) {
+          sb.classList.add('tl-clickable');
+          sb.addEventListener('click', () => selectTlEntry(entry));
+        }
         track.appendChild(sb);
         return;
       }
@@ -2959,6 +3278,7 @@ ${entry.date}${entry.endDate && entry.endDate !== entry.date ? ' → ' + entry.e
       bar.style.cssText = `left:${left}px;width:${width}px;top:${top}px;height:${barH}px;background:${entry.color};z-index:2;`;
       bar.title = `${entry.person} · ${entry.cat} · ${entry.taskName}\n${entry.date}${entry.endDate && entry.endDate !== entry.date ? ' → ' + entry.endDate : ''} (${entry.projectName})`;
       bar.dataset.projectId = entry.projectId;
+      markFocus(bar, entry);
       bar.dataset.taskId    = entry.taskId;
       if (entry.isReview) bar.dataset.attIdx = entry.attIdx;
 
@@ -3017,7 +3337,14 @@ ${entry.date}${entry.endDate && entry.endDate !== entry.date ? ' → ' + entry.e
 
     row.appendChild(track);
     rows.appendChild(row);
+    rowsDrawn++;
   });
+
+  if (!rowsDrawn && filtering) { rows.innerHTML = tlFilterEmptyHtml(); return; }
+  // The selection can be valid yet undrawn: its person hidden, its lane behind
+  // "+N more", its row collapsed away. Keep the panel, but don't fade the whole
+  // chart around a bar nobody can see.
+  if (focusProj && !rows.querySelector('.tl-selected')) rows.classList.remove('tl-proj-focus');
 }
 
 function scrollTlToToday() {
@@ -6549,9 +6876,23 @@ function init() {
   document.getElementById('legendPop').addEventListener('click', e => e.stopPropagation());
   syncLegendBtn();
   document.addEventListener('click', () => toggleLegendPop(false));
+  // CAPTURE phase, deliberately. The settings dialog's own Esc listener sits on
+  // document in the bubble phase and was registered first, so it used to run
+  // first, hide the dialog, and leave this one reading "not open" — one press
+  // closed Settings AND the task panel. Capture runs before it.
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') toggleLegendPop(false);
-  });
+    if (e.key !== 'Escape') return;
+    // One thing per press: the settings dialog owns Esc while it is open, then
+    // the legend popover, and only then the task panel.
+    const settings = document.getElementById('settingsOverlay');
+    if (settings && settings.style.display === 'flex') return;
+    const pop = document.getElementById('legendPop');
+    if (pop && pop.style.display !== 'none') { toggleLegendPop(false); return; }
+    // Never mid-gesture: closing re-renders, which detached the bar being
+    // dragged while its drop still committed — Esc-as-cancel became a save.
+    if (tlGestureActive) return;
+    if (viewMode === 'person') closeTlTaskPanel();
+  }, true);
 
   document.getElementById('wkndBtn').addEventListener('click', () => {
     showWeekends = !showWeekends;
